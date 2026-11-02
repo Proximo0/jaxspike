@@ -1,0 +1,657 @@
+{
+ "version": 1,
+ "slots": {
+  "tile.0": {
+   "path": "res://assets/sheets/terrain.png",
+   "region": [
+    0,
+    0,
+    16,
+    16
+   ]
+  },
+  "tile.1": {
+   "path": "res://assets/sheets/terrain.png",
+   "region": [
+    16,
+    0,
+    16,
+    16
+   ]
+  },
+  "tile.2": {
+   "path": "res://assets/sheets/terrain.png",
+   "region": [
+    32,
+    0,
+    16,
+    16
+   ]
+  },
+  "tile.3": {
+   "path": "res://assets/sheets/terrain.png",
+   "region": [
+    48,
+    0,
+    16,
+    16
+   ]
+  },
+  "tile.4": {
+   "path": "res://assets/sheets/terrain.png",
+   "region": [
+    64,
+    0,
+    16,
+    16
+   ]
+  },
+  "tile.5": {
+   "path": "res://assets/sheets/terrain.png",
+   "region": [
+    80,
+    0,
+    16,
+    16
+   ]
+  },
+  "tile.6": {
+   "path": "res://assets/sheets/terrain.png",
+   "region": [
+    96,
+    0,
+    16,
+    16
+   ]
+  },
+  "tile.7": {
+   "path": "res://assets/sheets/terrain.png",
+   "region": [
+    112,
+    0,
+    16,
+    16
+   ]
+  },
+  "tile.8": {
+   "path": "res://assets/sheets/terrain.png",
+   "region": [
+    128,
+    0,
+    16,
+    16
+   ]
+  },
+  "tile.9": {
+   "path": "res://assets/sheets/terrain.png",
+   "region": [
+    144,
+    0,
+    16,
+    16
+   ]
+  },
+  "tile.10": {
+   "path": "res://assets/sheets/terrain.png",
+   "region": [
+    160,
+    0,
+    16,
+    16
+   ]
+  },
+  "job.0.idle": {
+   "sheet": "res://assets/sheets/job_0.json",
+   "anim": "idle"
+  },
+  "job.0.walk": {
+   "sheet": "res://assets/sheets/job_0.json",
+   "anim": "walk"
+  },
+  "job.0.attack": {
+   "sheet": "res://assets/sheets/job_0.json",
+   "anim": "attack"
+  },
+  "job.0.dead": {
+   "sheet": "res://assets/sheets/job_0.json",
+   "anim": "dead"
+  },
+  "job.1.idle": {
+   "sheet": "res://assets/sheets/job_1.json",
+   "anim": "idle"
+  },
+  "job.1.walk": {
+   "sheet": "res://assets/sheets/job_1.json",
+   "anim": "walk"
+  },
+  "job.1.attack": {
+   "sheet": "res://assets/sheets/job_1.json",
+   "anim": "attack"
+  },
+  "job.1.dead": {
+   "sheet": "res://assets/sheets/job_1.json",
+   "anim": "dead"
+  },
+  "job.2.idle": {
+   "sheet": "res://assets/sheets/job_2.json",
+   "anim": "idle"
+  },
+  "job.2.walk": {
+   "sheet": "res://assets/sheets/job_2.json",
+   "anim": "walk"
+  },
+  "job.2.attack": {
+   "sheet": "res://assets/sheets/job_2.json",
+   "anim": "attack"
+  },
+  "job.2.dead": {
+   "sheet": "res://assets/sheets/job_2.json",
+   "anim": "dead"
+  },
+  "job.3.idle": {
+   "sheet": "res://assets/sheets/job_3.json",
+   "anim": "idle"
+  },
+  "job.3.walk": {
+   "sheet": "res://assets/sheets/job_3.json",
+   "anim": "walk"
+  },
+  "job.3.attack": {
+   "sheet": "res://assets/sheets/job_3.json",
+   "anim": "attack"
+  },
+  "job.3.dead": {
+   "sheet": "res://assets/sheets/job_3.json",
+   "anim": "dead"
+  },
+  "job.4.idle": {
+   "sheet": "res://assets/sheets/job_4.json",
+   "anim": "idle"
+  },
+  "job.4.walk": {
+   "sheet": "res://assets/sheets/job_4.json",
+   "anim": "walk"
+  },
+  "job.4.attack": {
+   "sheet": "res://assets/sheets/job_4.json",
+   "anim": "attack"
+  },
+  "job.4.dead": {
+   "sheet": "res://assets/sheets/job_4.json",
+   "anim": "dead"
+  },
+  "job.5.idle": {
+   "sheet": "res://assets/sheets/job_5.json",
+   "anim": "idle"
+  },
+  "job.5.walk": {
+   "sheet": "res://assets/sheets/job_5.json",
+   "anim": "walk"
+  },
+  "job.5.attack": {
+   "sheet": "res://assets/sheets/job_5.json",
+   "anim": "attack"
+  },
+  "job.5.dead": {
+   "sheet": "res://assets/sheets/job_5.json",
+   "anim": "dead"
+  },
+  "job.6.idle": {
+   "sheet": "res://assets/sheets/job_6.json",
+   "anim": "idle"
+  },
+  "job.6.walk": {
+   "sheet": "res://assets/sheets/job_6.json",
+   "anim": "walk"
+  },
+  "job.6.attack": {
+   "sheet": "res://assets/sheets/job_6.json",
+   "anim": "attack"
+  },
+  "job.6.dead": {
+   "sheet": "res://assets/sheets/job_6.json",
+   "anim": "dead"
+  },
+  "monster.rat": {
+   "path": "res://assets/sheets/monsters.png",
+   "region": [
+    0,
+    0,
+    16,
+    16
+   ]
+  },
+  "monster.orc": {
+   "path": "res://assets/sheets/monsters.png",
+   "region": [
+    16,
+    0,
+    16,
+    16
+   ]
+  },
+  "monster.poring": {
+   "path": "res://assets/sheets/monsters.png",
+   "region": [
+    32,
+    0,
+    16,
+    16
+   ]
+  },
+  "monster.drops": {
+   "path": "res://assets/sheets/monsters.png",
+   "region": [
+    48,
+    0,
+    16,
+    16
+   ]
+  },
+  "monster.poporing": {
+   "path": "res://assets/sheets/monsters.png",
+   "region": [
+    64,
+    0,
+    16,
+    16
+   ]
+  },
+  "monster.lunatic": {
+   "path": "res://assets/sheets/monsters.png",
+   "region": [
+    80,
+    0,
+    16,
+    16
+   ]
+  },
+  "monster.fabre": {
+   "path": "res://assets/sheets/monsters.png",
+   "region": [
+    96,
+    0,
+    16,
+    16
+   ]
+  },
+  "monster.pupa": {
+   "path": "res://assets/sheets/monsters.png",
+   "region": [
+    112,
+    0,
+    16,
+    16
+   ]
+  },
+  "monster.chonchon": {
+   "path": "res://assets/sheets/monsters.png",
+   "region": [
+    128,
+    0,
+    16,
+    16
+   ]
+  },
+  "monster.willow": {
+   "path": "res://assets/sheets/monsters.png",
+   "region": [
+    144,
+    0,
+    16,
+    16
+   ]
+  },
+  "monster.rocker": {
+   "path": "res://assets/sheets/monsters.png",
+   "region": [
+    160,
+    0,
+    16,
+    16
+   ]
+  },
+  "monster.spore": {
+   "path": "res://assets/sheets/monsters.png",
+   "region": [
+    176,
+    0,
+    16,
+    16
+   ]
+  },
+  "monster.thief_bug": {
+   "path": "res://assets/sheets/monsters.png",
+   "region": [
+    192,
+    0,
+    16,
+    16
+   ]
+  },
+  "monster.condor": {
+   "path": "res://assets/sheets/monsters.png",
+   "region": [
+    208,
+    0,
+    16,
+    16
+   ]
+  },
+  "monster.picky": {
+   "path": "res://assets/sheets/monsters.png",
+   "region": [
+    224,
+    0,
+    16,
+    16
+   ]
+  },
+  "monster.peco_peco": {
+   "path": "res://assets/sheets/monsters.png",
+   "region": [
+    240,
+    0,
+    16,
+    16
+   ]
+  },
+  "monster.wolf": {
+   "path": "res://assets/sheets/monsters.png",
+   "region": [
+    256,
+    0,
+    16,
+    16
+   ]
+  },
+  "monster.hode": {
+   "path": "res://assets/sheets/monsters.png",
+   "region": [
+    272,
+    0,
+    16,
+    16
+   ]
+  },
+  "monster.orc_warrior": {
+   "path": "res://assets/sheets/monsters.png",
+   "region": [
+    288,
+    0,
+    16,
+    16
+   ]
+  },
+  "monster.zombie": {
+   "path": "res://assets/sheets/monsters.png",
+   "region": [
+    304,
+    0,
+    16,
+    16
+   ]
+  },
+  "monster.skeleton": {
+   "path": "res://assets/sheets/monsters.png",
+   "region": [
+    320,
+    0,
+    16,
+    16
+   ]
+  },
+  "monster.baphomet_jr": {
+   "path": "res://assets/sheets/monsters.png",
+   "region": [
+    336,
+    0,
+    16,
+    16
+   ]
+  },
+  "item.gold_coin": {
+   "path": "res://assets/kenney/tiny-town/tilemap_packed.png",
+   "region": [
+    144,
+    112,
+    16,
+    16
+   ]
+  },
+  "item.meat": {
+   "path": "res://assets/kenney/tiny-town/tilemap_packed.png",
+   "region": [
+    160,
+    128,
+    16,
+    16
+   ]
+  },
+  "item.sword": {
+   "path": "res://assets/kenney/tiny-dungeon/tilemap_packed.png",
+   "region": [
+    160,
+    128,
+    16,
+    16
+   ]
+  },
+  "item.potion_red": {
+   "path": "res://assets/kenney/tiny-dungeon/tilemap_packed.png",
+   "region": [
+    112,
+    144,
+    16,
+    16
+   ]
+  },
+  "item.potion_blue": {
+   "path": "res://assets/kenney/tiny-dungeon/tilemap_packed.png",
+   "region": [
+    128,
+    144,
+    16,
+    16
+   ]
+  },
+  "item.dagger": {
+   "path": "res://assets/kenney/tiny-dungeon/tilemap_packed.png",
+   "region": [
+    112,
+    128,
+    16,
+    16
+   ]
+  },
+  "item.bow": {
+   "path": "res://assets/kenney/tiny-town/tilemap_packed.png",
+   "region": [
+    160,
+    144,
+    16,
+    16
+   ]
+  },
+  "item.staff": {
+   "path": "res://assets/kenney/tiny-dungeon/tilemap_packed.png",
+   "region": [
+    144,
+    160,
+    16,
+    16
+   ]
+  },
+  "item.mace": {
+   "path": "res://assets/kenney/tiny-dungeon/tilemap_packed.png",
+   "region": [
+    144,
+    144,
+    16,
+    16
+   ]
+  },
+  "item.axe": {
+   "path": "res://assets/kenney/tiny-dungeon/tilemap_packed.png",
+   "region": [
+    160,
+    144,
+    16,
+    16
+   ]
+  },
+  "item.shield": {
+   "path": "res://assets/kenney/tiny-dungeon/tilemap_packed.png",
+   "region": [
+    80,
+    128,
+    16,
+    16
+   ]
+  },
+  "item.armor": {
+   "path": "res://assets/kenney/tiny-dungeon/tilemap_packed.png",
+   "region": [
+    96,
+    128,
+    16,
+    16
+   ]
+  },
+  "item.hat": {
+   "path": "res://assets/kenney/tiny-dungeon/tilemap_packed.png",
+   "region": [
+    48,
+    112,
+    16,
+    16
+   ]
+  },
+  "item.boots": {
+   "path": "res://assets/kenney/tiny-town/tilemap_packed.png",
+   "region": [
+    112,
+    160,
+    16,
+    16
+   ]
+  },
+  "item.garment": {
+   "path": "res://assets/kenney/tiny-dungeon/tilemap_packed.png",
+   "region": [
+    96,
+    80,
+    16,
+    16
+   ]
+  },
+  "item.ring": {
+   "path": "res://assets/kenney/tiny-dungeon/tilemap_packed.png",
+   "region": [
+    128,
+    64,
+    16,
+    16
+   ]
+  },
+  "item.card": {
+   "path": "res://assets/kenney/tiny-dungeon/tilemap_packed.png",
+   "region": [
+    16,
+    80,
+    16,
+    16
+   ]
+  },
+  "item.ore": {
+   "path": "res://assets/kenney/tiny-dungeon/tilemap_packed.png",
+   "region": [
+    0,
+    32,
+    16,
+    16
+   ]
+  },
+  "item.herb": {
+   "path": "res://assets/kenney/tiny-town/tilemap_packed.png",
+   "region": [
+    80,
+    16,
+    16,
+    16
+   ]
+  },
+  "item.fish": {
+   "path": "res://assets/kenney/tiny-town/tilemap_packed.png",
+   "region": [
+    144,
+    160,
+    16,
+    16
+   ]
+  },
+  "item.1": {
+   "path": "res://assets/kenney/tiny-town/tilemap_packed.png",
+   "region": [
+    144,
+    112,
+    16,
+    16
+   ]
+  },
+  "item.2": {
+   "path": "res://assets/kenney/tiny-town/tilemap_packed.png",
+   "region": [
+    160,
+    128,
+    16,
+    16
+   ]
+  },
+  "item.3": {
+   "path": "res://assets/kenney/tiny-dungeon/tilemap_packed.png",
+   "region": [
+    160,
+    128,
+    16,
+    16
+   ]
+  },
+  "ui.panel": {
+   "path": "res://assets/kenney/ui-pack-rpg-expansion/panel_blue.png"
+  },
+  "ui.panel_title": {
+   "path": "res://assets/kenney/ui-pack-rpg-expansion/panel_brown.png"
+  },
+  "ui.button": {
+   "path": "res://assets/kenney/ui-pack-rpg-expansion/buttonLong_blue.png"
+  },
+  "ui.button_pressed": {
+   "path": "res://assets/kenney/ui-pack-rpg-expansion/buttonLong_blue_pressed.png"
+  },
+  "ui.button_hover": {
+   "path": "res://assets/kenney/ui-pack-rpg-expansion/buttonLong_beige.png"
+  },
+  "ui.slot": {
+   "path": "res://assets/kenney/ui-pack-rpg-expansion/panelInset_blue.png"
+  },
+  "ui.hpbar_bg": {
+   "path": "res://assets/kenney/ui-pack-rpg-expansion/barBack_horizontalMid.png"
+  },
+  "ui.hpbar_fill": {
+   "path": "res://assets/kenney/ui-pack-rpg-expansion/barRed_horizontalMid.png"
+  },
+  "ui.spbar_fill": {
+   "path": "res://assets/kenney/ui-pack-rpg-expansion/barBlue_horizontalBlue.png"
+  },
+  "ui.expbar_fill": {
+   "path": "res://assets/kenney/ui-pack-rpg-expansion/barYellow_horizontalMid.png"
+  },
+  "ui.cursor": {
+   "path": "res://assets/kenney/ui-pack-rpg-expansion/cursorHand_grey.png"
+  },
+  "ui.icon_close": {
+   "path": "res://assets/kenney/ui-pack-rpg-expansion/iconCross_grey.png"
+  }
+ }
+}
