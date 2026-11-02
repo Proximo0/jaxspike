@@ -8,6 +8,8 @@ var store: EntityStore = null
 var own_id: int = -1
 var tick_ms: float = ViewMath.DEFAULT_TICK_MS
 
+var slots: AssetSlots = null  ## Art registry; loaded on first use. Slots that do not resolve keep the coloured quads.
+
 var configured_count: int = 0  ## Sprites configured in the last refresh (for tests and the overlay).
 
 var _pool: SlotPool = SlotPool.new()
@@ -18,6 +20,8 @@ var _synced_version: int = -1
 var _synced_tile_px: float = -1.0
 var _synced_label_px: int = -1
 var _synced_own_id: int = -2
+var _tex_cache: Dictionary = {}  ## slot key -> Texture2D, or null when the slot has no usable art
+var _frames_cache: Dictionary = {}  ## sheet json path -> SpriteFrames or null
 
 
 func active_count() -> int:
@@ -94,12 +98,56 @@ func _update(id: int, now_ms: float, dur: float, tile_px: float, label_px: int) 
 		_tracks[id] = track
 	track.set_target(ViewMath.to_vec(e.get("pos")), now_ms, dur)
 	var kind: int = int(e.get("kind", 0))
-	var label: String = String(e.get("name", "")) if kind == 0 else ""
-	sprite.configure(kind, id == own_id, label, ViewMath.hp_fraction(int(e.get("hp", 0)), int(e.get("max_hp", 0))),
-			tile_px, label_px)
+	var cat: int = ViewMath.entity_category(kind, e.has("item"))
+	var label: String = String(e.get("name", "")) if cat == ViewMath.CAT_PLAYER else ""
+	var hp: int = int(e.get("hp", 0))
+	sprite.configure(kind, id == own_id, label, ViewMath.hp_fraction(hp, int(e.get("max_hp", 0))),
+			tile_px, label_px, entity_texture(e, cat), cat == ViewMath.CAT_NODE and ViewMath.node_depleted(hp), cat)
 	sprite.visible = true
-	sprite.z_index = 10 if id == own_id else 2 - ViewMath.category(kind)
+	sprite.z_index = 10 if id == own_id else 2 - mini(cat, ViewMath.CAT_DROP)
 	configured_count += 1
+
+
+## Art for an entity, or null while its slot is missing (players job.N, monsters monster.x, drops item.x, nodes node.N).
+func entity_texture(e: Dictionary, cat: int) -> Texture2D:
+	if slots == null:
+		slots = AssetSlots.load_default()
+	var key: String = ""
+	match cat:
+		ViewMath.CAT_PLAYER:
+			key = AssetSlots.job_key(int(e.get("job", 0)), "idle")
+		ViewMath.CAT_MONSTER:
+			var kind: int = int(e.get("kind", 1))
+			key = AssetSlots.monster_key(ViewMath.monster_art_index(kind, int(e.get("mkind", -1))))
+		ViewMath.CAT_DROP:
+			key = AssetSlots.item_key(int(e.get("item", 0)))
+		ViewMath.CAT_NODE:
+			key = "node.%d" % (int(e.get("kind", 0)) - ViewMath.NODE_KIND_BASE)
+	return slot_texture(key)
+
+
+## Texture for a registry key when it resolves to a real file, else null (cached).
+func slot_texture(key: String) -> Texture2D:
+	if _tex_cache.has(key):
+		return _tex_cache[key] as Texture2D
+	var found: Texture2D = null
+	if slots != null and slots.has(key):
+		var path: String = slots.path_of(key)
+		if slots.is_sheet(key):
+			found = _sheet_frame(path, "%s_down" % slots.anim_of(key))
+		elif ResourceLoader.exists(path):
+			found = slots.texture(key)
+	_tex_cache[key] = found
+	return found
+
+
+func _sheet_frame(json_path: String, anim: String) -> Texture2D:
+	if not _frames_cache.has(json_path):
+		_frames_cache[json_path] = SpriteSheetLoader.load_sheet(json_path)
+	var frames: SpriteFrames = _frames_cache[json_path] as SpriteFrames
+	if frames == null or not frames.has_animation(anim) or frames.get_frame_count(anim) == 0:
+		return null
+	return frames.get_frame_texture(anim, 0)
 
 
 func _drop(id: int) -> void:
