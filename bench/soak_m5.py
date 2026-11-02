@@ -1,10 +1,8 @@
 """M5 soak: bot-played worlds with the party, MVP and kafra phases attached in a test harness.
 
-The lead-owned step.py and combat.py are not edited here. This harness wraps `game.step.step`:
-it replays combat's player targeting to feed `ro_mvp.record_damage` (the lead wires that call into
-combat.py at merge), then runs the three M5 phases in the contract's order. Bots use the hunting policy
-plus `bots.ro_party_policy.party_inputs`. Reports party sizes, MVP kills per 1000 ticks and the standard
-invariants (MVP slots are excluded from the per-kind hp check, their kind is outside config's tables).
+step() runs the party, mvp and kafra phases and combat feeds record_damage. MVPs are the table's MVP-flag
+kinds placed by spawn_population (slots found via world["mvp"]["mvp_slot"]). Bots use ro_bot_inputs. Reports party
+sizes, MVP kills per 1000 ticks and the standard invariants (MVP slots are excluded from the per-kind hp check).
 """
 import sys
 import time
@@ -16,50 +14,31 @@ import numpy as np
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[1]))
 
 from bench.soak_check import check_invariants  # noqa: E402
-from bots.policies import bot_inputs  # noqa: E402
-from bots.ro_party_policy import party_inputs  # noqa: E402
+from bots.ro_policies import ro_bot_inputs  # noqa: E402
 from bots.runner import make_world_batch  # noqa: E402
-from game import ro_kafra, ro_mvp, ro_party  # noqa: E402
-from game.config import MAX_PLAYERS, PLAYER_ATTACK  # noqa: E402
-from game.spatial import build_grid, nearest_in_block  # noqa: E402
+from game import ro_mvp, ro_party  # noqa: E402
 from game.state import next_key  # noqa: E402
 from game.step import step  # noqa: E402
 
 
 def attach(worlds):
-    """Add the M5 blocks to a batch of worlds and place the MVPs."""
+    """Add the M5 blocks to a batch of worlds (MVPs come from spawn_population)."""
     b = worlds["tick"].shape[0]
     blocks = {"party": ro_party.make_state(), "mvp": ro_mvp.make_state()}
     blocks = jax.tree_util.tree_map(lambda a: jnp.broadcast_to(a, (b,) + a.shape), blocks)
-    return jax.vmap(ro_mvp.place_mvps)({**worlds, **blocks})
-
-
-def _player_damage(world, inputs):
-    """Replay combat's player targeting: (attacker slots, monster slots, damage) for this tick's hits."""
-    p, m = world["players"], world["monsters"]
-    alive = p["active"] & ~p["dead"]
-    table, _ = build_grid(m["pos"], m["active"])
-    tgt, dist = nearest_in_block(table, p["pos"], m["pos"])
-    hit = alive & inputs["attack"] & (p["attack_cd"] == 0) & (dist <= 1) & m["active"][tgt]
-    pidx = jnp.arange(MAX_PLAYERS, dtype=jnp.int32)
-    return pidx, jnp.where(hit, tgt, -1).astype(jnp.int32), jnp.where(hit, PLAYER_ATTACK, 0).astype(jnp.int32)
+    return {**worlds, **blocks}
 
 
 def m5_step(world, inputs):
-    a, mi, d = _player_damage(world, inputs)
-    world = ro_mvp.record_damage(world, a, mi, d)
-    world = step(world, inputs)
-    world = ro_party.phase(world, inputs)
-    world = ro_mvp.phase(world)
-    return ro_kafra.phase(world, inputs)
+    """step() already runs party, mvp and kafra phases and combat feeds record_damage."""
+    return step(world, inputs)
 
 
 def run(worlds, ticks):
     def tick(ws, _):
         keys, ws = jax.vmap(next_key)(ws)
         k1, k2 = jax.vmap(lambda k: tuple(jax.random.split(k)))(keys)
-        inputs = jax.vmap(bot_inputs)(ws, k1)
-        inputs = {**inputs, **jax.vmap(party_inputs)(ws, k2)}
+        inputs = jax.vmap(ro_bot_inputs)(ws, k1)
         return jax.vmap(m5_step)(ws, inputs), None
 
     final, _ = jax.lax.scan(tick, worlds, None, length=ticks)
@@ -130,10 +109,11 @@ def main(batch=4, chunks=5, ticks=100, seed=0):
         events_seen = int((ev[..., 0] >= 0).sum())
         heads = int(np.asarray(worlds["mvp"]["event_head"]).sum())
         kills = int(worlds["players"]["kills"].sum())
-        slots = np.asarray(worlds["mvp"]["mvp_slot"])[0]  # same slots in every world
-        live_slots = slots[slots >= 0]
-        mvp_hp = np.asarray(worlds["monsters"]["hp"])[:, live_slots].sum() if live_slots.size else 0
-        mvp_dmg = np.asarray(worlds["mvp"]["damage_ledger"])[:, live_slots].sum() if live_slots.size else 0
+        slots = np.asarray(worlds["mvp"]["mvp_slot"])  # [batch, N_KINDS], -1 = kind absent from that world
+        has = slots >= 0
+        sl = np.clip(slots, 0, None)
+        mvp_hp = int((np.take_along_axis(np.asarray(worlds["monsters"]["hp"]), sl, 1) * has).sum())
+        mvp_dmg = int((np.take_along_axis(np.asarray(worlds["mvp"]["damage_ledger"]), sl, 1) * has).sum())
         print(f"chunk {c + 1:2d} (tick {(c + 1) * ticks:5d}): kills={kills} players_in_party={in_party} "
               f"parties={n_parties} mean_size={mean_size:.1f} max_size={int(sizes.max())} "
               f"mvp_kills_total={heads} mvp_hp_sum={int(mvp_hp)} mvp_dmg_taken={int(mvp_dmg)} "

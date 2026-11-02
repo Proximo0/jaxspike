@@ -3,10 +3,16 @@ import jax.numpy as jnp
 import numpy as np
 
 from game import ro_mvp
-from game.config import ITEM_GOLD_COIN, ITEM_MEAT, ITEM_NONE, ITEM_SWORD, MAX_MONSTERS
+from game.config import MAX_MONSTERS
+from game.data import monsters as mon
+from game.data.items import ITEM_NONE
 from game.state import make_empty_world
 
-SLOT = MAX_MONSTERS - 3  # kind 2
+KIND = mon.KIND_BY_NAME["Eddga"]
+assert bool(mon.MVP[KIND])
+SLOT = MAX_MONSTERS - 3
+TILE = (40, 41)
+DROP = [int(x) for x in ro_mvp.MVP_DROP[KIND]]
 
 
 def mk():
@@ -14,7 +20,10 @@ def mk():
     w = {**w, "mvp": ro_mvp.make_state()}
     p = w["players"]
     w = {**w, "players": {**p, "active": p["active"].at[:4].set(True)}}
-    return ro_mvp.place_mvps(w)
+    m = w["monsters"]
+    return {**w, "monsters": {**m, "kind": m["kind"].at[SLOT].set(KIND), "hp": m["hp"].at[SLOT].set(int(mon.HP[KIND])),
+                              "pos": m["pos"].at[SLOT].set(i32(*TILE)), "spawn": m["spawn"].at[SLOT].set(i32(*TILE)),
+                              "active": m["active"].at[SLOT].set(True)}}
 
 
 def i32(*a):
@@ -48,12 +57,12 @@ def test_event_drops_and_reset():
     w = ro_mvp.record_damage(w, i32(2), i32(SLOT), i32(50))
     w = ro_mvp.phase(kill(w))
     v = w["mvp"]
-    assert list(map(int, v["event"][0])) == [2, 2, 42]
+    assert list(map(int, v["event"][0])) == [KIND, 2, 42]
     assert int(v["event_head"]) == 1
-    assert int(v["next_spawn"][2]) == 3000
+    assert int(v["next_spawn"][KIND]) == 3000
     assert int(v["top_damager"][SLOT]) == -1 and int(v["damage_ledger"][SLOT]) == 0
     inv = np.asarray(w["players"]["inv"][2])
-    assert list(inv[:4]) == [ITEM_SWORD, ITEM_GOLD_COIN, ITEM_GOLD_COIN, ITEM_MEAT]
+    assert list(inv[:4]) == DROP
     assert (np.asarray(w["players"]["inv"][0]) == ITEM_NONE).all()
 
 
@@ -63,7 +72,7 @@ def test_drops_skip_full_slots():
     w = {**w, "players": {**w["players"], "inv": inv}}
     w = ro_mvp.record_damage(w, i32(1), i32(SLOT), i32(5))
     w = ro_mvp.phase(kill(w))
-    assert list(np.asarray(w["players"]["inv"][1][:5])) == [9, ITEM_SWORD, ITEM_GOLD_COIN, ITEM_GOLD_COIN, ITEM_MEAT]
+    assert list(np.asarray(w["players"]["inv"][1][:5])) == [9] + DROP
 
 
 def test_non_mvp_death_writes_nothing():
@@ -92,9 +101,9 @@ def test_respawn_on_fixed_tile_full_hp():
     assert not bool(w["monsters"]["active"][SLOT])
     w = ph(w)
     m = w["monsters"]
-    assert bool(m["active"][SLOT]) and int(m["hp"][SLOT]) == 2000
-    assert tuple(map(int, m["pos"][SLOT])) == ro_mvp.MVP_SPAWN_TILE[2]
-    assert int(w["mvp"]["next_spawn"][2]) == 0
+    assert bool(m["active"][SLOT]) and int(m["hp"][SLOT]) == int(mon.HP[KIND])
+    assert tuple(map(int, m["pos"][SLOT])) == TILE
+    assert int(w["mvp"]["next_spawn"][KIND]) == 0
 
 
 def test_ring_wraps():
@@ -105,7 +114,7 @@ def test_ring_wraps():
         w = ro_mvp.phase(kill(w))
         m = w["monsters"]
         w = {**w, "monsters": {**m, "died": jnp.zeros_like(m["died"])},
-             "mvp": {**w["mvp"], "next_spawn": jnp.zeros(3, jnp.int32)}}
+             "mvp": {**w["mvp"], "next_spawn": jnp.zeros(mon.N_KINDS, jnp.int32)}}
     assert int(w["mvp"]["event_head"]) == 9
     assert int(w["mvp"]["event"][0, 2]) == 108
     assert int(w["mvp"]["event"][1, 2]) == 101
@@ -122,3 +131,27 @@ def test_jit_and_vmap():
     rd = jax.vmap(ro_mvp.record_damage)(
         b, jnp.stack([i32(1), i32(1)]), jnp.stack([i32(SLOT)] * 2), jnp.stack([i32(7)] * 2))
     assert list(map(int, rd["mvp"]["top_damage"][:, SLOT])) == [50, 7]
+
+
+def test_mvp_identified_by_table_flag():
+    w = mk()
+    m = w["monsters"]
+    flags = np.asarray(ro_mvp.is_mvp(w))
+    assert flags[SLOT] and flags.sum() == (np.asarray(m["kind"]) == KIND).sum()
+    assert list(np.flatnonzero(np.asarray(mon.MVP))) == [18, 19]
+    assert ro_mvp.MVP_DROP[0] == (0,) * 4 and len(ro_mvp.MVP_DROP) == mon.N_KINDS
+    w2 = {**w, "monsters": {**m, "kind": m["kind"].at[SLOT].set(2)}}  # Fabre is not an MVP
+    assert not bool(ro_mvp.is_mvp(w2)[SLOT])
+
+
+def test_other_mvp_kind_independent_timer():
+    gtb = mon.KIND_BY_NAME["Golden Thief Bug"]
+    w = mk()
+    m = w["monsters"]
+    s2 = SLOT - 1
+    w = {**w, "monsters": {**m, "kind": m["kind"].at[s2].set(gtb), "spawn": m["spawn"].at[s2].set(i32(50, 51)),
+                           "pos": m["pos"].at[s2].set(i32(50, 51)), "active": m["active"].at[s2].set(True)}}
+    w = ro_mvp.phase(kill(w, s2))
+    assert int(w["mvp"]["next_spawn"][gtb]) == 3000 and int(w["mvp"]["next_spawn"][KIND]) == 0
+    assert int(w["mvp"]["event"][0, 0]) == gtb
+    assert bool(w["monsters"]["active"][SLOT])

@@ -45,13 +45,14 @@ named player only, and the sender gets `system` "no such player" for an unknown 
 
 ## Welcome data
 
-`welcome` gains `mvp_kinds`: a list indexed by the `ro_mvp` kind (not the entity `mkind`), `null` for non-MVP kinds. Current table:
+`welcome` gains `mvp_kinds`: a list indexed by monster kind (the same index as the entity `mkind`, 20 entries), the monster name for MVPs and `null` otherwise. Current table:
 
 ```json
-"mvp_kinds": [null, null, "Orc Lord"]
+"mvp_kinds": [null, null, null, null, null, null, null, null, null, null,
+              null, null, null, null, null, null, null, null, "Golden Thief Bug", "Eddga"]
 ```
 
-The list is built from `game/ro_mvp.py` at server start (length `N_MVP_KINDS`) and is display text only.
+The list is built from `game/ro_mvp.py` at server start (length `N_KINDS` = 20, from the table `MVP` flag and names) and is display text only.
 
 ## Lines for lead-owned files
 
