@@ -1,5 +1,5 @@
 extends "res://tests/sim/sim_base.gd"
-## Lab smoke: the lab scene loads, finishes with a short run and prints a summary with four metric rows.
+## Lab smoke: the lab scene loads, finishes with a short run and prints a summary with five metric rows.
 ## Also instances the F2 panel and F1 overlay once to prove their scenes build.
 
 
@@ -19,7 +19,7 @@ func run() -> Array:
 	var rows: Array = [
 		row("lab_finishes", done[0], "frames=%d" % frames),
 		row("lab_summary_line", line.begins_with("LAB summary pass="), line),
-		row("lab_four_metrics", lab_rows.size() == 4, "rows=%d" % lab_rows.size()),
+		row("lab_five_metrics", lab_rows.size() == 5, "rows=%d" % lab_rows.size()),
 	]
 	var failed: int = 0
 	for r: Dictionary in lab_rows:

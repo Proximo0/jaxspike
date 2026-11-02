@@ -128,3 +128,27 @@ static func hp_fraction(hp: int, max_hp: int) -> float:
 	if max_hp <= 0:
 		return 0.0
 	return clampf(float(hp) / float(max_hp), 0.0, 1.0)
+
+
+## Terrain ids a character cannot walk on: water, tree, wall, rock.
+const BLOCKED_TERRAIN: Array[int] = [4, 5, 6, 7]
+const MARKER_STALL_TICKS: int = 10
+const MARKER_FLASH_MS: float = 400.0
+const MARKER_COLOR: Color = Color(1.0, 1.0, 1.0, 0.9)
+const MARKER_BLOCKED_COLOR: Color = Color(1.0, 0.15, 0.15, 0.95)
+
+
+static func is_blocked_terrain(terrain_id: int) -> bool:
+	return BLOCKED_TERRAIN.has(terrain_id)
+
+
+## True when the click target `tile` is a blocked tile of `map` (unloaded map and outside tiles are not blocked here).
+static func is_blocked_tile(map: MapData, tile: Vector2i) -> bool:
+	return map != null and is_blocked_terrain(map.at(tile.x, tile.y))
+
+
+## The walk target marker is finished when the own player stands on it or `stalled_ticks` server ticks passed
+## without the own position changing.
+static func marker_done(target: Vector2i, own_pos: Vector2i, stalled_ticks: int,
+		max_stalled: int = MARKER_STALL_TICKS) -> bool:
+	return own_pos == target or stalled_ticks >= max_stalled

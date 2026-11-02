@@ -60,3 +60,51 @@ func test_to_vec_and_hp() -> void:
 
 func test_tuned_falls_back_for_unknown_field() -> void:
 	assert_near(ViewMath.tuned("no_such_row", 7.5), 7.5)
+
+
+func test_blocked_terrain_ids() -> void:
+	for t: int in [4, 5, 6, 7]:
+		assert_true(ViewMath.is_blocked_terrain(t), str(t))
+	for t: int in [-2, -1, 0, 1, 2, 3, 8]:
+		assert_false(ViewMath.is_blocked_terrain(t), str(t))
+
+
+func test_is_blocked_tile_reads_map() -> void:
+	var m := MapData.new()
+	m.size = 2
+	m.terrain = PackedByteArray([0, 4, 6, 3])
+	assert_false(ViewMath.is_blocked_tile(m, Vector2i(0, 0)))
+	assert_true(ViewMath.is_blocked_tile(m, Vector2i(1, 0)))
+	assert_true(ViewMath.is_blocked_tile(m, Vector2i(0, 1)))
+	assert_false(ViewMath.is_blocked_tile(m, Vector2i(1, 1)))
+	assert_false(ViewMath.is_blocked_tile(m, Vector2i(5, 5)))
+	assert_false(ViewMath.is_blocked_tile(MapData.new(), Vector2i(0, 0)))
+	assert_false(ViewMath.is_blocked_tile(null, Vector2i(0, 0)))
+
+
+func test_marker_done() -> void:
+	assert_true(ViewMath.marker_done(Vector2i(3, 3), Vector2i(3, 3), 0))
+	assert_false(ViewMath.marker_done(Vector2i(3, 3), Vector2i(1, 1), 9))
+	assert_true(ViewMath.marker_done(Vector2i(3, 3), Vector2i(1, 1), 10))
+	assert_true(ViewMath.marker_done(Vector2i(3, 3), Vector2i(1, 1), 2, 2))
+
+
+func test_walk_marker_lifecycle() -> void:
+	var mk := WalkMarker.new()
+	mk.show_target(Vector2i(5, 5), Vector2i(1, 1), 32.0)
+	assert_true(mk.active)
+	assert_eq(mk.position, Vector2(160, 160))
+	mk.observe(Vector2i(2, 1), 1)
+	mk.observe(Vector2i(2, 1), 2)
+	assert_true(mk.active)
+	for t: int in range(3, 3 + ViewMath.MARKER_STALL_TICKS):
+		mk.observe(Vector2i(2, 1), t)
+	assert_false(mk.active, "hidden after the stall limit")
+	mk.show_target(Vector2i(5, 5), Vector2i(2, 1), 32.0)
+	mk.observe(Vector2i(5, 5), 20)
+	assert_false(mk.active, "hidden on arrival")
+	mk.flash_blocked(Vector2i(7, 7), 32.0)
+	assert_true(mk.active and mk.blocked_flash)
+	mk._process(1.0)
+	assert_false(mk.active)
+	mk.free()

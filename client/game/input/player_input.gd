@@ -5,6 +5,8 @@ extends Node
 
 signal quit_requested
 signal walk_sent
+signal walk_target(tile: Vector2i)  ## A walk_to was sent for this tile.
+signal walk_blocked(tile: Vector2i)  ## A click on a blocked tile; nothing was sent.
 
 var session: NetSession = null
 var enabled: bool = true
@@ -35,10 +37,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		var m: InputEventMouseButton = event
 		if m.pressed and m.button_index == MOUSE_BUTTON_LEFT:
-			var tile: Vector2i = click_tile(m.position)
-			if ViewMath.in_map(tile, session.map.size):
-				session.walk_to(tile.x, tile.y)
-				walk_sent.emit()
+			click_walk(click_tile(m.position))
 
 
 ## Tile under a viewport pixel, from the camera centre and zoom.
@@ -50,3 +49,17 @@ func click_tile(screen_px: Vector2) -> Vector2i:
 
 func _key(code: Key) -> bool:
 	return Input.is_physical_key_pressed(code)
+
+
+## Handles a click on `tile`: blocked terrain only flashes (walk_blocked), other in-map tiles send walk_to.
+## Returns true when walk_to was sent.
+func click_walk(tile: Vector2i) -> bool:
+	if session == null or not ViewMath.in_map(tile, session.map.size):
+		return false
+	if ViewMath.is_blocked_tile(session.map, tile):
+		walk_blocked.emit(tile)
+		return false
+	session.walk_to(tile.x, tile.y)
+	walk_sent.emit()
+	walk_target.emit(tile)
+	return true

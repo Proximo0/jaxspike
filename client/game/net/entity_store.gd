@@ -12,6 +12,9 @@ var you: Dictionary = {}
 var tick: int = 0
 var notice: String = ""
 var snaps: int = 0
+var version: int = 0  ## Bumped by every apply_snap (and clear/restore).
+var _changed: PackedInt32Array = PackedInt32Array()  ## Ids upserted by the last apply_snap.
+var _removed: PackedInt32Array = PackedInt32Array()  ## Ids deleted by the last apply_snap (full wipe included).
 var _ents: Dictionary = {}  ## int id -> Dictionary
 
 
@@ -19,7 +22,11 @@ var _ents: Dictionary = {}  ## int id -> Dictionary
 func apply_snap(snap: Dictionary) -> void:
 	tick = int(snap.get("tick", tick))
 	snaps += 1
+	version += 1
+	_changed = PackedInt32Array()
+	_removed = PackedInt32Array()
 	if bool(snap.get("full", false)):
+		_removed = ids()
 		_ents.clear()
 	var you_in: Variant = snap.get("you")
 	if typeof(you_in) == TYPE_DICTIONARY:
@@ -29,12 +36,24 @@ func apply_snap(snap: Dictionary) -> void:
 	var gone: Variant = snap.get("gone")
 	if typeof(gone) == TYPE_ARRAY:
 		for g: Variant in gone:
-			_ents.erase(int(g))
+			if _ents.erase(int(g)):
+				_removed.append(int(g))
 	var ents: Variant = snap.get("ents")
 	if typeof(ents) == TYPE_ARRAY:
 		for e: Variant in ents:
 			if typeof(e) == TYPE_DICTIONARY:
 				_upsert(e)
+
+
+## Ids upserted by the last apply_snap (an id listed twice appears twice).
+func changed_ids() -> PackedInt32Array:
+	return _changed
+
+
+## Ids removed by the last apply_snap: existing `gone` entries, plus every old id on a `full` snap. After a full
+## snap an id can be in both lists; has_ent() says whether it exists now.
+func removed_ids() -> PackedInt32Array:
+	return _removed
 
 
 func get_ent(id: int) -> Dictionary:
@@ -60,6 +79,9 @@ func ids() -> PackedInt32Array:
 
 
 func clear() -> void:
+	version += 1
+	_removed = ids()
+	_changed = PackedInt32Array()
 	_ents.clear()
 	you = {}
 	tick = 0
@@ -73,6 +95,8 @@ func snapshot() -> Dictionary:
 
 
 func restore(d: Dictionary) -> void:
+	version += 1
+	_removed = ids()
 	tick = int(d.get("tick", 0))
 	snaps = int(d.get("snaps", 0))
 	notice = String(d.get("notice", ""))
@@ -80,6 +104,7 @@ func restore(d: Dictionary) -> void:
 	you = (y as Dictionary).duplicate(true) if typeof(y) == TYPE_DICTIONARY else {}
 	var e: Variant = d.get("ents")
 	_ents = (e as Dictionary).duplicate(true) if typeof(e) == TYPE_DICTIONARY else {}
+	_changed = ids()
 
 
 func _upsert(src: Dictionary) -> void:
@@ -105,6 +130,7 @@ func _upsert(src: Dictionary) -> void:
 	if src.has("mkind"):
 		e["mkind"] = int(src["mkind"])
 	_ents[id] = e
+	_changed.append(id)
 
 
 func _entity_store_norm_you(src: Dictionary) -> Dictionary:

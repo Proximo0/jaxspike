@@ -49,3 +49,27 @@ func test_attack_flag() -> void:
 	var s := InputState.new()
 	assert_true(s.update(false, false, false, false, true, false))
 	assert_true(s.attack)
+
+
+func test_click_walk_sends_open_tiles_and_flashes_blocked() -> void:
+	var link := FakeLink.new()
+	var session := NetSession.new(link)
+	session.map.size = 3
+	session.map.terrain = PackedByteArray([0, 1, 4, 0, 5, 0, 6, 7, 0])
+	session.connect_to("ws://x")
+	var pi := PlayerInput.new()
+	pi.session = session
+	var sent: Array = []
+	var flashed: Array = []
+	pi.walk_target.connect(func(t: Vector2i) -> void: sent.append(t))
+	pi.walk_blocked.connect(func(t: Vector2i) -> void: flashed.append(t))
+	assert_true(pi.click_walk(Vector2i(1, 0)))
+	assert_false(pi.click_walk(Vector2i(2, 0)))
+	assert_false(pi.click_walk(Vector2i(1, 1)))
+	assert_false(pi.click_walk(Vector2i(0, 2)))
+	assert_false(pi.click_walk(Vector2i(1, 2)))
+	assert_false(pi.click_walk(Vector2i(9, 9)))
+	assert_eq(link.sent.size(), 1)
+	assert_eq(sent, [Vector2i(1, 0)])
+	assert_eq(flashed.size(), 4)
+	pi.free()

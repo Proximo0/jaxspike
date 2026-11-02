@@ -71,6 +71,7 @@ The full story is in `docs/lessons/ops_board.md` (VoxelSpace ops board: 20 commi
 
 | What happened | Rule |
 | --- | --- |
+| The lab's per-snap apply budget (2 ms) failed as soon as nine agent sessions and four workers shared the PC: 1.4 ms idle became 2-5 ms at HEAD and in the working tree alike, so a real change was blamed for load noise | Before blaming a change for a lab FAIL, run the same lab on a clean worktree of HEAD under the same load; set CPU-time budgets with headroom for a loaded box (here 5 ms against a 120 ms tick) and keep the tight number as a WARN. |
 | Feel bugs were found by the player, not by us | Build the debug layer and the bot before content: tunables, debug frame, snapshot/replay, recorder, overlay, lab, bot. |
 | A fix looked plausible but the bug predated the changed code | Check git history for when a bug first appeared. |
 | A lab WARN almost undid a design choice the player wanted | Check a WARN against the player's stated wishes before tuning it away. |

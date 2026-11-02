@@ -43,6 +43,13 @@ func tile_count() -> int:
 	return filled_tiles
 
 
+## Pixel size of the generated atlas texture (width px * terrain ids, height px), or ZERO before the first build.
+func atlas_size() -> Vector2i:
+	if _source == null or _source.texture == null:
+		return Vector2i.ZERO
+	return Vector2i(_source.texture.get_size())
+
+
 func _wanted_px() -> int:
 	return clampi(roundi(ViewMath.tuned("tile_px", ViewMath.DEFAULT_TILE_PX)), 4, 256)
 
