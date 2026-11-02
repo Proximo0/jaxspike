@@ -1,5 +1,5 @@
 import asyncio, threading, time
-from net.client import NetClient
+from net.client import NetClient, merge_snap
 from net.server import GameServer
 
 def _serve(tmp_path):
@@ -35,6 +35,8 @@ def test_client_logs_in_and_moves(tmp_path):
         c.send_input(0, False, False)
         c.close()
         assert _wait(lambda: not c.connected)
+        c.join(5)
+        assert not c.is_alive()
     finally:
         h["loop"].call_soon_threadsafe(h["stop"].set_result, None); t.join(10)
 
@@ -43,5 +45,14 @@ def test_client_reports_error(tmp_path):
     try:
         c = NetClient("127.0.0.1", h["s"].port, "x"); c.start()
         assert _wait(lambda: c.error is not None) and "name" in c.error
+        assert c.welcome is None
     finally:
         h["loop"].call_soon_threadsafe(h["stop"].set_result, None); t.join(10)
+
+def test_merge_snap_keeps_terrain():
+    terr = {"x0": 1, "y0": 2, "rows": []}
+    old = {"t": "snap", "tick": 1, "terrain": terr}
+    assert merge_snap(old, {"t": "snap", "tick": 2, "terrain": None}) == {"t": "snap", "tick": 2, "terrain": terr}
+    new = {"t": "snap", "tick": 3, "terrain": {"x0": 9, "y0": 9, "rows": []}}
+    assert merge_snap(old, new) is new
+    assert merge_snap(None, {"t": "snap", "terrain": None})["terrain"] is None

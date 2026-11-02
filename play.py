@@ -14,7 +14,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from game.config import (  # noqa: E402
-    ITEM_GOLD_COIN, ITEM_MEAT, ITEM_SWORD, MONSTER_HP,
+    ITEM_GOLD_COIN, ITEM_MEAT, ITEM_SWORD,
     T_FLOOR, T_GRASS, T_ROAD, T_ROCK, T_TEMPLE, T_TREE, T_WALL, T_WATER,
 )
 from net.client import NetClient  # noqa: E402
@@ -127,6 +127,7 @@ class Game:
         root.bind("<e>", lambda e: self.set_eat(True))
         root.bind("<KeyRelease-e>", lambda e: self.set_eat(False))
         root.bind("<Button-1>", self.on_click)
+        root.bind("<FocusOut>", self.on_focus_out)
         root.bind("<Escape>", lambda e: self.quit())
 
     def quit(self):
@@ -163,8 +164,16 @@ class Game:
             self.sent = cur
             self.client.send_input(*cur)
 
+    def on_focus_out(self, event):
+        if event.widget is not self.root:
+            return
+        self.held.clear()
+        self.attacking = False
+        self.eating = False
+        self.push_input()
+
     def on_click(self, event):
-        if self.snap is None:
+        if self.snap is None or self.terrain is None:
             return
         tx = (event.x - self.off_x) // TILE
         ty = event.y // TILE
@@ -233,7 +242,7 @@ class Game:
                 draw_rat(c, sx, sy)
             else:
                 draw_orc(c, sx, sy)
-            hp_frac = max(e["hp"], 0) / MONSTER_HP[e["mkind"]]
+            hp_frac = max(e["hp"], 0) / max(e["max_hp"], 1)
             c.create_rectangle(sx + 2, sy, sx + 2 + (TILE - 4) * hp_frac, sy + 2, fill="#ff4444", outline="")
         for e in ents:
             if e["kind"] != "p" or not on_screen(*e["pos"]) or list(e["pos"]) == [hx, hy]:

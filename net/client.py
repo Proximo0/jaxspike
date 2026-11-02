@@ -7,6 +7,13 @@ import websockets
 from net.protocol import decode, encode
 
 
+def merge_snap(old, new):
+    """Newest snap wins, but a null terrain keeps the last known window (the server sends it only on change)."""
+    if new.get("terrain") is None and old is not None and old.get("terrain") is not None:
+        return {**new, "terrain": old["terrain"]}
+    return new
+
+
 class NetClient(threading.Thread):
     def __init__(self, host: str, port: int, name: str):
         super().__init__(daemon=True)
@@ -71,8 +78,8 @@ class NetClient(threading.Thread):
             if msg["t"] != "welcome":
                 self.error = "unexpected reply"
                 return
-            self.welcome = msg
             self.connected = True
+            self.welcome = msg
 
             async def recv_loop():
                 async for text in ws:
@@ -81,7 +88,7 @@ class NetClient(threading.Thread):
                         continue
                     if m["t"] == "snap":
                         with self._lock:
-                            self._snap = m
+                            self._snap = merge_snap(self._snap, m)
                     elif m["t"] == "error":
                         self.error = m.get("msg", "error")
 
