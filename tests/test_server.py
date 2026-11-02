@@ -1,9 +1,10 @@
 import asyncio, json, numpy as np, pytest
 import websockets
-from game.config import PLAYER_MAX_HP, PROTOCOL_VERSION
+from game.config import ITEM_MEAT, PLAYER_MAX_HP, PROTOCOL_VERSION
 from game.world_layout import TOWNS, temple_tiles
 from net.characters import load, load_roster, new_character, save
-from net.server import GameServer
+from net.protocol import view_window
+from net.server import Client, GameServer
 
 def run(coro):
     return asyncio.run(asyncio.wait_for(coro, 25))
@@ -26,8 +27,12 @@ def test_login_welcome_and_snapshots(tmp_path):
         try:
             ws, w = await connect(s, "Alice")
             assert w["t"] == "welcome" and s.owner[w["slot"]] == "alice"
-            snap = await next_snap(ws)
+            msgs = [json.loads(await ws.recv()) for _ in range(3)]
+            assert w["t"] == "welcome" and [m["t"] for m in msgs] == ["snap", "snap", "snap"]  # welcome comes first
+            snap = msgs[0]
             assert snap["terrain"] is not None and snap["you"]["hp"] == PLAYER_MAX_HP
+            assert (snap["terrain"]["x0"], snap["terrain"]["y0"]) == view_window(snap["you"]["pos"])
+            assert msgs[1]["terrain"] is None and msgs[2]["terrain"] is None  # the player has not moved
             assert snap["you"]["safe"] is True  # new characters start on a temple
             await ws.close()
         finally:
@@ -119,7 +124,8 @@ def test_refusals(tmp_path):
             e, we = await connect(s, "frank"); assert we["t"] == "error" and we["msg"] == "corrupt character"
             ws = await websockets.connect(f"ws://127.0.0.1:{s.port}")
             await ws.send("garbage")
-            assert json.loads(await ws.recv())["t"] == "error"
+            m = json.loads(await ws.recv())
+            assert m["t"] == "error" and m["msg"] == "expected login"
         finally:
             await s.stop()
     run(body())
@@ -168,3 +174,82 @@ def test_fallback_slot_keeps_home_town(tmp_path):
     assert err is None and slot % nt != 0
     s.logout(slot)
     assert load(tmp_path, "yan")["town"] == 0
+
+
+class FakeWS:
+    def __init__(self):
+        self.sent = []
+    async def send(self, text):
+        self.sent.append(json.loads(text))
+    async def close(self):
+        pass
+
+def _attach(s, slot):
+    ws = FakeWS()
+    s.conn[slot] = Client(ws)
+    return ws
+
+def test_eat_is_applied_once_per_message(tmp_path):
+    s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=20)
+    s.prepare()
+    slot, _ = s.login("eater")
+    inv = s.world["players"]["inv"]
+    s.world["players"]["inv"] = inv.at[slot, 0].set(ITEM_MEAT).at[slot, 1].set(ITEM_MEAT)
+    s._on_message(slot, {"t": "input", "move": 0, "attack": False, "eat": True})
+    for _ in range(5):
+        s.tick_once()
+    left = int((np.asarray(s.world["players"]["inv"][slot]) == ITEM_MEAT).sum())
+    assert left == 1
+
+def test_sub_tick_tap_moves_exactly_one_tile(tmp_path):
+    s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=20)
+    s.prepare()
+    slot, _ = s.login("tapper")
+    start = np.asarray(s.world["players"]["pos"][slot]).copy()
+    s._on_message(slot, {"t": "input", "move": 2, "attack": False, "eat": False})
+    s._on_message(slot, {"t": "input", "move": 0, "attack": False, "eat": False})
+    s.tick_once()
+    one = np.asarray(s.world["players"]["pos"][slot])
+    assert one.tolist() == [start[0], start[1] + 1]
+    for _ in range(3):
+        s.tick_once()
+    assert np.asarray(s.world["players"]["pos"][slot]).tolist() == one.tolist()
+
+def test_path_cleared_on_death(tmp_path):
+    async def body():
+        s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=20)
+        s.prepare()
+        slot, _ = s.login("mortal")
+        ws = _attach(s, slot)
+        start = np.asarray(s.world["players"]["pos"][slot]).copy()
+        s._on_message(slot, {"t": "walk_to", "x": int(start[0]) + 3, "y": int(start[1]) + 2})
+        s.tick_once(); s.tick_once()
+        assert len(s.path[slot]) > 0
+        p = s.world["players"]
+        spawn = np.asarray(p["spawn"][slot])
+        # keep the body from respawning by parking a monster on the spawn tile
+        m = s.world["monsters"]
+        s.world["monsters"] = {**m, "active": m["active"].at[0].set(True), "pos": m["pos"].at[0].set(jnp_arr(spawn)),
+                               "hp": m["hp"].at[0].set(10 ** 6)}
+        s.world["players"] = {**p, "dead": p["dead"].at[slot].set(True)}
+        s.tick_once()
+        await asyncio.sleep(0)
+        assert not s.path[slot] and s.stuck[slot] == 0 and s.pending[slot] is None
+        m = s.world["monsters"]
+        s.world["monsters"] = {**m, "active": m["active"].at[0].set(False)}
+        for _ in range(50):
+            s.tick_once(); await asyncio.sleep(0)
+            if not bool(s.world["players"]["dead"][slot]):
+                break
+        assert not bool(s.world["players"]["dead"][slot])
+        pos = np.asarray(s.world["players"]["pos"][slot]).tolist()
+        assert pos == spawn.tolist()
+        for _ in range(5):
+            s.tick_once(); await asyncio.sleep(0)
+            assert np.asarray(s.world["players"]["pos"][slot]).tolist() == pos
+        assert "you died" in [m_["notice"] for m_ in ws.sent if m_["t"] == "snap"]
+    run(body())
+
+def jnp_arr(v):
+    import jax.numpy as jnp
+    return jnp.asarray(v, jnp.int32)

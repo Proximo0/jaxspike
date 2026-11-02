@@ -1,13 +1,15 @@
 """Character files and the town roster for the networked server (numpy only)."""
 import json
+import os
 import re
+import threading
 import zipfile
 import zlib
 from pathlib import Path
 
 import numpy as np
 
-from game.config import INV_SLOTS, PLAYER_MAX_HP
+from game.config import INV_SLOTS, MAP, PLAYER_MAX_HP
 from game.world_layout import TOWNS
 
 _NAME_RE = re.compile(r"[a-z0-9_]{3,16}")
@@ -29,20 +31,38 @@ def new_character(town: int, tile: tuple[int, int]) -> dict:
 
 
 def save(chars_dir: Path, name: str, fields: dict) -> None:
-    """Write a character to <chars_dir>/<name>.npz."""
-    np.savez(Path(chars_dir) / f"{name}.npz", **fields)
+    """Write a character to <chars_dir>/<name>.npz atomically (temp file, then replace)."""
+    final = Path(chars_dir) / f"{name}.npz"
+    tmp = Path(chars_dir) / f"{name}.npz.tmp"
+    with _save_lock:
+        with open(tmp, "wb") as f:
+            np.savez(f, **fields)
+        os.replace(tmp, final)
+
+
+_save_lock = threading.Lock()  # a periodic thread write and a logout write must not share the temp file
+_KEYS = ("town", "pos", "spawn", "hp", "inv", "kills", "deaths")
 
 
 def load(chars_dir: Path, name: str) -> dict | None:
-    """Read a character; None if the file is missing or corrupt."""
+    """Read a character; None if the file is missing, corrupt or fails validation."""
     try:
         with np.load(Path(chars_dir) / f"{name}.npz") as z:
+            if not all(k in z.files for k in _KEYS):
+                return None
             out = {k: z[k] for k in z.files}
-    except (OSError, ValueError, EOFError, zlib.error, zipfile.BadZipFile):
-        return None
-    for k in _INT_FIELDS:
-        if k in out:
+        for k in _INT_FIELDS:
             out[k] = int(out[k])
+        for k in ("pos", "spawn"):
+            v = np.asarray(out[k])
+            if v.shape != (2,) or not ((0 <= v) & (v < MAP)).all():
+                return None
+        if np.asarray(out["inv"]).shape != (INV_SLOTS,):
+            return None
+        if not 0 <= out["town"] < len(TOWNS):
+            return None
+    except (OSError, ValueError, TypeError, EOFError, zlib.error, zipfile.BadZipFile):
+        return None
     return out
 
 
@@ -57,7 +77,10 @@ def load_roster(chars_dir) -> dict[str, int]:
 
 def save_roster(chars_dir, roster) -> None:
     """Write name -> town to roster.json."""
-    (Path(chars_dir) / "roster.json").write_text(json.dumps(roster))
+    final = Path(chars_dir) / "roster.json"
+    tmp = Path(chars_dir) / "roster.json.tmp"
+    tmp.write_text(json.dumps(roster))
+    os.replace(tmp, final)
 
 
 def next_town(roster: dict[str, int]) -> int:

@@ -5,7 +5,6 @@ import numpy as np
 
 from game.config import (INV_SLOTS, MAP, MONSTER_HP, PLAYER_MAX_HP, PROTOCOL_VERSION, T_ROCK, VIEW_H,
                          VIEW_W)
-from game.world_layout import TOWNS
 
 _MONSTER_HP = np.asarray(MONSTER_HP)
 
@@ -59,12 +58,14 @@ def terrain_window(terrain: np.ndarray, x0: int, y0: int) -> list[list[int]]:
     return out.tolist()
 
 
-def host_view(world) -> dict:
-    """Numpy copies of the arrays a snapshot needs."""
+def host_view(world, static: dict | None = None) -> dict:
+    """Numpy copies of the arrays a snapshot needs. `static` ({"terrain","pz"} numpy) skips re-copying the map."""
     p, m, d = world["players"], world["monsters"], world["drops"]
+    if static is None:
+        static = {"terrain": np.asarray(world["terrain"]), "pz": np.asarray(world["pz"])}
     return {
-        "terrain": np.asarray(world["terrain"]), "pz": np.asarray(world["pz"]),
-        "players": {k: np.asarray(p[k]) for k in ("pos", "hp", "active", "dead", "inv", "kills", "deaths")},
+        "terrain": static["terrain"], "pz": static["pz"],
+        "players": {k: np.asarray(p[k]) for k in ("pos", "spawn", "hp", "active", "dead", "inv", "kills", "deaths")},
         "monsters": {k: np.asarray(m[k]) for k in ("pos", "hp", "kind", "active")},
         "drops": {k: np.asarray(d[k]) for k in ("pos", "item", "active")},
     }
@@ -95,14 +96,15 @@ def _drop_ents(d: dict, x0: int, y0: int) -> list[dict]:
     return [{"kind": "d", "item": int(d["item"][i]), "pos": d["pos"][i].tolist()} for i in idx]
 
 
-def snapshot(hv: dict, slot: int, names: dict, send_terrain: bool, notice: str | None, tick: int) -> dict:
-    """Build the snap message for one player's view window."""
+def snapshot(hv: dict, slot: int, names: dict, send_terrain: bool, notice: str | None, tick: int,
+             town: int) -> dict:
+    """Build the snap message for one player's view window; `town` is the player's home town."""
     p = hv["players"]
     pos = p["pos"][slot]
     x0, y0 = view_window(pos)
     you = {"pos": pos.tolist(), "hp": int(p["hp"][slot]), "max_hp": PLAYER_MAX_HP,
            "kills": int(p["kills"][slot]), "deaths": int(p["deaths"][slot]),
-           "inv": p["inv"][slot][:INV_SLOTS].tolist(), "town": slot % len(TOWNS),
+           "inv": p["inv"][slot][:INV_SLOTS].tolist(), "town": int(town),
            "safe": bool(hv["pz"][pos[0], pos[1]])}
     ents = _player_ents(p, x0, y0, names) + _monster_ents(hv["monsters"], x0, y0) + _drop_ents(hv["drops"], x0, y0)
     terrain = {"x0": x0, "y0": y0, "rows": terrain_window(hv["terrain"], x0, y0)} if send_terrain else None

@@ -42,7 +42,7 @@ def _world():
 
 def test_snapshot_contents():
     hv = host_view(_world())
-    s = snapshot(hv, 0, {0: "me", 7: "bob", 9: "far"}, send_terrain=True, notice="hi", tick=5)
+    s = snapshot(hv, 0, {0: "me", 7: "bob", 9: "far"}, send_terrain=True, notice="hi", tick=5, town=0)
     assert s["t"] == "snap" and s["tick"] == 5 and s["notice"] == "hi"
     you = s["you"]
     assert you["pos"] == [100, 100] and you["hp"] == 50 and you["max_hp"] == PLAYER_MAX_HP
@@ -54,8 +54,8 @@ def test_snapshot_contents():
     orc = next(e for e in s["ents"] if e["kind"] == "m")
     assert orc["mkind"] == 1 and orc["max_hp"] == MONSTER_HP[1]
     assert s["terrain"]["x0"] == 100 - VIEW_W // 2 and len(s["terrain"]["rows"]) == VIEW_W
-    assert snapshot(hv, 0, {}, send_terrain=False, notice=None, tick=6)["terrain"] is None
+    assert snapshot(hv, 0, {}, send_terrain=False, notice=None, tick=6, town=0)["terrain"] is None
 
 def test_snapshot_is_json_serialisable():
     import json
-    json.dumps(snapshot(host_view(_world()), 0, {0: "me"}, True, None, 1))
+    json.dumps(snapshot(host_view(_world()), 0, {0: "me"}, True, None, 1, 0))

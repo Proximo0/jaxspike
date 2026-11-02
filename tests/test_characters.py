@@ -1,5 +1,5 @@
 import numpy as np
-from game.config import INV_SLOTS, PLAYER_MAX_HP, ITEM_MEAT
+from game.config import INV_SLOTS, MAP, PLAYER_MAX_HP, ITEM_MEAT
 from game.world_layout import TOWNS
 from net.characters import (load, load_roster, new_character, next_town, save, save_roster, valid_name)
 
@@ -40,3 +40,23 @@ def test_roster_round_robin(tmp_path):
     assert towns == list(range(len(TOWNS))) + [0]
     save_roster(tmp_path, r)
     assert load_roster(tmp_path) == r
+
+def test_save_is_atomic_leaves_no_tmp(tmp_path):
+    save(tmp_path, "amy", new_character(0, (5, 6)))
+    save_roster(tmp_path, {"amy": 0})
+    assert not list(tmp_path.glob("*.tmp"))
+    assert load(tmp_path, "amy") is not None and load_roster(tmp_path) == {"amy": 0}
+
+def test_load_validates(tmp_path):
+    good = new_character(0, (5, 6))
+    save(tmp_path, "ok", good)
+    assert load(tmp_path, "ok") is not None
+    missing = {k: v for k, v in good.items() if k != "inv"}
+    save(tmp_path, "nokey", missing)
+    assert load(tmp_path, "nokey") is None
+    save(tmp_path, "badpos", {**good, "pos": np.array([MAP, 0], np.int32)})
+    assert load(tmp_path, "badpos") is None
+    save(tmp_path, "badtown", {**good, "town": 99})
+    assert load(tmp_path, "badtown") is None
+    save(tmp_path, "badinv", {**good, "inv": np.zeros(3, np.int32)})
+    assert load(tmp_path, "badinv") is None

@@ -22,12 +22,12 @@ from net.client import NetClient  # noqa: E402
 TILE = 32            # pixels per tile (Tibia uses 32)
 HUD_H = 40           # pixel strip under the map for the status lines
 
-# Move codes from config: 0 stay, 1 north (y-1), 2 south (y+1), 3 west (x-1), 4 east (x+1).
+# Keys are lower-cased keysyms (Caps Lock / Shift change the case). Move codes from config: 0 stay, 1 north (y-1), 2 south (y+1), 3 west (x-1), 4 east (x+1).
 KEY_TO_MOVE = {
-    "w": 1, "Up": 1,
-    "s": 2, "Down": 2,
-    "a": 3, "Left": 3,
-    "d": 4, "Right": 4,
+    "w": 1, "up": 1,
+    "s": 2, "down": 2,
+    "a": 3, "left": 3,
+    "d": 4, "right": 4,
 }
 
 # Flat fill colour per terrain id. None means a drawn tile (grass, tree, wall) handled in draw().
@@ -101,6 +101,11 @@ def draw_drop(c, sx, sy, item):
         c.create_oval(sx + 6, sy + 6, sx + TILE - 6, sy + TILE - 6, fill="#e8c547", outline="")
 
 
+def _odd(n):
+    """Largest odd count not above n (so the player's tile can be centred)."""
+    return max(n if n % 2 else n - 1, 1)
+
+
 class Game:
     def __init__(self, root, client):
         self.root = root
@@ -115,8 +120,8 @@ class Game:
         self.x0 = self.y0 = 0    # world coordinates of the top-left drawn tile
         sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
         # The server fixes the view size; draw only the tiles that fit in the window.
-        self.view_w = min(self.welcome["view_w"], (sw // TILE) | 1)
-        self.view_h = min(self.welcome["view_h"], ((sh - HUD_H) // TILE) | 1)
+        self.view_w = min(self.welcome["view_w"], _odd(sw // TILE))
+        self.view_h = min(self.welcome["view_h"], _odd((sh - HUD_H) // TILE))
         self.off_x = (sw - self.view_w * TILE) // 2  # centre the map strip on the screen
         self.canvas = tk.Canvas(root, width=sw, height=sh, bg="#101010", highlightthickness=0)
         self.canvas.pack(fill="both", expand=True)
@@ -124,8 +129,9 @@ class Game:
         root.bind("<KeyRelease>", self.on_release)
         root.bind("<space>", lambda e: self.set_attack(True))
         root.bind("<KeyRelease-space>", lambda e: self.set_attack(False))
-        root.bind("<e>", lambda e: self.set_eat(True))
-        root.bind("<KeyRelease-e>", lambda e: self.set_eat(False))
+        for ch in ("e", "E"):
+            root.bind(f"<KeyPress-{ch}>", lambda e: self.set_eat(True))
+            root.bind(f"<KeyRelease-{ch}>", lambda e: self.set_eat(False))
         root.bind("<Button-1>", self.on_click)
         root.bind("<FocusOut>", self.on_focus_out)
         root.bind("<Escape>", lambda e: self.quit())
@@ -143,14 +149,15 @@ class Game:
         self.push_input()
 
     def on_press(self, event):
-        k = event.keysym
+        k = event.keysym.lower()
         if k in KEY_TO_MOVE and k not in self.held:
             self.held.append(k)
             self.push_input()
 
     def on_release(self, event):
-        if event.keysym in self.held:
-            self.held.remove(event.keysym)
+        k = event.keysym.lower()
+        if k in self.held:
+            self.held.remove(k)
             self.push_input()
 
     def human_move(self):

@@ -8,6 +8,7 @@ import logging
 import os
 import signal
 import sys
+import time
 from collections import deque
 from pathlib import Path
 
@@ -69,6 +70,11 @@ class GameServer:
         self.owner: list[str | None] = [None] * MAX_PLAYERS
         self.conn: dict[int, Client] = {}
         self.latest_input = {}
+        self.tap: dict[int, list] = {}  # slot -> [move, attack] set by a message, consumed by the next tick
+        self.static = None
+        self._walked: set = set()
+        self._max_tick_s = 0.0
+        self._saving: set = set()
         self.path: dict[int, deque] = {}
         self.pending: dict[int, tuple | None] = {}
         self.stuck: dict[int, int] = {}
@@ -90,6 +96,7 @@ class GameServer:
             return
         self.world = _initial_world(self.seed)
         self.walls = np.asarray(self.world["walls"])
+        self.static = {"terrain": np.array(self.world["terrain"]), "pz": np.array(self.world["pz"])}
         active = np.asarray(self.world["players"]["active"])
         self.owner = ["bot" if a else None for a in active]
         inputs, _ = self._bot_inputs()  # also compiles; the advanced rng is dropped so the world is untouched
@@ -121,7 +128,7 @@ class GameServer:
             self._server = None
         for t in list(self._sending):
             t.cancel()
-        await asyncio.gather(*self._closing, *self._sending, return_exceptions=True)
+        await asyncio.gather(*self._closing, *self._sending, *self._saving, return_exceptions=True)
 
     # ----- slots and characters -----
 
@@ -135,6 +142,12 @@ class GameServer:
                 if self.owner[s] == want:
                     return s
         return None
+
+    def _tile_taken(self, pos) -> bool:
+        p = self.world["players"]
+        live = np.asarray(p["active"] & ~p["dead"])
+        ppos = np.asarray(p["pos"])[live]
+        return bool(((ppos[:, 0] == int(pos[0])) & (ppos[:, 1] == int(pos[1]))).any())
 
     def _free_temple_tile(self, town: int) -> tuple[int, int]:
         p = self.world["players"]
@@ -176,9 +189,13 @@ class GameServer:
                 characters.save_roster(self.chars_dir, self.roster)
             except OSError:
                 log.exception("roster save failed")
-        self._write_slot(slot, char["pos"], char["spawn"], char["hp"], char["inv"], char["kills"], char["deaths"])
+        pos = char["pos"]
+        if self._tile_taken(pos):
+            pos = np.array(self._free_temple_tile(town), np.int32)
+        self._write_slot(slot, pos, char["spawn"], char["hp"], char["inv"], char["kills"], char["deaths"])
         self.owner[slot] = key
         self.latest_input[slot] = (0, False, False)
+        self.tap[slot] = [0, False]
         self.path[slot] = deque()
         self.pending[slot] = None
         self.stuck[slot] = 0
@@ -189,14 +206,17 @@ class GameServer:
         log.info("login %s slot %d town %d", key, slot, town)
         return slot, None
 
-    def _fields(self, slot: int) -> dict:
-        p = self.world["players"]
-        dead = bool(p["dead"][slot])
-        spawn = np.asarray(p["spawn"][slot], np.int32)
-        return {"town": self.town[slot], "pos": spawn.copy() if dead else np.asarray(p["pos"][slot], np.int32),
-                "spawn": spawn, "hp": PLAYER_MAX_HP if dead else int(p["hp"][slot]),
-                "inv": np.asarray(p["inv"][slot], np.int32)[:INV_SLOTS],
-                "kills": int(p["kills"][slot]), "deaths": int(p["deaths"][slot])}
+    def _fields(self, slot: int, pl: dict | None = None) -> dict:
+        """Character fields for `slot`, from the host view's player arrays (or the world when none given)."""
+        if pl is None:
+            p = self.world["players"]
+            pl = {k: np.asarray(p[k]) for k in ("pos", "spawn", "hp", "dead", "inv", "kills", "deaths")}
+        dead = bool(pl["dead"][slot])
+        spawn = np.array(pl["spawn"][slot], np.int32)
+        return {"town": self.town[slot], "pos": spawn.copy() if dead else np.array(pl["pos"][slot], np.int32),
+                "spawn": spawn, "hp": PLAYER_MAX_HP if dead else int(pl["hp"][slot]),
+                "inv": np.array(pl["inv"][slot], np.int32)[:INV_SLOTS],
+                "kills": int(pl["kills"][slot]), "deaths": int(pl["deaths"][slot])}
 
     def _save_slot(self, slot: int) -> None:
         name = self.owner[slot]
@@ -204,6 +224,31 @@ class GameServer:
             characters.save(self.chars_dir, name, self._fields(slot))
         except Exception:
             log.exception("save failed for %s", name)
+
+    def _write_batch(self, batch: list) -> None:
+        for name, fields in batch:
+            try:
+                characters.save(self.chars_dir, name, fields)
+            except Exception:
+                log.exception("save failed for %s", name)
+
+    def _periodic_save(self, hv: dict) -> None:
+        """Collect every human's fields now, write the files off the tick path."""
+        batch = [(self.owner[s], self._fields(s, hv["players"])) for s in self._humans()]
+        if not batch:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            self._write_batch(batch)  # no event loop (direct tick_once call): write inline
+            return
+        if self._saving:
+            log.warning("previous periodic save still running; skipping tick %d", self.tick)
+            return
+        t = loop.create_task(asyncio.to_thread(self._write_batch, batch))
+        self._saving.add(t)
+        t.add_done_callback(self._saving.discard)
+        log.info("saving %d characters at tick %d", len(batch), self.tick)
 
     def logout(self, slot: int) -> None:
         """Save the human, hand the slot back to the bots, drop its connection state."""
@@ -215,8 +260,9 @@ class GameServer:
         tile = self._free_temple_tile(town)
         self._write_slot(slot, tile, tile, PLAYER_MAX_HP, np.zeros(INV_SLOTS, np.int32), 0, 0)
         self.owner[slot] = "bot"
+        self._walked.discard(slot)
         for d in (self.latest_input, self.path, self.pending, self.stuck, self.last_window, self.notice,
-                  self.prev_dead, self.town):
+                  self.prev_dead, self.town, self.tap):
             d.pop(slot, None)
         c = self.conn.pop(slot, None)
         if c is not None:
@@ -249,19 +295,27 @@ class GameServer:
         pos = np.asarray(self.world["players"]["pos"])
         for slot in self._humans():
             m, a, e = self.latest_input[slot]
+            tm, ta = self.tap[slot]
+            m, a = m or tm, a or ta  # a tap released before this tick still counts for one tick
+            self.tap[slot] = [0, False]
+            if e:
+                self.latest_input[slot] = (self.latest_input[slot][0], self.latest_input[slot][1], False)  # one eat per message
             attack[slot], eat[slot] = a, e
             move[slot] = self._path_move(slot, tuple(int(v) for v in pos[slot]), m)
         inputs = {"move": jnp.asarray(move, jnp.int32), "attack": jnp.asarray(attack), "eat": jnp.asarray(eat)}
         self.world = _step_jit(self.world, inputs)
         self.tick += 1
-        hv = host_view(self.world)
+        self._walked.clear()
+        hv = host_view(self.world, self.static)
         names = {s: self.owner[s] for s in self._humans()}
         for slot in list(self.conn):
-            self._queue_snapshot(slot, hv, names)
+            try:
+                self._queue_snapshot(slot, hv, names)
+            except Exception:
+                log.exception("snapshot failed for slot %d; logging it out", slot)
+                self.logout(slot)
         if self.tick % SAVE_EVERY_TICKS == 0:
-            for slot in self._humans():
-                self._save_slot(slot)
-            log.info("saved %d characters at tick %d", len(self._humans()), self.tick)
+            self._periodic_save(hv)
 
     def _path_move(self, slot: int, pos: tuple, default: int) -> int:
         """Move code for a human this tick: the next path step if walking, else the held input."""
@@ -289,13 +343,16 @@ class GameServer:
         dead = bool(hv["players"]["dead"][slot])
         if dead and not self.prev_dead.get(slot, False):
             self.notice[slot] = "you died"
+            self.path[slot].clear()
+            self.pending[slot] = None
+            self.stuck[slot] = 0
         self.prev_dead[slot] = dead
         c = self.conn[slot]
         if c.send_task is not None and not c.send_task.done():
             return  # slow client: skip this tick, never wait
         window = view_window(hv["players"]["pos"][slot])
         snap = snapshot(hv, slot, names, self.last_window.get(slot) != window, self.notice.pop(slot, None),
-                        self.tick)
+                        self.tick, self.town[slot])
         self.last_window[slot] = window
         c.send_task = asyncio.create_task(self._send(c, encode(snap)))
 
@@ -314,10 +371,18 @@ class GameServer:
         while True:
             delay = deadline - loop.time()
             await asyncio.sleep(max(delay, 0))
+            t0 = time.perf_counter()
             try:
                 self.tick_once()
             except Exception:
                 log.exception("tick failed")
+            took = time.perf_counter() - t0
+            self._max_tick_s = max(self._max_tick_s, took)
+            if took > dt:
+                self.overruns += 1
+            if self.tick % 100 == 0:
+                log.info("max tick duration over the last 100 ticks: %.1f ms", self._max_tick_s * 1000)
+                self._max_tick_s = 0.0
             deadline += dt
             now = loop.time()
             if now > deadline + dt:
@@ -381,9 +446,17 @@ class GameServer:
     def _on_message(self, slot: int, msg: dict) -> None:
         if msg["t"] == "input":
             self.latest_input[slot] = (msg["move"], msg["attack"], msg["eat"])
+            tap = self.tap[slot]
+            if msg["move"]:
+                tap[0] = msg["move"]
+            if msg["attack"]:
+                tap[1] = True
             self.path[slot].clear()
             self.pending[slot] = None
         elif msg["t"] == "walk_to":
+            if slot in self._walked:
+                return  # at most one A* per slot per tick
+            self._walked.add(slot)
             p = self.world["players"]["pos"][slot]
             start = (int(p[0]), int(p[1]))
             path = find_path(self.walls, start, (msg["x"], msg["y"]))
