@@ -73,6 +73,9 @@ def test_walk_to_reaches_tile(tmp_path):
                 if pos == goal:
                     break
             assert pos == goal
+            await ws.send(json.dumps({"v": 1, "t": "walk_to", "x": -1, "y": 5}))
+            notices = [(await next_snap(ws))["notice"] for _ in range(5)]
+            assert "too far" in notices
             await ws.close()
         finally:
             await s.stop()

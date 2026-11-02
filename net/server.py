@@ -361,7 +361,11 @@ class GameServer:
                     await self._refuse(ws, "malformed message")
                     return
                 if msg["t"] in ("input", "walk_to"):
-                    msg = validate_client(msg)
+                    if msg["t"] == "walk_to" and all(
+                            isinstance(msg.get(k), int) and not isinstance(msg.get(k), bool) for k in ("x", "y")):
+                        msg = {"t": "walk_to", "x": msg["x"], "y": msg["y"]}  # out-of-map ints: "too far", not malformed
+                    else:
+                        msg = validate_client(msg)
                     if msg is None:
                         await self._refuse(ws, "malformed message")
                         return
