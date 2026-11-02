@@ -12,6 +12,8 @@ var session: NetSession = null
 var enabled: bool = true
 var camera: Camera2D = null
 var state: InputState = InputState.new()
+## Optional: called with the click's world position before a walk; returning true consumes the click (entity select).
+var click_filter: Callable = Callable()
 
 
 func _process(_delta: float) -> void:
@@ -37,6 +39,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		var m: InputEventMouseButton = event
 		if m.pressed and m.button_index == MOUSE_BUTTON_LEFT:
+			if get_viewport().gui_get_hovered_control() != null:
+				return  # a panel is under the mouse
+			if click_filter.is_valid() and bool(click_filter.call(camera.get_global_mouse_position())):
+				return
 			click_walk(click_tile(m.position))
 
 

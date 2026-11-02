@@ -16,6 +16,15 @@ var map_drawn: bool = false
 var welcome_to_drawn_ms: int = 0
 var walk_marker: WalkMarker = null
 var _marker_tick: int = -1
+var ui_layer: CanvasLayer = null
+var panels: Array[Node] = []  ## every RO panel: bind(session) / set_welcome(msg) / on_message(msg) where defined
+var skill_bar: SkillBar = null
+
+const PANEL_SCENES: Array[String] = [
+	"res://game/ui/status_panel.tscn", "res://game/ui/skill_bar.tscn", "res://game/ui/skill_panel.tscn",
+	"res://game/ui/inventory_panel.tscn", "res://game/ui/craft_panel.tscn", "res://game/ui/party_panel.tscn",
+	"res://game/ui/chat_box.tscn",
+]
 
 
 func start(s: NetSession) -> void:
@@ -34,15 +43,28 @@ func start(s: NetSession) -> void:
 		player_input.walk_blocked.connect(_on_walk_blocked)
 	walk_marker.hide_marker()
 	hud.bind(s)
+	_ensure_panels()
+	for p: Node in panels:
+		if p == skill_bar:
+			skill_bar.bind(s, entity_layer)
+		elif p.has_method("bind"):
+			p.call("bind", s)
+	player_input.click_filter = Callable(self, "_click_world")
 
 
 func _process(_delta: float) -> void:
 	if session == null:
 		return
 	for msg: Dictionary in session.poll():
+		for p: Node in panels:
+			if p.has_method("on_message"):
+				p.call("on_message", msg)
 		match String(msg["t"]):
 			"welcome":
 				_on_welcome()
+				for p: Node in panels:
+					if p.has_method("set_welcome"):
+						p.call("set_welcome", msg)
 			"error":
 				_close(session.last_error)
 				return
@@ -100,6 +122,41 @@ func _track_marker() -> void:
 	if session.store.tick != _marker_tick:
 		_marker_tick = session.store.tick
 		walk_marker.observe(_own_tile(), _marker_tick)
+
+
+## Instances the RO panels once, under a CanvasLayer above the HUD; keys live inside the panels.
+func _ensure_panels() -> void:
+	if ui_layer != null:
+		return
+	ui_layer = CanvasLayer.new()
+	ui_layer.layer = 2
+	add_child(ui_layer)
+	for path: String in PANEL_SCENES:
+		var node: Node = (load(path) as PackedScene).instantiate()
+		ui_layer.add_child(node)
+		panels.append(node)
+		if node is SkillBar:
+			skill_bar = node as SkillBar
+	var cast_bar: Control = Control.new()
+	cast_bar.set_script(load("res://game/ui/cast_bar.gd"))
+	cast_bar.name = "CastBar"
+	cast_bar.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	cast_bar.offset_top = -130.0
+	ui_layer.add_child(cast_bar)
+	panels.append(cast_bar)
+	var buff_row: HBoxContainer = HBoxContainer.new()
+	buff_row.set_script(load("res://game/ui/buff_row.gd"))
+	buff_row.name = "BuffRow"
+	buff_row.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	buff_row.offset_left = -400.0
+	buff_row.offset_top = 8.0
+	ui_layer.add_child(buff_row)
+	panels.append(buff_row)
+
+
+## Left click in the world: entity select wins over walk-to (the skill bar owns the selection).
+func _click_world(world_pos: Vector2) -> bool:
+	return skill_bar != null and skill_bar.click_world(world_pos)
 
 
 func _on_quit() -> void:

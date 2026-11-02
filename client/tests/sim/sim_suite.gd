@@ -7,6 +7,8 @@ const SIM_FILES: Array = [
 	"sim_example",
 	"sim_login",
 	"sim_lab_smoke",
+	"sim_ui_stats",
+	"sim_ui_items",
 ]
 
 
