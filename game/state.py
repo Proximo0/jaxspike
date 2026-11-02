@@ -1,0 +1,106 @@
+"""World state schema and constructor. Owned by the lead.
+
+The world is a plain nested dict (a JAX pytree). Every phase reads and writes
+only these keys. Shapes are fixed. Inactive slots keep their last values but
+their `active` flag is False, and phases must ignore them.
+
+world = {
+  "walls":   int8  [MAP, MAP]                 1 = blocked
+  "tick":    int32 []
+  "rng":     uint32 [2]                       JAX PRNG key, advanced by next_key()
+  "players": {
+      "pos":        int32 [MAX_PLAYERS, 2]
+      "hp":         int32 [MAX_PLAYERS]
+      "active":     bool  [MAX_PLAYERS]        logged in (may be dead)
+      "dead":       bool  [MAX_PLAYERS]        hp reached 0 this or an earlier tick, awaiting respawn
+      "spawn":      int32 [MAX_PLAYERS, 2]
+      "attack_cd":  int32 [MAX_PLAYERS]        ticks until next attack allowed
+      "inv":        int32 [MAX_PLAYERS, INV_SLOTS]  item ids, ITEM_NONE = empty
+      "kills":      int32 [MAX_PLAYERS]
+      "deaths":     int32 [MAX_PLAYERS]
+  }
+  "monsters": {
+      "pos":        int32 [MAX_MONSTERS, 2]
+      "hp":         int32 [MAX_MONSTERS]
+      "kind":       int32 [MAX_MONSTERS]
+      "active":     bool  [MAX_MONSTERS]       alive and on the map
+      "spawn":      int32 [MAX_MONSTERS, 2]
+      "respawn_in": int32 [MAX_MONSTERS]       >0 while dead, counts down to respawn
+      "attack_cd":  int32 [MAX_MONSTERS]
+      "died":       bool  [MAX_MONSTERS]       set by combat on the tick it dies, cleared each tick
+  }
+  "drops": {
+      "pos":    int32 [MAX_DROPS, 2]
+      "item":   int32 [MAX_DROPS]               ITEM_NONE if slot unused
+      "active": bool  [MAX_DROPS]
+      "ttl":    int32 [MAX_DROPS]
+  }
+}
+
+inputs (per tick, built by bots or the network layer):
+  {"move": int32 [MAX_PLAYERS] in 0..4, "attack": bool [MAX_PLAYERS]}
+"""
+import jax
+import jax.numpy as jnp
+
+from game.config import (
+    INV_SLOTS,
+    MAP,
+    MAX_DROPS,
+    MAX_MONSTERS,
+    MAX_PLAYERS,
+    PLAYER_MAX_HP,
+)
+
+
+def next_key(world):
+    """Return (sub_key, new_world) with the world's rng advanced.
+
+    The stored rng is raw uint32 key data (shape [2]) so it can be vmapped and saved.
+    """
+    key = jax.random.wrap_key_data(world["rng"])
+    key, sub = jax.random.split(key)
+    return sub, {**world, "rng": jax.random.key_data(key)}
+
+
+def empty_inputs():
+    return {
+        "move": jnp.zeros((MAX_PLAYERS,), jnp.int32),
+        "attack": jnp.zeros((MAX_PLAYERS,), jnp.bool_),
+    }
+
+
+def make_empty_world(key):
+    """Blank world with no walls, no players, no monsters. Used by tests and as a base."""
+    return {
+        "walls": jnp.zeros((MAP, MAP), jnp.int8),
+        "tick": jnp.zeros((), jnp.int32),
+        "rng": jax.random.key_data(jax.random.PRNGKey(0) if key is None else key),
+        "players": {
+            "pos": jnp.zeros((MAX_PLAYERS, 2), jnp.int32),
+            "hp": jnp.full((MAX_PLAYERS,), PLAYER_MAX_HP, jnp.int32),
+            "active": jnp.zeros((MAX_PLAYERS,), jnp.bool_),
+            "dead": jnp.zeros((MAX_PLAYERS,), jnp.bool_),
+            "spawn": jnp.zeros((MAX_PLAYERS, 2), jnp.int32),
+            "attack_cd": jnp.zeros((MAX_PLAYERS,), jnp.int32),
+            "inv": jnp.zeros((MAX_PLAYERS, INV_SLOTS), jnp.int32),
+            "kills": jnp.zeros((MAX_PLAYERS,), jnp.int32),
+            "deaths": jnp.zeros((MAX_PLAYERS,), jnp.int32),
+        },
+        "monsters": {
+            "pos": jnp.zeros((MAX_MONSTERS, 2), jnp.int32),
+            "hp": jnp.zeros((MAX_MONSTERS,), jnp.int32),
+            "kind": jnp.zeros((MAX_MONSTERS,), jnp.int32),
+            "active": jnp.zeros((MAX_MONSTERS,), jnp.bool_),
+            "spawn": jnp.zeros((MAX_MONSTERS, 2), jnp.int32),
+            "respawn_in": jnp.zeros((MAX_MONSTERS,), jnp.int32),
+            "attack_cd": jnp.zeros((MAX_MONSTERS,), jnp.int32),
+            "died": jnp.zeros((MAX_MONSTERS,), jnp.bool_),
+        },
+        "drops": {
+            "pos": jnp.zeros((MAX_DROPS, 2), jnp.int32),
+            "item": jnp.zeros((MAX_DROPS,), jnp.int32),
+            "active": jnp.zeros((MAX_DROPS,), jnp.bool_),
+            "ttl": jnp.zeros((MAX_DROPS,), jnp.int32),
+        },
+    }
