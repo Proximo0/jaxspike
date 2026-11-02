@@ -1,35 +1,26 @@
-"""Playable window for the JAX tile MMO. CPU only.
+"""Playable window for the JAX tile MMO: a network client for net/server.py. CPU only.
 
-You control player 0 (the human). Other players are bots. Monsters chase and fight.
-
-Opens fullscreen. Controls: WASD or arrow keys to move, Space to attack, R for a new world, Esc to quit.
-Run from C:\\Users\\crp27\\jaxspike:  venv\\Scripts\\python.exe play.py
+Opens fullscreen. Controls: WASD or arrow keys to move, Space to attack, E to eat, left click to walk to a
+tile, Esc to quit.
+Run from C:\\Users\\crp27\\jaxspike:  venv\\Scripts\\python.exe play.py --host 127.0.0.1 --port 8765 --name you
 """
-import os
+import argparse
+import getpass
 import sys
+import time
 import tkinter as tk
 from pathlib import Path
 
-os.environ.setdefault("JAX_PLATFORMS", "cpu")
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import jax  # noqa: E402
-import jax.numpy as jnp  # noqa: E402
-import numpy as np  # noqa: E402
-
-from bots.policies import bot_inputs  # noqa: E402
-from bots.runner import make_world_batch  # noqa: E402
 from game.config import (  # noqa: E402
-    ITEM_GOLD_COIN, ITEM_MEAT, ITEM_SWORD, MAP, MONSTER_HP, PLAYER_MAX_HP,
+    ITEM_GOLD_COIN, ITEM_MEAT, ITEM_SWORD, MONSTER_HP,
     T_FLOOR, T_GRASS, T_ROAD, T_ROCK, T_TEMPLE, T_TREE, T_WALL, T_WATER,
 )
-from game.world_layout import TOWNS  # noqa: E402
-from game.step import step  # noqa: E402
+from net.client import NetClient  # noqa: E402
 
 TILE = 32            # pixels per tile (Tibia uses 32)
 HUD_H = 40           # pixel strip under the map for the status lines
-TICK_MS = 120        # game ticks per second is about 8
-HUMAN = 0            # player slot the keyboard controls
 
 # Move codes from config: 0 stay, 1 north (y-1), 2 south (y+1), 3 west (x-1), 4 east (x+1).
 KEY_TO_MOVE = {
@@ -38,10 +29,6 @@ KEY_TO_MOVE = {
     "a": 3, "Left": 3,
     "d": 4, "Right": 4,
 }
-
-bot_inputs_jit = jax.jit(bot_inputs)
-step_jit = jax.jit(step)
-
 
 # Flat fill colour per terrain id. None means a drawn tile (grass, tree, wall) handled in draw().
 TERRAIN_FILL = {
@@ -54,10 +41,6 @@ TERRAIN_FILL = {
     T_WALL: None,
     T_ROCK: "#3a3a3a",
 }
-
-
-def unbatch(worlds):
-    return jax.tree_util.tree_map(lambda x: x[0], worlds)
 
 
 def draw_grass(c, sx, sy, shade):
@@ -119,17 +102,21 @@ def draw_drop(c, sx, sy, item):
 
 
 class Game:
-    def __init__(self, root):
+    def __init__(self, root, client):
         self.root = root
-        self.seed = 0
+        self.client = client
+        self.welcome = client.welcome
         self.held = []           # held movement keys, most recent last
         self.attacking = False
         self.eating = False
-        self.paused = False
-        # Fullscreen: as many whole tiles as fit, odd counts so the human sits on the centre tile.
+        self.sent = (0, False, False)
+        self.terrain = None      # last non-null snap["terrain"]
+        self.snap = None
+        self.x0 = self.y0 = 0    # world coordinates of the top-left drawn tile
         sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
-        self.view_w = (sw // TILE) | 1
-        self.view_h = ((sh - HUD_H) // TILE) | 1
+        # The server fixes the view size; draw only the tiles that fit in the window.
+        self.view_w = min(self.welcome["view_w"], (sw // TILE) | 1)
+        self.view_h = min(self.welcome["view_h"], ((sh - HUD_H) // TILE) | 1)
         self.off_x = (sw - self.view_w * TILE) // 2  # centre the map strip on the screen
         self.canvas = tk.Canvas(root, width=sw, height=sh, bg="#101010", highlightthickness=0)
         self.canvas.pack(fill="both", expand=True)
@@ -139,148 +126,159 @@ class Game:
         root.bind("<KeyRelease-space>", lambda e: self.set_attack(False))
         root.bind("<e>", lambda e: self.set_eat(True))
         root.bind("<KeyRelease-e>", lambda e: self.set_eat(False))
-        root.bind("<r>", lambda e: self.reset())
-        root.bind("<p>", lambda e: self.toggle_pause())
-        root.bind("<Escape>", lambda e: root.destroy())
-        self.reset()
+        root.bind("<Button-1>", self.on_click)
+        root.bind("<Escape>", lambda e: self.quit())
 
-    def reset(self):
-        self.world = unbatch(make_world_batch(self.seed, 1))
-        self.seed += 1
-        self.tick_no = 0
-        self.last_stats = (0, 0)
-        self.draw()
-
-    def toggle_pause(self):
-        self.paused = not self.paused
+    def quit(self):
+        self.client.close()
+        self.root.destroy()
 
     def set_attack(self, on):
         self.attacking = on
+        self.push_input()
 
     def set_eat(self, on):
         self.eating = on
+        self.push_input()
 
     def on_press(self, event):
         k = event.keysym
         if k in KEY_TO_MOVE and k not in self.held:
             self.held.append(k)
+            self.push_input()
 
     def on_release(self, event):
         if event.keysym in self.held:
             self.held.remove(event.keysym)
+            self.push_input()
 
     def human_move(self):
         if not self.held:
             return 0
         return KEY_TO_MOVE[self.held[-1]]
 
-    def run_tick(self):
-        if not self.paused:
-            key = jax.random.PRNGKey(self.tick_no)
-            inputs = bot_inputs_jit(self.world, key)
-            move = np.array(inputs["move"])
-            attack = np.array(inputs["attack"])
-            eat = np.array(inputs["eat"])
-            move[HUMAN] = self.human_move()
-            attack[HUMAN] = self.attacking
-            eat[HUMAN] = self.eating
-            inputs = {"move": jnp.asarray(move, jnp.int32), "attack": jnp.asarray(attack), "eat": jnp.asarray(eat)}
-            self.world = step_jit(self.world, inputs)
-            self.tick_no += 1
-            self.draw()
-        self.root.after(TICK_MS, self.run_tick)
+    def push_input(self):
+        cur = (self.human_move(), self.attacking, self.eating)
+        if cur != self.sent:
+            self.sent = cur
+            self.client.send_input(*cur)
+
+    def on_click(self, event):
+        if self.snap is None:
+            return
+        tx = (event.x - self.off_x) // TILE
+        ty = event.y // TILE
+        if 0 <= tx < self.view_w and 0 <= ty < self.view_h:
+            self.client.walk_to(self.x0 + tx, self.y0 + ty)
+
+    def frame(self):
+        snap = self.client.latest()
+        if snap is not None:
+            self.snap = snap
+            if snap.get("terrain") is not None:
+                self.terrain = snap["terrain"]
+        self.draw()
+        self.root.after(self.welcome["tick_ms"], self.frame)
 
     def draw(self):
-        w = jax.device_get(self.world)
         c = self.canvas
         c.delete("all")
-        hx, hy = w["players"]["pos"][HUMAN]
-        x0 = int(hx) - self.view_w // 2
-        y0 = int(hy) - self.view_h // 2
+        hud_y = self.view_h * TILE
+        snap = self.snap
+        if snap is None or self.terrain is None:
+            c.create_text(8, hud_y + 12, anchor="w", fill="#dddddd", font=("Consolas", 11), text="waiting for server...")
+            return
+        you = snap["you"]
+        hx, hy = you["pos"]
+        self.x0 = hx - self.view_w // 2
+        self.y0 = hy - self.view_h // 2
+        x0, y0 = self.x0, self.y0
 
         def to_screen(x, y):
             return self.off_x + (x - x0) * TILE, (y - y0) * TILE
 
-        terrain = w["terrain"]
-        pz = w["pz"]
+        def on_screen(x, y):
+            return x0 <= x < x0 + self.view_w and y0 <= y < y0 + self.view_h
+
+        t = self.terrain
+        tx0, ty0, rows = t["x0"], t["y0"], t["rows"]
         for ty in range(self.view_h):
             for tx in range(self.view_w):
                 x, y = x0 + tx, y0 + ty
                 sx, sy = to_screen(x, y)
-                if not (0 <= x < MAP and 0 <= y < MAP):
+                i, j = x - tx0, y - ty0
+                if not (0 <= i < len(rows) and 0 <= j < len(rows[0])):
                     c.create_rectangle(sx, sy, sx + TILE, sy + TILE, fill="#000000", outline="")
+                    continue
+                tid = rows[i][j]
+                fill = TERRAIN_FILL.get(tid)
+                if fill is not None:
+                    c.create_rectangle(sx, sy, sx + TILE, sy + TILE, fill=fill, outline="")
+                elif tid == T_WALL:
+                    draw_wall(c, sx, sy)
+                elif tid == T_TREE:
+                    draw_tree(c, sx, sy, (x * 7 + y * 13) % 3)
                 else:
-                    t = int(terrain[x, y])
-                    fill = TERRAIN_FILL[t]
-                    if fill is not None:
-                        c.create_rectangle(sx, sy, sx + TILE, sy + TILE, fill=fill, outline="")
-                    elif t == T_WALL:
-                        draw_wall(c, sx, sy)
-                    elif t == T_TREE:
-                        draw_tree(c, sx, sy, (x * 7 + y * 13) % 3)
-                    else:
-                        draw_grass(c, sx, sy, (x * 7 + y * 13) % 3)
+                    draw_grass(c, sx, sy, (x * 7 + y * 13) % 3)
 
-        d = w["drops"]
-        def on_screen(x, y):
-            return x0 <= x < x0 + self.view_w and y0 <= y < y0 + self.view_h
-
-        for i in np.flatnonzero(d["active"]):
-            x, y = d["pos"][i]
-            if on_screen(x, y):
-                draw_drop(c, *to_screen(x, y), int(d["item"][i]))
-
-        m = w["monsters"]
-        for i in np.flatnonzero(m["active"]):
-            x, y = m["pos"][i]
-            if not on_screen(x, y):
+        ents = snap["ents"]
+        for e in ents:
+            if e["kind"] == "d" and on_screen(*e["pos"]):
+                draw_drop(c, *to_screen(*e["pos"]), e["item"])
+        for e in ents:
+            if e["kind"] != "m" or not on_screen(*e["pos"]):
                 continue
-            sx, sy = to_screen(x, y)
-            if m["kind"][i] == 0:
+            sx, sy = to_screen(*e["pos"])
+            if e["mkind"] == 0:
                 draw_rat(c, sx, sy)
             else:
                 draw_orc(c, sx, sy)
-            hp_frac = max(m["hp"][i], 0) / MONSTER_HP[int(m["kind"][i])]
+            hp_frac = max(e["hp"], 0) / MONSTER_HP[e["mkind"]]
             c.create_rectangle(sx + 2, sy, sx + 2 + (TILE - 4) * hp_frac, sy + 2, fill="#ff4444", outline="")
-
-        p = w["players"]
-        for i in np.flatnonzero(p["active"]):
-            x, y = p["pos"][i]
-            if not on_screen(x, y):
+        for e in ents:
+            if e["kind"] != "p" or not on_screen(*e["pos"]) or list(e["pos"]) == [hx, hy]:
                 continue
-            sx, sy = to_screen(x, y)
-            if i == HUMAN:
-                draw_player(c, sx, sy, "#ffd166", "#000000", bool(p["dead"][i]))
-            else:
-                draw_player(c, sx, sy, "#5dade2", "#1b4f72", bool(p["dead"][i]))
+            sx, sy = to_screen(*e["pos"])
+            draw_player(c, sx, sy, "#5dade2", "#1b4f72", False)
+            c.create_text(sx + TILE // 2, sy - 6, fill="#ffffff", font=("Consolas", 9), text=e["name"])
+        sx, sy = to_screen(hx, hy)
+        draw_player(c, sx, sy, "#ffd166", "#000000", you["hp"] <= 0)
 
-        hp = int(p["hp"][HUMAN])
-        kills = int(p["kills"][HUMAN])
-        deaths = int(p["deaths"][HUMAN])
-        items = int(np.count_nonzero(p["inv"][HUMAN]))
-        status = "PAUSED  " if self.paused else ""
-        if p["dead"][HUMAN]:
-            status += "YOU ARE DEAD (respawning) "
-        hud_y = self.view_h * TILE
+        items = sum(1 for i in you["inv"] if i)
+        notice = f"   [{snap['notice']}]" if snap.get("notice") else ""
         c.create_text(
             8, hud_y + 12, anchor="w", fill="#dddddd", font=("Consolas", 11),
-            text=f"HP {hp}/{PLAYER_MAX_HP}   kills {kills}   deaths {deaths}   items {items}   tick {self.tick_no}   town {HUMAN % len(TOWNS)}"
-            + ("   SAFE" if pz[int(hx), int(hy)] else ""),
+            text=f"HP {you['hp']}/{you['max_hp']}   kills {you['kills']}   deaths {you['deaths']}   items {items}"
+            f"   town {you['town']}" + ("   SAFE" if you["safe"] else "") + notice,
         )
+        down = not self.client.connected
         c.create_text(
-            8, hud_y + 30, anchor="w", fill="#aaaaaa", font=("Consolas", 10),
-            text=status + "WASD/arrows move  Space attack  E eat  P pause  R new world  Esc quit",
+            8, hud_y + 30, anchor="w", fill="#ff6666" if down else "#aaaaaa", font=("Consolas", 10),
+            text="DISCONNECTED" if down else "WASD/arrows move  Space attack  E eat  click to walk  Esc quit",
         )
 
 
 def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--host", default="127.0.0.1")
+    ap.add_argument("--port", type=int, default=8765)
+    ap.add_argument("--name", default=getpass.getuser().lower())
+    args = ap.parse_args()
+    client = NetClient(args.host, args.port, args.name)
+    client.start()
+    t0 = time.time()
+    while client.welcome is None and client.error is None and time.time() - t0 < 10:
+        time.sleep(0.02)
+    if client.welcome is None:
+        sys.exit(f"could not join: {client.error or 'timed out'}")
     root = tk.Tk()
-    root.title("JAX tile MMO demo")
+    root.title("JAX tile MMO - " + args.name)
     root.attributes("-fullscreen", True)
-    game = Game(root)
+    game = Game(root, client)
     root.focus_force()
-    root.after(TICK_MS, game.run_tick)
+    root.after(client.welcome["tick_ms"], game.frame)
     root.mainloop()
+    client.close()
 
 
 if __name__ == "__main__":
