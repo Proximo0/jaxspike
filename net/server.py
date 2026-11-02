@@ -249,16 +249,18 @@ class GameServer:
 
     def _periodic_save(self, hv: dict) -> None:
         """Collect every human's fields now, write the files off the tick path."""
-        batch = self._collect_batch(hv)
-        if not batch:
-            return
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
-            self._write_batch(batch)  # no event loop (direct tick_once call): write inline
-            return
-        if self._saving:
+            loop = None
+        if loop is not None and self._saving:
             log.warning("previous periodic save still running; skipping tick %d", self.tick)
+            return  # before collecting: bumping generations here would invalidate the in-flight batch
+        batch = self._collect_batch(hv)
+        if not batch:
+            return
+        if loop is None:
+            self._write_batch(batch)  # no event loop (direct tick_once call): write inline
             return
         t = loop.create_task(asyncio.to_thread(self._write_batch, batch))
         self._saving.add(t)

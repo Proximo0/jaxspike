@@ -237,6 +237,22 @@ def test_stale_periodic_batch_does_not_overwrite_logout_save(tmp_path):
     s._write_batch(batch2)
     assert load(tmp_path, "gen")["hp"] == full
 
+def test_skipped_periodic_save_leaves_generations_alone(tmp_path):
+    async def body():
+        s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=20)
+        s.prepare()
+        s.login("busy")
+        before = dict(s.save_gen)
+        fut = asyncio.get_running_loop().create_future()  # stands in for an in-flight batch
+        s._saving.add(fut)
+        s._periodic_save(host_view(s.world, s.static))
+        assert s.save_gen == before
+        s._saving.discard(fut)
+        s._periodic_save(host_view(s.world, s.static))
+        assert s.save_gen["busy"] == before.get("busy", 0) + 1
+        await asyncio.gather(*s._saving)
+    run(body())
+
 def test_sub_tick_tap_moves_exactly_one_tile(tmp_path):
     s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=20)
     s.prepare()
