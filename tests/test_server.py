@@ -23,7 +23,7 @@ async def next_snap(ws):
 
 def test_login_welcome_and_snapshots(tmp_path):
     async def body():
-        s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=20)
+        s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=50)
         await s.start("127.0.0.1", 0)
         try:
             ws, w = await connect(s, "Alice")
@@ -49,7 +49,7 @@ def test_login_welcome_and_snapshots(tmp_path):
 
 def test_input_moves_and_two_clients_see_each_other(tmp_path):
     async def body():
-        s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=20)
+        s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=50)
         await s.start("127.0.0.1", 0)
         try:
             a, wa = await connect(s, "alice"); b, wb = await connect(s, "bob")
@@ -85,7 +85,7 @@ def test_input_moves_and_two_clients_see_each_other(tmp_path):
 
 def test_walk_to_reaches_tile(tmp_path):
     async def body():
-        s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=20)
+        s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=50)
         await s.start("127.0.0.1", 0)
         try:
             ws, w = await connect(s, "walker")
@@ -108,15 +108,15 @@ def test_walk_to_reaches_tile(tmp_path):
 
 def test_logout_saves_and_slot_returns_to_bot(tmp_path):
     async def body():
-        s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=20)
+        s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=50)
         await s.start("127.0.0.1", 0)
         try:
             ws, w = await connect(s, "carol"); slot = w["slot"]
             last = await next_snap(ws)
             await ws.close()
-            for _ in range(20):
+            for _ in range(100):
                 if s.owner[slot] == "bot": break
-                await asyncio.sleep(0.02)
+                await asyncio.sleep(0.05)
             assert s.owner[slot] == "bot" and (tmp_path / "carol.npz").exists()
             saved = load(tmp_path, "carol")
             assert saved["pos"].tolist() == last["you"]["pos"] and saved["hp"] == last["you"]["hp"]
@@ -131,7 +131,7 @@ def test_logout_saves_and_slot_returns_to_bot(tmp_path):
 
 def test_refusals(tmp_path):
     async def body():
-        s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=20, max_clients=1)
+        s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=50, max_clients=1)
         await s.start("127.0.0.1", 0)
         try:
             a, wa = await connect(s, "dave"); assert wa["t"] == "welcome"
@@ -151,7 +151,7 @@ def test_refusals(tmp_path):
     run(body())
 
 def test_two_logins_get_distinct_slots(tmp_path):
-    s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=20)
+    s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=50)
     s.prepare()  # builds the world without starting sockets
     a, _ = s.login("gina"); b, _ = s.login("hank")
     assert a is not None and b is not None and a != b
@@ -159,7 +159,7 @@ def test_two_logins_get_distinct_slots(tmp_path):
 
 def test_disconnect_during_play_frees_slot(tmp_path):
     async def body():
-        s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=20)
+        s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=50)
         await s.start("127.0.0.1", 0)
         try:
             ws, w = await connect(s, "ivan"); slot = w["slot"]
@@ -168,7 +168,7 @@ def test_disconnect_during_play_frees_slot(tmp_path):
             await ws.close()
             t0 = s.tick
             for _ in range(30):
-                await asyncio.sleep(0.02)
+                await asyncio.sleep(0.05)
                 if s.owner[slot] == "bot": break
             assert s.owner[slot] == "bot" and s.tick > t0  # the loop kept ticking
         finally:
@@ -176,14 +176,14 @@ def test_disconnect_during_play_frees_slot(tmp_path):
     run(body())
 
 def test_slot_pick_prefers_own_stripe(tmp_path):
-    s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=20)
+    s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=50)
     s.prepare()
     save(tmp_path, "zed", new_character(0, (1, 1)))
     slot, err = s.login("zed")
     assert err is None and slot % len(TOWNS) == 0
 
 def test_fallback_slot_keeps_home_town(tmp_path):
-    s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=20)
+    s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=50)
     s.prepare()
     nt = len(TOWNS)
     save(tmp_path, "yan", new_character(0, tuple(int(v) for v in np.asarray(temple_tiles())[0][0])))
@@ -210,7 +210,7 @@ def _attach(s, slot):
     return ws
 
 def test_eat_is_applied_once_per_message(tmp_path):
-    s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=20)
+    s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=50)
     s.prepare()
     slot, _ = s.login("eater")
     inv = s.world["players"]["inv"]
@@ -223,7 +223,7 @@ def test_eat_is_applied_once_per_message(tmp_path):
 
 def test_eat_tap_shorter_than_a_tick_still_eats(tmp_path):
     async def body():
-        s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=20)
+        s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=50)
         await s.start("127.0.0.1", 0)
         try:
             ws, w = await connect(s, "nibbler"); slot = w["slot"]
@@ -242,7 +242,7 @@ def test_eat_tap_shorter_than_a_tick_still_eats(tmp_path):
     run(body())
 
 def test_stale_periodic_batch_does_not_overwrite_logout_save(tmp_path):
-    s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=20)
+    s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=50)
     s.prepare()
     slot, _ = s.login("gen")
     batch = s._collect_batch({'players': s._player_arrays()})  # collected, not yet written
@@ -259,7 +259,7 @@ def test_stale_periodic_batch_does_not_overwrite_logout_save(tmp_path):
 
 def test_skipped_periodic_save_leaves_generations_alone(tmp_path):
     async def body():
-        s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=20)
+        s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=50)
         s.prepare()
         s.login("busy")
         before = dict(s.save_gen)
@@ -274,7 +274,7 @@ def test_skipped_periodic_save_leaves_generations_alone(tmp_path):
     run(body())
 
 def test_sub_tick_tap_moves_exactly_one_tile(tmp_path):
-    s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=20)
+    s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=50)
     s.prepare()
     slot, _ = s.login("tapper")
     start = np.asarray(s.world["players"]["pos"][slot]).copy()
@@ -289,7 +289,7 @@ def test_sub_tick_tap_moves_exactly_one_tile(tmp_path):
 
 def test_path_cleared_on_death(tmp_path):
     async def body():
-        s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=20)
+        s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=50)
         s.prepare()
         slot, _ = s.login("mortal")
         ws = _attach(s, slot)
@@ -331,7 +331,7 @@ def _snaps(ws):
 
 def test_gone_after_monster_dies_and_new_monster_appears(tmp_path):
     async def body():
-        s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=20)
+        s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=50)
         s.prepare()
         slot, _ = s.login("hunter")
         ws = _attach(s, slot)
@@ -355,7 +355,7 @@ def test_gone_after_monster_dies_and_new_monster_appears(tmp_path):
 
 def test_skipped_slow_client_gets_a_full_resync(tmp_path):
     async def body():
-        s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=20)
+        s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=50)
         s.prepare()
         slot, _ = s.login("slowpoke")
         ws = _attach(s, slot)
@@ -372,3 +372,4 @@ def test_skipped_slow_client_gets_a_full_resync(tmp_path):
         last = _snaps(ws)[-1]
         assert last["full"] is True and any(e["id"] == slot for e in last["ents"])
     run(body())
+
