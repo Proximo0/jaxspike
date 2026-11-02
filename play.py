@@ -115,8 +115,9 @@ class Game:
         self.attacking = False
         self.eating = False
         self.sent = (0, False, False)
-        self.terrain = None      # last non-null snap["terrain"]
+        self.terrain = client.terrain  # int8 [MAP, MAP] indexed [x, y], decoded from welcome
         self.snap = None
+        self.ents = {}
         self.x0 = self.y0 = 0    # world coordinates of the top-left drawn tile
         sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
         # The server fixes the view size; draw only the tiles that fit in the window.
@@ -180,7 +181,7 @@ class Game:
         self.push_input()
 
     def on_click(self, event):
-        if self.snap is None or self.terrain is None:
+        if self.snap is None:
             return
         tx = (event.x - self.off_x) // TILE
         ty = event.y // TILE
@@ -191,8 +192,7 @@ class Game:
         snap = self.client.latest()
         if snap is not None:
             self.snap = snap
-            if snap.get("terrain") is not None:
-                self.terrain = snap["terrain"]
+            self.ents = self.client.entities()
         self.draw()
         self.root.after(self.welcome["tick_ms"], self.frame)
 
@@ -201,7 +201,7 @@ class Game:
         c.delete("all")
         hud_y = self.view_h * TILE
         snap = self.snap
-        if snap is None or self.terrain is None:
+        if snap is None:
             c.create_text(8, hud_y + 12, anchor="w", fill="#dddddd", font=("Consolas", 11), text="waiting for server...")
             return
         you = snap["you"]
@@ -216,17 +216,16 @@ class Game:
         def on_screen(x, y):
             return x0 <= x < x0 + self.view_w and y0 <= y < y0 + self.view_h
 
-        t = self.terrain
-        tx0, ty0, rows = t["x0"], t["y0"], t["rows"]
+        terr = self.terrain
+        n = terr.shape[0]
         for ty in range(self.view_h):
             for tx in range(self.view_w):
                 x, y = x0 + tx, y0 + ty
                 sx, sy = to_screen(x, y)
-                i, j = x - tx0, y - ty0
-                if not (0 <= i < len(rows) and 0 <= j < len(rows[0])):
+                if not (0 <= x < n and 0 <= y < n):
                     c.create_rectangle(sx, sy, sx + TILE, sy + TILE, fill="#000000", outline="")
                     continue
-                tid = rows[i][j]
+                tid = int(terr[x, y])
                 fill = TERRAIN_FILL.get(tid)
                 if fill is not None:
                     c.create_rectangle(sx, sy, sx + TILE, sy + TILE, fill=fill, outline="")
@@ -237,12 +236,13 @@ class Game:
                 else:
                     draw_grass(c, sx, sy, (x * 7 + y * 13) % 3)
 
-        ents = snap["ents"]
+        # v2 entity kinds: 0 player, 1 + mkind monster, 100 + item drop; the own player is drawn last
+        ents = list(self.ents.values())
         for e in ents:
-            if e["kind"] == "d" and on_screen(*e["pos"]):
+            if e["kind"] >= 100 and on_screen(*e["pos"]):
                 draw_drop(c, *to_screen(*e["pos"]), e["item"])
         for e in ents:
-            if e["kind"] != "m" or not on_screen(*e["pos"]):
+            if not 1 <= e["kind"] < 100 or not on_screen(*e["pos"]):
                 continue
             sx, sy = to_screen(*e["pos"])
             if e["mkind"] == 0:
@@ -252,7 +252,7 @@ class Game:
             hp_frac = max(e["hp"], 0) / max(e["max_hp"], 1)
             c.create_rectangle(sx + 2, sy, sx + 2 + (TILE - 4) * hp_frac, sy + 2, fill="#ff4444", outline="")
         for e in ents:
-            if e["kind"] != "p" or not on_screen(*e["pos"]) or list(e["pos"]) == [hx, hy]:
+            if e["kind"] != 0 or not on_screen(*e["pos"]) or e["id"] == self.welcome["slot"]:
                 continue
             sx, sy = to_screen(*e["pos"])
             draw_player(c, sx, sy, "#5dade2", "#1b4f72", False)

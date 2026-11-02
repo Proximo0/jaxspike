@@ -1,0 +1,125 @@
+class_name EntityStore
+extends RefCounted
+## Client copy of the entities the server says we can see. Upsert `ents`, delete `gone`, wipe on `full`.
+## Entity dictionary keys: id, kind, pos (Vector2i), prev_pos (Vector2i, position before the last change, for
+## interpolation), hp, max_hp, and name (players, kind 0), item (drops, kind >= 100), mkind (monsters).
+## `you` keeps the own-player fields of the snap: pos (Vector2i), hp, max_hp, kills, deaths, inv, town, safe.
+
+const KIND_PLAYER: int = 0
+const KIND_DROP_BASE: int = 100
+
+var you: Dictionary = {}
+var tick: int = 0
+var notice: String = ""
+var snaps: int = 0
+var _ents: Dictionary = {}  ## int id -> Dictionary
+
+
+## Applies one decoded `snap` message.
+func apply_snap(snap: Dictionary) -> void:
+	tick = int(snap.get("tick", tick))
+	snaps += 1
+	if bool(snap.get("full", false)):
+		_ents.clear()
+	var you_in: Variant = snap.get("you")
+	if typeof(you_in) == TYPE_DICTIONARY:
+		you = _entity_store_norm_you(you_in)
+	var n: Variant = snap.get("notice")
+	notice = String(n) if typeof(n) == TYPE_STRING else ""
+	var gone: Variant = snap.get("gone")
+	if typeof(gone) == TYPE_ARRAY:
+		for g: Variant in gone:
+			_ents.erase(int(g))
+	var ents: Variant = snap.get("ents")
+	if typeof(ents) == TYPE_ARRAY:
+		for e: Variant in ents:
+			if typeof(e) == TYPE_DICTIONARY:
+				_upsert(e)
+
+
+func get_ent(id: int) -> Dictionary:
+	return _ents.get(id, {})
+
+
+func has_ent(id: int) -> bool:
+	return _ents.has(id)
+
+
+func count() -> int:
+	return _ents.size()
+
+
+## Known ids, ascending.
+func ids() -> PackedInt32Array:
+	var keys: Array = _ents.keys()
+	keys.sort()
+	var out := PackedInt32Array()
+	for k: Variant in keys:
+		out.append(int(k))
+	return out
+
+
+func clear() -> void:
+	_ents.clear()
+	you = {}
+	tick = 0
+	notice = ""
+	snaps = 0
+
+
+## Deep copy of the whole store, safe to keep and to feed to restore().
+func snapshot() -> Dictionary:
+	return {"tick": tick, "snaps": snaps, "notice": notice, "you": you.duplicate(true), "ents": _ents.duplicate(true)}
+
+
+func restore(d: Dictionary) -> void:
+	tick = int(d.get("tick", 0))
+	snaps = int(d.get("snaps", 0))
+	notice = String(d.get("notice", ""))
+	var y: Variant = d.get("you")
+	you = (y as Dictionary).duplicate(true) if typeof(y) == TYPE_DICTIONARY else {}
+	var e: Variant = d.get("ents")
+	_ents = (e as Dictionary).duplicate(true) if typeof(e) == TYPE_DICTIONARY else {}
+
+
+func _upsert(src: Dictionary) -> void:
+	if not src.has("id"):
+		return
+	var id: int = int(src["id"])
+	var pos: Vector2i = _entity_store_pos(src.get("pos"))
+	var e: Dictionary = {
+		"id": id,
+		"kind": int(src.get("kind", 0)),
+		"pos": pos,
+		"prev_pos": pos,
+		"hp": int(src.get("hp", 0)),
+		"max_hp": int(src.get("max_hp", 0)),
+	}
+	if _ents.has(id):
+		var old: Dictionary = _ents[id]
+		e["prev_pos"] = old["pos"]
+	if src.has("name"):
+		e["name"] = String(src["name"])
+	if src.has("item"):
+		e["item"] = int(src["item"])
+	if src.has("mkind"):
+		e["mkind"] = int(src["mkind"])
+	_ents[id] = e
+
+
+func _entity_store_norm_you(src: Dictionary) -> Dictionary:
+	var out: Dictionary = src.duplicate(true)
+	out["pos"] = _entity_store_pos(src.get("pos"))
+	for k: String in ["hp", "max_hp", "kills", "deaths", "town"]:
+		if out.has(k) and (typeof(out[k]) == TYPE_FLOAT or typeof(out[k]) == TYPE_INT):
+			out[k] = int(out[k])
+	return out
+
+
+static func _entity_store_pos(v: Variant) -> Vector2i:
+	if typeof(v) == TYPE_ARRAY and (v as Array).size() >= 2:
+		var a: Array = v
+		return Vector2i(int(a[0]), int(a[1]))
+	if typeof(v) == TYPE_VECTOR2I:
+		return v
+	return Vector2i.ZERO

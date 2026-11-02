@@ -12,12 +12,22 @@ signal changed(field: String, value: float)
 const FIELDS: Array = [
 	["gravity", 18.0, 5.0, 40.0, 0.5, "World", "Gravity, m/s². Real is 9.8; higher feels snappier, less floaty."],
 	["move_speed", 6.0, 1.0, 20.0, 0.25, "Movement", "Top move speed, m/s."],
+	["tile_px", 32.0, 16.0, 64.0, 8.0, "View", "Pixels per map tile when drawing the world."],
+	["interp_delay_ticks", 1.0, 0.0, 3.0, 0.05, "View", "Entity interpolation delay, in server ticks."],
+	["camera_zoom", 1.0, 0.5, 3.0, 0.05, "View", "Camera zoom factor (1 = one screen pixel per world pixel)."],
+	["overlay_window_s", 2.0, 0.5, 10.0, 0.5, "Debug", "Seconds of frames the F1 overlay summarises (p50/p95/max)."],
+	["name_label_px", 12.0, 8.0, 24.0, 1.0, "View", "Font size of entity name labels, px."],
 ]
 
 static var _shared: Tuning = null
 
 var gravity: float
 var move_speed: float
+var tile_px: float
+var interp_delay_ticks: float
+var camera_zoom: float
+var overlay_window_s: float
+var name_label_px: float
 
 
 func _init() -> void:

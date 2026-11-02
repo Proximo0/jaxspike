@@ -1,5 +1,7 @@
 import asyncio, threading, time
-from net.client import NetClient, merge_snap
+import numpy as np
+from game.config import MAP
+from net.client import NetClient, apply_snap
 from net.server import GameServer
 
 def _serve(tmp_path):
@@ -49,10 +51,25 @@ def test_client_reports_error(tmp_path):
     finally:
         h["loop"].call_soon_threadsafe(h["stop"].set_result, None); t.join(10)
 
-def test_merge_snap_keeps_terrain():
-    terr = {"x0": 1, "y0": 2, "rows": []}
-    old = {"t": "snap", "tick": 1, "terrain": terr}
-    assert merge_snap(old, {"t": "snap", "tick": 2, "terrain": None}) == {"t": "snap", "tick": 2, "terrain": terr}
-    new = {"t": "snap", "tick": 3, "terrain": {"x0": 9, "y0": 9, "rows": []}}
-    assert merge_snap(old, new) is new
-    assert merge_snap(None, {"t": "snap", "terrain": None})["terrain"] is None
+def test_client_decodes_terrain_and_tracks_entities(tmp_path):
+    h, t = _serve(tmp_path)
+    try:
+        c = NetClient("127.0.0.1", h["s"].port, "kim"); c.start()
+        assert _wait(lambda: c.welcome is not None) and _wait(lambda: c.latest() is not None)
+        assert c.terrain.shape == (MAP, MAP) and (c.terrain == np.asarray(h["s"].world["terrain"])).all()
+        assert c.pz.dtype == bool and (c.pz == np.asarray(h["s"].world["pz"])).all()
+        slot = c.welcome["slot"]
+        assert _wait(lambda: slot in c.entities())
+        me = c.entities()[slot]
+        assert me["name"] == "kim" and "terrain" not in c.latest() and c.snap_count > 0 and c.snap_bytes > 0
+        c.close(); c.join(5)
+    finally:
+        h["loop"].call_soon_threadsafe(h["stop"].set_result, None); t.join(10)
+
+def test_apply_snap_upserts_deletes_and_full_resets():
+    ents = {}
+    apply_snap(ents, {"full": True, "gone": [], "ents": [{"id": 1, "hp": 5}, {"id": 2, "hp": 6}]})
+    apply_snap(ents, {"full": False, "gone": [2], "ents": [{"id": 1, "hp": 4}, {"id": 3, "hp": 9}]})
+    assert ents == {1: {"id": 1, "hp": 4}, 3: {"id": 3, "hp": 9}}
+    apply_snap(ents, {"full": True, "gone": [], "ents": [{"id": 7, "hp": 1}]})
+    assert list(ents) == [7]

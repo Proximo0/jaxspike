@@ -2,16 +2,20 @@
 import asyncio
 import threading
 
+import numpy as np
 import websockets
 
-from net.protocol import decode, encode
+from net.protocol import decode, decode_map, encode
 
 
-def merge_snap(old, new):
-    """Newest snap wins, but a null terrain keeps the last known window (the server sends it only on change)."""
-    if new.get("terrain") is None and old is not None and old.get("terrain") is not None:
-        return {**new, "terrain": old["terrain"]}
-    return new
+def apply_snap(ents: dict, snap: dict) -> None:
+    """Apply a v2 snap to an entity dict keyed by global id: `full` clears first, then delete `gone`, upsert `ents`."""
+    if snap.get("full"):
+        ents.clear()
+    for i in snap.get("gone", ()):
+        ents.pop(i, None)
+    for e in snap.get("ents", ()):
+        ents[e["id"]] = e
 
 
 class NetClient(threading.Thread):
@@ -21,7 +25,12 @@ class NetClient(threading.Thread):
         self.welcome = None
         self.error = None
         self.connected = False
+        self.terrain = None  # int8 [MAP, MAP] indexed [x, y], decoded from welcome
+        self.pz = None  # bool [MAP, MAP] indexed [x, y]
+        self.snap_count = 0  # snap messages received
+        self.snap_bytes = 0  # characters of snap text received (JSON is ASCII)
         self._snap = None
+        self._ents = {}
         self._lock = threading.Lock()
         self._loop = None
         self._queue = None
@@ -31,6 +40,11 @@ class NetClient(threading.Thread):
     def latest(self):
         with self._lock:
             return self._snap
+
+    def entities(self) -> dict:
+        """Copy of the known entities by global id (upserted from `ents`, removed by `gone`)."""
+        with self._lock:
+            return dict(self._ents)
 
     def _send(self, msg):
         with self._lock:
@@ -78,6 +92,12 @@ class NetClient(threading.Thread):
             if msg["t"] != "welcome":
                 self.error = "unexpected reply"
                 return
+            try:
+                self.terrain = decode_map(msg["terrain"], np.int8)
+                self.pz = decode_map(msg["pz"], np.uint8).astype(bool)
+            except (KeyError, ValueError):
+                self.error = "bad welcome"
+                return
             self.connected = True
             self.welcome = msg
 
@@ -88,7 +108,10 @@ class NetClient(threading.Thread):
                         continue
                     if m["t"] == "snap":
                         with self._lock:
-                            self._snap = merge_snap(self._snap, m)
+                            apply_snap(self._ents, m)
+                            self._snap = m
+                            self.snap_count += 1
+                            self.snap_bytes += len(text)
                     elif m["t"] == "error":
                         self.error = m.get("msg", "error")
 

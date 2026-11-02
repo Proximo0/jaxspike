@@ -1,0 +1,23 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://game/world/game_view.gd" id="1"]
+[ext_resource type="Script" path="res://game/world/map_renderer.gd" id="2"]
+[ext_resource type="Script" path="res://game/world/entity_layer.gd" id="3"]
+[ext_resource type="Script" path="res://game/input/player_input.gd" id="4"]
+[ext_resource type="PackedScene" path="res://game/ui/hud.tscn" id="5"]
+
+[node name="GameView" type="Node2D"]
+script = ExtResource("1")
+
+[node name="MapRenderer" type="TileMapLayer" parent="."]
+script = ExtResource("2")
+
+[node name="EntityLayer" type="Node2D" parent="."]
+script = ExtResource("3")
+
+[node name="Camera2D" type="Camera2D" parent="."]
+
+[node name="PlayerInput" type="Node" parent="."]
+script = ExtResource("4")
+
+[node name="Hud" parent="." instance=ExtResource("5")]
