@@ -27,6 +27,8 @@ def test_save_load_exact(tmp_path):
 def test_load_corrupt_file_returns_none(tmp_path):
     (tmp_path / "eve.npz").write_bytes(b"not an npz")
     assert load(tmp_path, "eve") is None
+    (tmp_path / "empty.npz").write_bytes(b"")
+    assert load(tmp_path, "empty") is None
 
 def test_roster_round_robin(tmp_path):
     assert load_roster(tmp_path) == {}

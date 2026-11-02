@@ -2,6 +2,7 @@
 import json
 import re
 import zipfile
+import zlib
 from pathlib import Path
 
 import numpy as np
@@ -37,7 +38,7 @@ def load(chars_dir: Path, name: str) -> dict | None:
     try:
         with np.load(Path(chars_dir) / f"{name}.npz") as z:
             out = {k: z[k] for k in z.files}
-    except (OSError, ValueError, zipfile.BadZipFile):
+    except (OSError, ValueError, EOFError, zlib.error, zipfile.BadZipFile):
         return None
     for k in _INT_FIELDS:
         if k in out:
