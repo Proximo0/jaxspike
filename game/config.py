@@ -68,3 +68,12 @@ MEAT_HEAL = 40
 # Bots and spawns around town gates.
 HUNT_RETREAT_HP = 60      # a bot below this HP walks home to rest (40% of PLAYER_MAX_HP)
 GATE_APRON_TILES = 4      # monsters never spawn within this walking distance of a gate
+
+# Networking (milestone 2)
+TICK_MS = 120
+VIEW_W = 61
+VIEW_H = 33
+PATH_RADIUS = 32
+PATH_STUCK_TICKS = 8
+SAVE_EVERY_TICKS = 2400
+PROTOCOL_VERSION = 1
