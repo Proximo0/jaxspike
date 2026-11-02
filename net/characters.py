@@ -30,11 +30,15 @@ def new_character(town: int, tile: tuple[int, int]) -> dict:
             "kills": 0, "deaths": 0}
 
 
-def save(chars_dir: Path, name: str, fields: dict) -> None:
-    """Write a character to <chars_dir>/<name>.npz atomically (temp file, then replace)."""
+def save(chars_dir: Path, name: str, fields: dict, guard=None) -> None:
+    """Write a character to <chars_dir>/<name>.npz atomically (temp file, then replace).
+
+    `guard`, if given, is called under the file lock; a falsy result skips the write."""
     final = Path(chars_dir) / f"{name}.npz"
     tmp = Path(chars_dir) / f"{name}.npz.tmp"
     with _save_lock:
+        if guard is not None and not guard():
+            return
         with open(tmp, "wb") as f:
             np.savez(f, **fields)
         os.replace(tmp, final)

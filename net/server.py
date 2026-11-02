@@ -70,11 +70,12 @@ class GameServer:
         self.owner: list[str | None] = [None] * MAX_PLAYERS
         self.conn: dict[int, Client] = {}
         self.latest_input = {}
-        self.tap: dict[int, list] = {}  # slot -> [move, attack] set by a message, consumed by the next tick
+        self.tap: dict[int, list] = {}  # slot -> [move, attack, eat] set by a message, consumed by the next tick
         self.static = None
         self._walked: set = set()
         self._max_tick_s = 0.0
         self._saving: set = set()
+        self.save_gen: dict[str, int] = {}  # name -> generation of the newest initiated save (event loop writes only)
         self.path: dict[int, deque] = {}
         self.pending: dict[int, tuple | None] = {}
         self.stuck: dict[int, int] = {}
@@ -195,7 +196,7 @@ class GameServer:
         self._write_slot(slot, pos, char["spawn"], char["hp"], char["inv"], char["kills"], char["deaths"])
         self.owner[slot] = key
         self.latest_input[slot] = (0, False, False)
-        self.tap[slot] = [0, False]
+        self.tap[slot] = [0, False, False]
         self.path[slot] = deque()
         self.pending[slot] = None
         self.stuck[slot] = 0
@@ -220,21 +221,35 @@ class GameServer:
 
     def _save_slot(self, slot: int) -> None:
         name = self.owner[slot]
+        self.save_gen[name] = self.save_gen.get(name, 0) + 1  # before the write: any older batch entry is now stale
         try:
             characters.save(self.chars_dir, name, self._fields(slot))
         except Exception:
             log.exception("save failed for %s", name)
 
     def _write_batch(self, batch: list) -> None:
-        for name, fields in batch:
+        """Write (name, generation, fields) entries; an entry is skipped if a newer save for that name started.
+
+        Runs in a thread: only reads save_gen (the event loop is the sole writer), and the check happens inside
+        the characters file lock so a logout save cannot slip between the check and the write."""
+        for name, gen, fields in batch:
             try:
-                characters.save(self.chars_dir, name, fields)
+                characters.save(self.chars_dir, name, fields, guard=lambda n=name, g=gen: self.save_gen.get(n, 0) <= g)
             except Exception:
                 log.exception("save failed for %s", name)
 
+    def _collect_batch(self, hv: dict) -> list:
+        """Snapshot every human's fields and bump their save generation (event loop only)."""
+        batch = []
+        for s in self._humans():
+            name = self.owner[s]
+            self.save_gen[name] = self.save_gen.get(name, 0) + 1
+            batch.append((name, self.save_gen[name], self._fields(s, hv["players"])))
+        return batch
+
     def _periodic_save(self, hv: dict) -> None:
         """Collect every human's fields now, write the files off the tick path."""
-        batch = [(self.owner[s], self._fields(s, hv["players"])) for s in self._humans()]
+        batch = self._collect_batch(hv)
         if not batch:
             return
         try:
@@ -295,9 +310,9 @@ class GameServer:
         pos = np.asarray(self.world["players"]["pos"])
         for slot in self._humans():
             m, a, e = self.latest_input[slot]
-            tm, ta = self.tap[slot]
-            m, a = m or tm, a or ta  # a tap released before this tick still counts for one tick
-            self.tap[slot] = [0, False]
+            tm, ta, te = self.tap[slot]
+            m, a, e = m or tm, a or ta, e or te  # a tap released before this tick still counts for one tick
+            self.tap[slot] = [0, False, False]
             if e:
                 self.latest_input[slot] = (self.latest_input[slot][0], self.latest_input[slot][1], False)  # one eat per message
             attack[slot], eat[slot] = a, e
@@ -451,6 +466,8 @@ class GameServer:
                 tap[0] = msg["move"]
             if msg["attack"]:
                 tap[1] = True
+            if msg["eat"]:
+                tap[2] = True
             self.path[slot].clear()
             self.pending[slot] = None
         elif msg["t"] == "walk_to":

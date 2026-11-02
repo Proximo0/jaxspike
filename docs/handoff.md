@@ -4,9 +4,9 @@ For the next lead. Read this, then docs/brief.md (module contracts and phase ord
 
 ## State
 - Project: `C:\Users\crp27\jaxspike`. Python venv `venv` (CPU jax 0.12.0.1, pytest, pygame not available). GPU runs use WSL Ubuntu with `~/jaxgpu` (JAX CUDA).
-- Modules: `game/` (config, state, spatial, world_layout, map_gen, movement, monsters, combat, loot, survival, step), `bots/` (policies, runner), `game/persistence.py`, `bench/` (soak_check with `--batch/--chunks/--ticks/--seed`, bench_step), `net/` (characters, pathing, protocol, server, client), `tests/` (144 passing), `play.py` (tkinter fullscreen network client, CPU).
+- Modules: `game/` (config, state, spatial, world_layout, map_gen, movement, monsters, combat, loot, survival, step), `bots/` (policies, runner), `game/persistence.py`, `bench/` (soak_check with `--batch/--chunks/--ticks/--seed`, bench_step), `net/` (characters, pathing, protocol, server, client), `tests/` (146 passing), `play.py` (tkinter fullscreen network client, CPU).
 - Run: server `venv\Scripts\python.exe -m net.server`, client `venv\Scripts\python.exe play.py --name you` (add `--host`/`--port` for a remote server). Load bench: `venv\Scripts\python.exe bench/server_load.py --embedded --clients 50 --seconds 10`.
-- Verified: 144 tests pass on CPU. 1000-tick CPU soaks on seeds 0 and 1 with zero invariant violations on the 5-town map with hunting bots. GPU soak results by batch size are in the "GPU batch" section below. The user played the window (walked town to town, killed monsters) and called the world solid.
+- Verified: 146 tests pass on CPU. 1000-tick CPU soaks on seeds 0 and 1 with zero invariant violations on the 5-town map with hunting bots. GPU soak results by batch size are in the "GPU batch" section below. The user played the window (walked town to town, killed monsters) and called the world solid.
 - Balance on the 5-town map is tuned with hunting bots (see "Balance").
 - Direction (2026-11-02, from the user): a public Tibia-style MMO, hybrid architecture (JAX tick + Python server layer). Spec and plan for milestone 1: `docs/superpowers/specs/2026-11-02-world-survival-design.md`, `docs/superpowers/plans/2026-11-02-world-survival.md`. Milestones: (1) world + survival [done], (2) networked server + client [done], (3) items/equipment/spells, (4) skilling, (5) pygame-ce renderer with Kenney tiles.
 - Local git repo (no remote): history of milestone 1 is in `git log`.
@@ -86,9 +86,7 @@ Targets chosen by the lead: 0.3-0.6 deaths and 5-10 kills per bot per 1000 ticks
 - Loot thresholds live in config (LOOT_*_MAX) and the loot test reads them.
 
 ## Open work, in priority order
-0. Known defects from the milestone 2 final re-review (not yet fixed, small):
-   - An `E` tap shorter than one tick (120 ms) does not eat: `play.py` sends `eat=True` on press and `eat=False` on release, and the server stores a pending tap only for `move`/`attack` (`net/server.py` `_on_message` / the sampler in `tick_once`). Fix: add `eat` to the tap and OR it in; test press-then-release with no tick between.
-   - A periodic save batch collected at tick T is written in a thread file by file; a logout save for the same name during that write can be overwritten by the stale batch (item duplication window, sub-second, once per 2400 ticks; `stop()` has the same ordering). Fix: per-name generation counter checked in `_write_batch` before each file.
+0. Known defects from the milestone 2 final re-review:
    - Protocol v2 (parked design finding): terrain is a 61x33 JSON list resent on every step (~4-10 KB/step; the bench's 38-49 KB/client/s is almost all terrain). For hundreds of moving players send the map once at login (zlib) or only the newly exposed edge strip, and drop `terrain` from `snap`. The bench shows 0 overruns at 200 clients, so this is not urgent.
 1. Milestone 3: items/equipment/spells (spec first). Builds on the network layer: new item ids and equipment slots extend `you.inv` and the character files.
    - Spec item: A living player idling on another player's temple spawn tile blocks that respawn indefinitely (griefing vector on a public server): consider letting living players overlap on temple tiles or respawning on the nearest free temple tile.

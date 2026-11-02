@@ -3,7 +3,7 @@ import websockets
 from game.config import ITEM_MEAT, PLAYER_MAX_HP, PROTOCOL_VERSION
 from game.world_layout import TOWNS, temple_tiles
 from net.characters import load, load_roster, new_character, save
-from net.protocol import view_window
+from net.protocol import host_view, view_window
 from net.server import Client, GameServer
 
 def run(coro):
@@ -200,6 +200,42 @@ def test_eat_is_applied_once_per_message(tmp_path):
         s.tick_once()
     left = int((np.asarray(s.world["players"]["inv"][slot]) == ITEM_MEAT).sum())
     assert left == 1
+
+def test_eat_tap_shorter_than_a_tick_still_eats(tmp_path):
+    async def body():
+        s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=20)
+        await s.start("127.0.0.1", 0)
+        try:
+            ws, w = await connect(s, "nibbler"); slot = w["slot"]
+            await next_snap(ws)
+            p = s.world["players"]
+            s.world["players"] = {**p, "inv": p["inv"].at[slot, 0].set(ITEM_MEAT).at[slot, 1].set(ITEM_MEAT),
+                                  "hp": p["hp"].at[slot].set(10)}
+            for eat in (True, False):  # press and release with no await between them: no tick can run in between
+                await ws.send(json.dumps({"v": 1, "t": "input", "move": 0, "attack": False, "eat": eat}))
+            snaps = [await next_snap(ws) for _ in range(5)]
+            left = int((np.asarray(s.world["players"]["inv"][slot]) == ITEM_MEAT).sum())
+            assert left == 1 and snaps[-1]["you"]["hp"] > 10
+            await ws.close()
+        finally:
+            await s.stop()
+    run(body())
+
+def test_stale_periodic_batch_does_not_overwrite_logout_save(tmp_path):
+    s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=20)
+    s.prepare()
+    slot, _ = s.login("gen")
+    batch = s._collect_batch(host_view(s.world, s.static))  # collected, not yet written
+    full = int(s.world["players"]["hp"][slot])
+    p = s.world["players"]
+    s.world["players"] = {**p, "hp": p["hp"].at[slot].set(7)}
+    s.logout(slot)
+    assert load(tmp_path, "gen")["hp"] == 7
+    s._write_batch(batch)  # the stale batch carries the older hp and must be skipped
+    assert full != 7 and load(tmp_path, "gen")["hp"] == 7
+    batch2 = [(n, g + 1, f) for n, g, f in batch]  # sanity: a newer-generation entry does write
+    s._write_batch(batch2)
+    assert load(tmp_path, "gen")["hp"] == full
 
 def test_sub_tick_tap_moves_exactly_one_tile(tmp_path):
     s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=20)
