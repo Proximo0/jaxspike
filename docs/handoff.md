@@ -4,16 +4,28 @@ For the next lead. Read this, then docs/brief.md (module contracts and phase ord
 
 ## State
 - Project: `C:\Users\crp27\jaxspike`. Python venv `venv` (CPU jax 0.12.0.1, pytest, pygame not available). GPU runs use WSL Ubuntu with `~/jaxgpu` (JAX CUDA).
-- Modules: `game/` (config, state, spatial, world_layout, map_gen, movement, monsters, combat, loot, survival, step), `bots/` (policies, runner), `game/persistence.py`, `bench/` (soak_check with `--batch/--chunks/--ticks/--seed`, bench_step), `tests/` (108 passing), `play.py` (tkinter fullscreen window, CPU).
-- Verified: 108 tests pass on CPU. 1000-tick CPU soaks on seeds 0 and 1 with zero invariant violations on the 5-town map with hunting bots. GPU soak results by batch size are in the "GPU batch" section below. The user played the window (walked town to town, killed monsters) and called the world solid.
+- Modules: `game/` (config, state, spatial, world_layout, map_gen, movement, monsters, combat, loot, survival, step), `bots/` (policies, runner), `game/persistence.py`, `bench/` (soak_check with `--batch/--chunks/--ticks/--seed`, bench_step), `net/` (characters, pathing, protocol, server, client), `tests/` (136 passing), `play.py` (tkinter fullscreen network client, CPU).
+- Run: server `venv\Scripts\python.exe -m net.server`, client `venv\Scripts\python.exe play.py --name you` (add `--host`/`--port` for a remote server). Load bench: `venv\Scripts\python.exe bench/server_load.py --embedded --clients 50 --seconds 10`.
+- Verified: 136 tests pass on CPU. 1000-tick CPU soaks on seeds 0 and 1 with zero invariant violations on the 5-town map with hunting bots. GPU soak results by batch size are in the "GPU batch" section below. The user played the window (walked town to town, killed monsters) and called the world solid.
 - Balance on the 5-town map is tuned with hunting bots (see "Balance").
-- Direction (2026-11-02, from the user): a public Tibia-style MMO, hybrid architecture (JAX tick + Python server layer). Spec and plan for milestone 1: `docs/superpowers/specs/2026-11-02-world-survival-design.md`, `docs/superpowers/plans/2026-11-02-world-survival.md`. Milestones: (1) world + survival [done], (2) networked server + client, (3) items/equipment/spells, (4) skilling, (5) pygame-ce renderer with Kenney tiles.
+- Direction (2026-11-02, from the user): a public Tibia-style MMO, hybrid architecture (JAX tick + Python server layer). Spec and plan for milestone 1: `docs/superpowers/specs/2026-11-02-world-survival-design.md`, `docs/superpowers/plans/2026-11-02-world-survival.md`. Milestones: (1) world + survival [done], (2) networked server + client [done], (3) items/equipment/spells, (4) skilling, (5) pygame-ce renderer with Kenney tiles.
 - Local git repo (no remote): history of milestone 1 is in `git log`.
 
 ## World + survival (milestone 1, 2026-11-02)
 - `MAP = 512`; `world["terrain"]` (ids `T_*`) and `world["pz"]` (protection zone); `walls` derived. Layout in `game/world_layout.py` (5 towns, 8 roads, 12x12 temples, in map fractions: 2048 is a one-constant change).
 - Players spawn on their home temple (slot mod 5); monsters spawn off-PZ, rats within `RAT_RING` of a town, orcs beyond (about 160 rats / 350 orcs per world, an average over an 8-world batch). Monsters cannot enter towns or hit a player standing in one.
 - `survival` phase: +1 HP every 4 ticks, meat heals 40 on `inputs["eat"]`; bots eat below half HP.
+
+## Milestone 2: networked server (2026-11-02)
+Spec `docs/superpowers/specs/2026-11-02-networked-server-design.md`, plan `docs/superpowers/plans/2026-11-02-networked-server.md`, module contracts in `docs/brief.md` ("Networking (net/)").
+- One JAX world, 512 slots. WebSocket + JSON, name-only login (`[a-z0-9_]{3,16}`, lower-cased, one session per name). Every tick the server sends each client a viewport snapshot (61x33 window around the player); terrain only when the window moved.
+- What persists: per character `characters/<name>.npz` with pos, spawn, hp, inv, kills, deaths, town, plus `characters/roster.json` (`{name: town}`). Saved on logout, every `SAVE_EVERY_TICKS` (2400), and on shutdown. A missing file makes a fresh character on the next round-robin home town's temple; a corrupt file refuses the login with an error.
+- Slot order on login: an inactive slot with `slot % NT == town`, then a bot slot in that stripe, then any inactive, then any bot, else "server full". On logout the slot is re-seeded as a bot on its town's temple (full HP, empty inventory, counters 0).
+- Click-to-walk is server-side A* (`net/pathing.py`, radius 32); the path emits one move per tick, a blocked move retries and the path drops after `PATH_STUCK_TICKS` ticks without progress. Any `input` cancels it.
+- Death does not log out: `notice: "you died"`, respawn at the temple as in milestone 1.
+- Not done: passwords/accounts, chat, multiple worlds, binary protocol, persisting the world (drops, monster timers) across restarts. The temple-spawn griefing item under Open work is still open.
+- Scale notes: snapshot cost is per connected client; if the tick overruns the first moves are terrain as packed bytes and snapshot building in a thread pool (protocol shape unchanged).
+- Load bench (`bench/server_load.py`, CPU, embedded, 50 clients, 10 s): 50 clients all connected, 8.38 snapshots/client/s mean (min 8.29; nominal 8.33), about 38.7 KB/client/s mean (max 48.9 KB/s; compact-JSON re-encode of the received snap, so an estimate), 0 tick overruns in 86 ticks. Clients and server share one CPU process here, so this is a floor for a real deployment. Hundreds of clients not yet measured: run with `--clients 300`.
 
 ## Distance fields and hunting bots (2026-11-02, later)
 The concept that keeps goal-directed behaviour in JAX: **precomputed distance fields instead of pathfinding.**
@@ -74,9 +86,10 @@ Targets chosen by the lead: 0.3-0.6 deaths and 5-10 kills per bot per 1000 ticks
 - Loot thresholds live in config (LOOT_*_MAX) and the loot test reads them.
 
 ## Open work, in priority order
-1. Milestone 2: networked server + client (spec first). Design notes agreed with the user: JAX tick is authoritative; a human's click-to-walk is an A* on the Python server that emits one move per tick, so the engine never needs a general pathfinder.
+1. Milestone 3: items/equipment/spells (spec first). Builds on the network layer: new item ids and equipment slots extend `you.inv` and the character files.
    - Spec item: A living player idling on another player's temple spawn tile blocks that respawn indefinitely (griefing vector on a public server): consider letting living players overlap on temple tiles or respawning on the nearest free temple tile.
-2. Milestones 3-5 (items/equipment/spells, skilling, pygame-ce renderer with Kenney tiles). Concepts agreed for staying in JAX: tables indexed by id for items/recipes/monster kinds; per-player xp arrays for skills; counters on entities for timers; distance fields for every "go to X".
+   - Milestone 2 leftovers: passwords, chat, world persistence, binary protocol / packed terrain if the tick overruns at scale.
+2. Milestones 4-5 (skilling, pygame-ce renderer with Kenney tiles). Concepts agreed for staying in JAX: tables indexed by id for items/recipes/monster kinds; per-player xp arrays for skills; counters on entities for timers; distance fields for every "go to X".
 3. Decide K_CELL for towns (see "Spatial grid capacity"); temples now hold up to ~26 players per 8x8 cell.
 4. Tiled import for hand-authored towns; MAP = 2048 for the first playable release (distance fields: 42 MB per world, computed once).
 5. Done since the last handoff: hunting bots, monster tile-sharing on revive (fixed, soak invariant added), gate-apron spawns (excluded), balance re-tuned.

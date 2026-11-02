@@ -103,3 +103,31 @@ A Tibia-style single-floor tile world in JAX. Players move, attack monsters, die
 ## Done means
 - Your module's tests pass.
 - You report: files changed, the pytest output summary line, and any deviations from this brief with a reason.
+
+## Networking (net/)
+Milestone 2. Plain Python/numpy around the JAX tick; `game/` is untouched except for constants in `game/config.py` (`TICK_MS`, `VIEW_W`, `VIEW_H`, `PATH_RADIUS`, `PATH_STUCK_TICKS`, `SAVE_EVERY_TICKS`, `PROTOCOL_VERSION`). Spec: `docs/superpowers/specs/2026-11-02-networked-server-design.md`.
+
+### Modules and public functions
+- `net/characters.py`: `valid_name(name) -> str | None` (lower-cased `[a-z0-9_]{3,16}`); `new_character(town, tile) -> dict`; `save(chars_dir, name, fields)`; `load(chars_dir, name) -> dict | None` (None when missing or corrupt); `load_roster(chars_dir) -> dict[str, int]`; `save_roster(chars_dir, roster)`; `next_town(roster) -> int` (fewest names, lowest index on ties). Files: `<name>.npz` and `roster.json`.
+- `net/pathing.py`: `find_path(walls, start, goal, max_radius=PATH_RADIUS) -> list[int] | None`: A* on the 4-neighbour grid, move codes 1 N, 2 S, 3 W, 4 E; `[]` when already there; None when unreachable, goal is a wall or off-map, or goal is outside `start +- max_radius`.
+- `net/protocol.py`: `encode(msg) -> str`; `decode(text) -> dict | None`; `validate_client(msg) -> dict | None`; `view_window(pos) -> (x0, y0)`; `terrain_window(terrain, x0, y0) -> list[list[int]]` (`T_ROCK` outside the map); `host_view(world) -> dict` (one numpy pull per tick); `snapshot(hv, slot, names, send_terrain, notice, tick) -> dict`.
+- `net/server.py`: `GameServer(seed, chars_dir, tick_ms=TICK_MS, max_clients=MAX_PLAYERS)` with `await start(host, port)` (`port=0` picks a free port, read from `.port`), `await stop()`, `login(name) -> (slot, error)`, `logout(slot)`, `tick_once()`, attributes `owner`, `tick`, `world`, `overruns`. CLI: `venv\Scripts\python.exe -m net.server [--host 0.0.0.0 --port 8765 --seed 0 --chars characters --tick-ms 120]`.
+- `net/client.py`: `NetClient(host, port, name)` (daemon thread): `start()`, `welcome`, `error`, `connected`, `latest()` (newest `snap`), `send_input(move, attack, eat)`, `walk_to(x, y)`, `close()`. `play.py` is a thin tkinter front end over it (`--host --port --name`).
+- `bench/server_load.py`: N headless `NetClient`s sending random inputs; `--embedded` runs a server in-process.
+
+### Protocol (WebSocket, JSON; every message has `"v": 1` and `"t"`)
+| t | direction | fields | notes |
+|---|---|---|---|
+| `login` | C->S | `name` | first message, once; reply `welcome` or `error` + close |
+| `input` | C->S | `move` 0..4, `attack`, `eat` | sent on change; server keeps the latest per slot; cancels a `walk_to` path |
+| `walk_to` | C->S | `x`, `y` | click-to-walk (server A*); replaces any path; unreachable or too far -> `notice` |
+| `welcome` | S->C | `slot`, `map`, `tick_ms`, `view_w`, `view_h` | view size fixed per connection |
+| `snap` | S->C | `tick`, `you`, `ents`, `terrain`, `notice` | every tick; `ents` limited to the view window; `terrain` only when the window moved, else null; players appear by name, never slot |
+| `error` | S->C | `msg` | then the socket closes |
+
+Unknown `t` is ignored; malformed JSON, wrong version, or any message before `login` gets `error` and a close. `you` = `{pos, hp, max_hp, kills, deaths, inv, town, safe}`. Entities: `{kind:"p", name, pos, hp, max_hp}`, `{kind:"m", mkind, pos, hp, max_hp}`, `{kind:"d", item, pos}`.
+
+### Rules
+- The tick never awaits a client: at most one in-flight snapshot send per client; a slow client skips ticks.
+- Login runs synchronously on the event loop (no await between slot pick and mark), so two humans never get the same slot.
+- Logout saves the character and re-seeds the slot as a bot on its town's temple.
