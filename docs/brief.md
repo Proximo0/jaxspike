@@ -5,8 +5,9 @@ A Tibia-style single-floor tile world in JAX. Players move, attack monsters, die
 
 ## Shared API (lead owns, do not edit)
 - `game/config.py`: constants. Use these names. Do not hardcode numbers.
-- `game/state.py`: world schema (see docstring), `make_empty_world(key)`, `next_key(world) -> (sub_key, world)`, `empty_inputs()`.
+- `game/state.py`: world schema (see docstring), `make_empty_world(key)` (world also holds `terrain` int8 and `pz` bool, both `[MAP, MAP]`), `next_key(world) -> (sub_key, world)`, `empty_inputs()`.
 - `game/spatial.py`: `build_grid(pos, active)`, `block_candidates(table, query_pos)`, `nearest_in_block(table, query_pos, targets_pos) -> (idx, dist)`. Only nearest within 3x3 cell block (about CELL=8 tiles). Use `BIG` as the "none" distance.
+- `game/world_layout.py`: layout spec in map fractions; the only file allowed to contain coordinate literals.
 - `game/step.py`: the tick. Phase order is fixed below.
 
 ## Phase order (one tick)
@@ -14,7 +15,8 @@ A Tibia-style single-floor tile world in JAX. Players move, attack monsters, die
 2. `monsters.monster_ai(world) -> world`
 3. `combat.combat(world, inputs) -> world`
 4. `loot.loot(world) -> world`
-5. tick counter +1 (lead, in step.py)
+5. `survival.survival(world, inputs) -> world`
+6. tick counter +1 (lead, in step.py)
 
 `monsters.died` is cleared by step.py at the start of the tick. Combat sets it on the tick a monster dies. Loot reads it.
 
@@ -24,6 +26,7 @@ A Tibia-style single-floor tile world in JAX. Players move, attack monsters, die
 - Every phase must be `jax.jit`-compatible and `jax.vmap`-compatible. Test with `jax.jit` at least once.
 - Randomness only through `next_key(world)`. Never use `np.random` or Python `random`.
 - Positions are int32 tile coordinates in `[0, MAP)`. Clip with `jnp.clip`.
+- No coordinate literal outside `game/world_layout.py`; derive positions from `MAP` and the layout spec.
 - Walls: `walls[x, y] == 1` is blocked. Index as `walls[pos[:,0], pos[:,1]]`.
 - Deterministic tie-breaks: when two entities want the same tile, the lowest slot index wins. Use scatter-min or argmin, not race-prone writes.
 - Only update the fields your phase owns (listed per module below). Return a world with the same keys and shapes.
@@ -67,6 +70,11 @@ A Tibia-style single-floor tile world in JAX. Players move, attack monsters, die
   3. Decay: `ttl -= 1`, deactivate at 0.
 - Owns: `drops.*`, `players.inv`.
 - Tests: `tests/test_loot.py`.
+
+### `game/survival.py` (worker: survival)
+- `survival(world, inputs)`: living players regain `REGEN_HP` every `REGEN_TICKS` ticks (capped at `PLAYER_MAX_HP`); a player with `inputs["eat"]` and meat in `inv` removes one `ITEM_MEAT` and heals `MEAT_HEAL`.
+- Owns: `players.hp` (increments only; combat only subtracts) and `players.inv` (removals only; loot only adds).
+- Tests: `tests/test_survival.py`.
 
 ### `bots/policies.py` (worker: bots)
 - `bot_inputs(world, key) -> inputs`: vectorized over players. A living active player with a monster within manhattan 6 (use a monster grid when it needs nearest) moves toward it one step per tick, and attacks when adjacent. Without one, it moves in a random direction (uniform over the 5 options, so stay is included), 50% of ticks.

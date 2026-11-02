@@ -5,7 +5,7 @@ import pytest
 
 from bots import runner
 from game import persistence
-from game.config import MAX_MONSTERS, MAX_PLAYERS, MONSTER_HP
+from game.config import MAX_MONSTERS, MAX_PLAYERS, MONSTER_HP, T_WATER
 from game.state import make_empty_world
 
 
@@ -15,6 +15,8 @@ def test_persistence_roundtrip_exact(tmp_path):
     w["players"]["active"] = w["players"]["active"].at[3].set(True)
     w["monsters"]["pos"] = w["monsters"]["pos"].at[5].set(jnp.array([9, 11]))
     w["walls"] = w["walls"].at[1, 2].set(1)
+    w["terrain"] = w["terrain"].at[3, 4].set(T_WATER)
+    w["pz"] = w["pz"].at[5, 6].set(True)
     w["tick"] = jnp.int32(12)
     path = tmp_path / "w.npz"
     persistence.save(w, path)

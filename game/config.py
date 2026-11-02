@@ -2,7 +2,7 @@
 
 All sizes are compile-time constants. Changing one recompiles the step.
 """
-MAP = 256                 # tiles per side of the single floor
+MAP = 512                 # tiles per side of the single floor
 CELL = 8                  # spatial grid cell size in tiles
 G = MAP // CELL           # grid cells per side
 NCELLS = G * G
@@ -48,3 +48,18 @@ ITEM_GOLD_COIN = 1
 ITEM_MEAT = 2
 ITEM_SWORD = 3
 NUM_ITEMS = 4
+
+# Terrain ids stored in world["terrain"]. Blocking set: T_WATER, T_TREE, T_WALL, T_ROCK.
+T_GRASS = 0
+T_ROAD = 1
+T_FLOOR = 2
+T_TEMPLE = 3
+T_WATER = 4
+T_TREE = 5
+T_WALL = 6
+T_ROCK = 7
+
+# Survival: living players regain REGEN_HP every REGEN_TICKS ticks; eating meat heals MEAT_HEAL.
+REGEN_HP = 1
+REGEN_TICKS = 4
+MEAT_HEAL = 40

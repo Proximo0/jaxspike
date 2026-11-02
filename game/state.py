@@ -6,6 +6,8 @@ their `active` flag is False, and phases must ignore them.
 
 world = {
   "walls":   int8  [MAP, MAP]                 1 = blocked
+  "terrain": int8  [MAP, MAP]                 T_* ids from config
+  "pz":      bool  [MAP, MAP]                 protection zone: monsters cannot hit players here
   "tick":    int32 []
   "rng":     uint32 [2]                       JAX PRNG key, advanced by next_key()
   "players": {
@@ -38,7 +40,7 @@ world = {
 }
 
 inputs (per tick, built by bots or the network layer):
-  {"move": int32 [MAX_PLAYERS] in 0..4, "attack": bool [MAX_PLAYERS]}
+  {"move": int32 [MAX_PLAYERS] in 0..4, "attack": bool [MAX_PLAYERS], "eat": bool [MAX_PLAYERS]}
 """
 import jax
 import jax.numpy as jnp
@@ -50,6 +52,7 @@ from game.config import (
     MAX_MONSTERS,
     MAX_PLAYERS,
     PLAYER_MAX_HP,
+    T_GRASS,
 )
 
 
@@ -67,6 +70,7 @@ def empty_inputs():
     return {
         "move": jnp.zeros((MAX_PLAYERS,), jnp.int32),
         "attack": jnp.zeros((MAX_PLAYERS,), jnp.bool_),
+        "eat": jnp.zeros((MAX_PLAYERS,), jnp.bool_),
     }
 
 
@@ -74,6 +78,8 @@ def make_empty_world(key):
     """Blank world with no walls, no players, no monsters. Used by tests and as a base."""
     return {
         "walls": jnp.zeros((MAP, MAP), jnp.int8),
+        "terrain": jnp.full((MAP, MAP), T_GRASS, jnp.int8),
+        "pz": jnp.zeros((MAP, MAP), jnp.bool_),
         "tick": jnp.zeros((), jnp.int32),
         "rng": jax.random.key_data(jax.random.PRNGKey(0) if key is None else key),
         "players": {
