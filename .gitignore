@@ -4,3 +4,9 @@ __pycache__/
 .superpowers/
 *.npz
 .pytest_cache/
+characters/
+client/.godot/
+client/build/
+client/out/
+client/config/*credentials*
+*credentials*.cfg

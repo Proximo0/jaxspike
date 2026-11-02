@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Git Bash on Windows has no flock(1); the kit tools call it around the Godot import. Put this folder on PATH
+# when running client/tools/*.sh from Git Bash (one lead, no parallel imports): PATH="$PWD/tools/winshim:$PATH".
+exit 0

@@ -1,0 +1,1488 @@
+<style>
+.sb { display: grid; gap: var(--cds-gap-lg); font-family: var(--font-anthropic-sans); max-width: 92rem; margin-inline: auto; }
+.sb-head h1 { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: var(--cds-font-size-title); margin: 0; text-wrap: balance; }
+.sb-head p { margin: var(--cds-gap-xs) 0 0; color: var(--color-fg-muted); font-size: var(--cds-font-size-body); }
+.sb-head .bad { color: var(--color-bad); }
+.sb-head .ok { color: var(--color-ok); }
+.sb-tabs { display: flex; flex-wrap: wrap; gap: var(--cds-gap-xs); border-bottom: 1px solid var(--color-border-line); }
+.sb-tab { appearance: none; background: none; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: var(--cds-pad-sm) var(--cds-pad-md); font: inherit; font-size: var(--cds-font-size-body); color: var(--color-fg-muted); cursor: pointer; }
+.sb-tab:hover { color: var(--color-fg); }
+.sb-tab[aria-selected=true] { color: var(--color-fg); border-bottom-color: var(--color-fg); }
+.sb-page { display: grid; gap: var(--cds-gap-lg); }
+.sb-page[hidden] { display: none; }
+.sb-sec { font-size: var(--cds-font-size-heading); font-weight: var(--cds-font-weight-medium); margin: var(--cds-gap-sm) 0 0; }
+.sb-tiles { display: grid; gap: var(--cds-gap-md); grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr)); }
+.sb-tile, .sb-card { background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-lg); min-width: 0; }
+.sb-tile .lab { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+.sb-tile .num { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: var(--cds-font-size-title); font-variant-numeric: tabular-nums; margin-top: var(--cds-gap-xs); line-height: 1.15; overflow-wrap: anywhere; }
+.sb-tile .num.bad { color: var(--color-bad); }
+.sb-tile .num.ok { color: var(--color-ok); }
+.sb-tile .num.warn { color: var(--color-warn); }
+.sb-tile .sub { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); margin-top: var(--cds-gap-xs); }
+.sb-grid { display: grid; gap: var(--cds-gap-md); grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr)); }
+.sb-wide { grid-column: 1 / -1; }
+.sb-card h2 { font-size: var(--cds-font-size-heading); font-weight: var(--cds-font-weight-medium); margin: 0; }
+.sb-card .note { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); margin: var(--cds-gap-xs) 0 var(--cds-gap-md); }
+.sb-chart { position: relative; min-height: 200px; }
+.sb-chart.short { min-height: 64px; }
+.sb-svg { display: block; overflow: visible; }
+.sb-svg text { font-family: var(--font-anthropic-sans); font-size: var(--cds-font-size-caption); fill: var(--color-fg-muted); font-variant-numeric: tabular-nums; }
+.sb-svg text.val { fill: var(--color-fg); }
+.sb-svg text.inside { fill: var(--color-bg); }
+.sb-tip { position: absolute; z-index: 2; pointer-events: none; background: var(--cds-surface-popover); border: 1px solid var(--cds-border); border-radius: var(--cds-radius); box-shadow: var(--cds-shadow-popover); padding: var(--cds-pad-xs) var(--cds-pad-sm); font-size: var(--cds-font-size-caption); max-width: min(20rem, 90%); }
+.sb-tip .k { color: var(--cds-text-secondary); margin-bottom: 2px; }
+.sb-tip .ln { display: flex; align-items: baseline; gap: var(--cds-gap-xs); }
+.sb-tip .ln b { font-weight: var(--cds-font-weight-medium); margin-left: auto; padding-left: var(--cds-gap-sm); font-variant-numeric: tabular-nums; }
+.sb-tip .sw, .sb-legend .sw { display: inline-block; width: .6rem; height: .6rem; border-radius: 2px; flex: none; }
+.sb-legend { display: flex; flex-wrap: wrap; gap: var(--cds-gap-xs) var(--cds-gap-md); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); margin: 0 0 var(--cds-gap-sm); }
+.sb-legend span.it { display: inline-flex; align-items: center; gap: var(--cds-gap-xs); }
+.sb-legend b { color: var(--color-fg); font-weight: var(--cds-font-weight-medium); font-variant-numeric: tabular-nums; }
+.sb-tools { display: flex; flex-wrap: wrap; gap: var(--cds-gap-sm); align-items: center; margin-bottom: var(--cds-gap-sm); }
+.sb-search { font: inherit; font-size: var(--cds-font-size-caption); color: var(--color-fg); background: var(--color-bg); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-xs) var(--cds-pad-sm); min-width: 0; flex: 1 1 10rem; max-width: 18rem; }
+.sb-chips { display: flex; flex-wrap: wrap; gap: var(--cds-gap-xs); }
+.sb-chip { font: inherit; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); background: none; border: 1px solid var(--color-border-line); border-radius: 999px; padding: 0 var(--cds-pad-sm); cursor: pointer; }
+.sb-chip[aria-pressed=true] { color: var(--color-fg); border-color: var(--color-fg); }
+.sb-scroll { max-height: 28rem; overflow: auto; }
+.sb table { width: 100%; border-collapse: collapse; font-size: var(--cds-font-size-caption); font-variant-numeric: tabular-nums; }
+.sb th { text-align: left; font-weight: var(--cds-font-weight-medium); color: var(--color-fg-muted); position: sticky; top: 0; z-index: 1; background: var(--color-panel); padding: 0; border-bottom: 1px solid var(--color-border-line); white-space: nowrap; }
+.sb th button { all: unset; display: block; padding: var(--cds-pad-xs) var(--cds-pad-sm); cursor: pointer; }
+.sb th[aria-sort=ascending] button::after { content: " ↑"; }
+.sb th[aria-sort=descending] button::after { content: " ↓"; }
+.sb th.num, .sb td.num { text-align: right; }
+.sb td { padding: var(--cds-pad-xs) var(--cds-pad-sm); border-bottom: 1px solid var(--color-border-line); vertical-align: top; }
+.sb tr[hidden] { display: none; }
+.sb [hidden] { display: none !important; }
+.sb .cap { text-transform: capitalize; }
+.sb .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.sb .pill { display: inline-flex; align-items: center; gap: var(--cds-gap-xs); padding: 0 var(--cds-pad-sm); border-radius: 999px; border: 1px solid var(--color-border-line); white-space: nowrap; }
+.sb .pill::before { content: ""; width: .45rem; height: .45rem; border-radius: 50%; background: var(--cds-chart-muted); }
+.sb .pill.p-ok::before { background: var(--color-ok); }
+.sb .pill.p-bad::before { background: var(--color-bad); }
+.sb .pill.p-warn::before { background: var(--color-warn); }
+.sb .pill.p-run::before { background: var(--cds-chart-reference); }
+.sb .empty-note { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); margin: 0; }
+.sb ul.sb-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--cds-gap-sm); }
+.sb-fail { display: flex; align-items: center; justify-content: center; gap: var(--cds-gap-xs); min-height: inherit; height: 100%; color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); }
+.sb-fail::before { content: ""; width: .375rem; height: .375rem; border-radius: 50%; background: var(--color-bad); }
+@media (max-width: 40rem) { .sb .hide-narrow { display: none; } }
+[data-dash-source-state=empty] { color: transparent; }
+[data-dash-source-state=refreshing] { opacity: .5; transition: opacity var(--cds-dur-slow); }
+@media (prefers-reduced-motion: no-preference) {
+  .sb-anim { animation: sb-in var(--cds-dur-slow) var(--cds-ease-out) both; }
+  @keyframes sb-in { from { opacity: 0; } to { opacity: 1; } }
+}
+</style>
+<div class="sb">
+  <header class="sb-head" id="top">
+    <h1><span class="v" data-source="project" data-field="board_title" data-row="0">—</span></h1>
+    <p id="status-line"><span class="v dash-skeleton" data-source="worker_counts" data-field="n" data-where="status=Running" data-fmt="int">—</span> workers running.
+      Checks on main: <span class="v" data-source="latest_runs" data-field="result" data-where-tpl="workflow={checks_workflow}">—</span>.
+      <span data-needs="perf_streak">Perf runner: <span class="v" data-source="perf_streak" data-field="latest_result" data-row="0">—</span>.</span>
+      <span data-needs="match_start"><span class="v cap" data-source="project" data-field="match_word" data-row="0">—</span>-start freeze <span class="v" id="freeze-inline" data-source="freeze_summary" data-field="ms" data-where="stat=warm_median" data-fmt="int">—</span> ms, <span id="freeze-verdict">—</span>.</span></p>
+  </header>
+
+  <nav class="sb-tabs" role="tablist" aria-label="Board pages" data-source="project">
+    <button class="sb-tab" role="tab" id="tab-overview" data-tab="overview" aria-selected="true">—</button>
+    <button class="sb-tab" role="tab" id="tab-work" data-tab="work" aria-selected="false">—</button>
+    <button class="sb-tab" role="tab" id="tab-quality" data-tab="quality" aria-selected="false">—</button>
+    <button class="sb-tab" role="tab" id="tab-performance" data-tab="performance" aria-selected="false">—</button>
+    <button class="sb-tab" role="tab" id="tab-balance" data-tab="balance" aria-selected="false">—</button>
+    <button class="sb-tab" role="tab" id="tab-assets" data-tab="assets" aria-selected="false">—</button>
+    <button class="sb-tab" role="tab" id="tab-goals" data-tab="goals" aria-selected="false">—</button>
+  </nav>
+
+  <!-- ===================== OVERVIEW ===================== -->
+  <section class="sb-page" id="overview" role="tabpanel" aria-labelledby="tab-overview">
+    <div class="sb-tiles">
+      <div class="sb-tile" id="t-workers"><div class="lab">Workers running now</div>
+        <div class="num v dash-skeleton" data-source="worker_counts" data-field="n" data-where="status=Running" data-fmt="int">—</div>
+        <div class="sub">of <span class="v" data-source="worker_counts" data-field="n" data-where="status=All" data-fmt="int">—</span> in this push; <span class="v" data-source="worker_counts" data-field="n" data-where="status=Stopped" data-fmt="int">—</span> paused</div></div>
+      <div class="sb-tile" id="t-commits"><div class="lab">Commits to main, latest day</div>
+        <div class="num v dash-skeleton" data-source="commits_by_day" data-field="n" data-row="0" data-fmt="int">—</div>
+        <div class="sub"><span class="v" data-source="commits_by_day" data-field="day" data-row="0" data-fmt="day">—</span> (UTC); latest <span class="v mono" data-source="commits" data-field="sha" data-row="0">—</span> at <span class="v" data-source="commits" data-field="time" data-row="0" data-fmt="hm">—</span></div></div>
+      <div class="sb-tile" id="t-tests" data-needs="checks"><div class="lab"><span class="v" data-source="checks" data-field="check" data-where="role=unit">—</span> on main</div>
+        <div class="num v dash-skeleton" id="t-tests-num" data-source="checks" data-field="count" data-where="role=unit" data-fmt="int">—</div>
+        <div class="sub"><span class="v" data-source="checks" data-field="result" data-where="role=unit">—</span>; <span class="v" data-source="checks" data-field="count" data-where="role=sims" data-fmt="int">—</span> sims <span class="v" data-source="checks" data-field="result" data-where="role=sims">—</span>; lint <span class="v" data-source="checks" data-field="result" data-where="role=lint">—</span></div></div>
+      <div class="sb-tile" id="t-fps" data-needs="perf_fps"><div class="lab">Real-GPU fps, <span class="v" data-source="project" data-field="perf_scenario_short" data-row="0">—</span></div>
+        <div class="num v dash-skeleton" data-source="perf_fps" data-field="fps" data-row="0" data-fmt="int">—</div>
+        <div class="sub"><span class="v" data-source="perf_fps" data-field="tier" data-row="0">—</span> graphics; <span class="v" data-source="perf_fps" data-field="tier" data-row="1">—</span> <span class="v" data-source="perf_fps" data-field="fps" data-row="1" data-fmt="int">—</span> fps</div></div>
+      <div class="sb-tile" id="t-freeze" data-needs="match_start"><div class="lab"><span class="v cap" data-source="project" data-field="match_word" data-row="0">—</span>-start freeze</div>
+        <div class="num"><span class="v dash-skeleton" id="t-freeze-num" data-source="freeze_summary" data-field="ms" data-where="stat=warm_median" data-fmt="int">—</span> ms</div>
+        <div class="sub">median after the first; target ≤ <span class="v" data-source="project" data-field="freeze_target_ms" data-row="0" data-fmt="int">—</span> ms; first <span class="v" data-source="freeze_summary" data-field="ms" data-where="stat=first" data-fmt="int">—</span> ms</div></div>
+      <div class="sb-tile" id="t-gpu" data-needs="perf_streak"><div class="lab">Perf runner (<span class="v" data-source="project" data-field="perf_workflow" data-row="0">—</span>), last run</div>
+        <div class="num v dash-skeleton" id="t-gpu-num" data-source="perf_streak" data-field="latest_result" data-row="0">—</div>
+        <div class="sub">at <span class="v" data-source="perf_streak" data-field="latest_at" data-row="0" data-fmt="hm">—</span>; <span class="v" data-source="perf_streak" data-field="green" data-row="0" data-fmt="int">—</span> of <span class="v" data-source="perf_streak" data-field="runs" data-row="0" data-fmt="int">—</span> runs green</div></div>
+      <div class="sb-tile" id="t-clock"><div class="lab">Time left until <span class="v" data-source="project" data-field="deadline_label" data-row="0">—</span></div>
+        <div class="num" id="countdown">—</div>
+        <div class="sub"><span class="v" data-source="project" data-field="deadline_utc" data-row="0" data-fmt="time">—</span>, by this browser's clock</div></div>
+    </div>
+
+    <div class="sb-grid">
+      <div class="sb-card" id="needs">
+        <h2>Needs <span class="v" data-source="project" data-field="owner" data-row="0">—</span></h2>
+        <p class="note"><span class="v" data-source="needs_counts" data-field="n" data-where="kind=Blocking" data-fmt="int">—</span> blocking, <span class="v" data-source="needs_counts" data-field="n" data-where="kind=Optional" data-fmt="int">—</span> optional.</p>
+        <table id="needs-table" data-source="needs_owner" data-row-key="item">
+          <thead><tr><th data-field="item"><button>Item</button></th><th data-field="kind" data-pill="1"><button>Kind</button></th><th data-field="detail" class="hide-narrow"><button>Why</button></th></tr></thead><tbody></tbody>
+        </table>
+      </div>
+      <div class="sb-card" id="ov-latest">
+        <h2>Latest on main</h2>
+        <p class="note">The newest commit and the newest finished run of each workflow.</p>
+        <p class="empty-note"><span class="v mono" data-source="commits" data-field="sha" data-row="0">—</span> · <span class="v" data-source="commits" data-field="message" data-row="0">—</span></p>
+        <table id="latest-table" data-source="latest_runs" data-row-key="workflow" style="margin-top: var(--cds-gap-md)">
+          <thead><tr><th data-field="workflow"><button>Workflow</button></th><th data-field="result" data-pill="1"><button>Result</button></th><th data-field="branch" class="hide-narrow mono"><button>Branch</button></th><th data-field="started" data-fmt="hm"><button>Started</button></th></tr></thead><tbody></tbody>
+        </table>
+      </div>
+      <div class="sb-card" id="ov-hours">
+        <h2>Commits per hour</h2>
+        <p class="note">Commits landing on main, by hour (UTC).</p>
+        <div class="sb-chart dash-skeleton" id="ov-hours-chart" data-source="commits_hourly"></div>
+      </div>
+      <div class="sb-card" id="ov-goals" data-needs="goals">
+        <h2>Goals at a glance</h2>
+        <p class="note">Every target by status; rows tied to a workflow stay live from its runs.</p>
+        <div class="sb-legend" id="ov-goals-legend"></div>
+        <div class="sb-chart short dash-skeleton" id="ov-goals-chart" data-source="goal_counts"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== WORK ===================== -->
+  <section class="sb-page" id="work" role="tabpanel" aria-labelledby="tab-work" hidden>
+    <div class="sb-grid">
+      <div class="sb-card sb-wide" id="workers">
+        <h2>Workers and threads</h2>
+        <p class="note">What each one builds, where it runs, the model, its status and its branch. "Stopped" means paused with the work kept on its branch.</p>
+        <div class="sb-tools"><input class="sb-search" type="search" placeholder="Search workers" aria-label="Search workers" data-for="workers-table"><div class="sb-chips" id="workers-chips-where" data-for="workers-table" data-field="where"></div><div class="sb-chips" id="workers-chips-status" data-for="workers-table" data-field="status"></div></div>
+        <div class="sb-scroll">
+          <table id="workers-table" data-source="workers" data-row-key="area">
+            <thead><tr><th data-field="area"><button>What</button></th><th data-field="where"><button>Where</button></th><th data-field="model" class="hide-narrow"><button>Model</button></th><th data-field="status" data-pill="1"><button>Status</button></th><th data-field="branch" class="hide-narrow mono"><button>Branch</button></th></tr></thead><tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="sb-card sb-wide" id="threads-card" data-needs="threads">
+        <h2>Thread cost</h2>
+        <p class="note">Each project thread's cost and wall-clock time, from its cloud session record. The daily cost routine refreshes it.</p>
+        <p class="note"><span class="v" data-source="threads_total" data-field="threads" data-row="0" data-fmt="int">—</span> threads, <span class="v" data-source="threads_total" data-field="running" data-row="0" data-fmt="int">—</span> running; <span class="v" data-source="threads_total" data-field="cost_usd" data-row="0" data-fmt="usd">—</span> over <span class="v" data-source="threads_total" data-field="minutes" data-row="0" data-fmt="int">—</span> minutes.</p>
+        <div class="sb-scroll">
+          <table id="threads-table" data-source="threads" data-row-key="id">
+            <thead><tr><th data-field="title"><button>Thread</button></th><th data-field="role"><button>Role</button></th><th data-field="model" class="hide-narrow"><button>Model</button></th><th data-field="status" data-pill="1"><button>Status</button></th><th data-field="minutes" class="num" data-fmt="int"><button>Minutes</button></th><th data-field="cost_usd" class="num" data-fmt="usd"><button>Cost</button></th><th data-field="cost_per_hour" class="num hide-narrow" data-fmt="usd"><button>Per hour</button></th><th data-field="context_used" class="num hide-narrow" data-fmt="int"><button>Context</button></th></tr></thead><tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="sb-card" id="where-card">
+        <h2>Where the work runs</h2>
+        <p class="note">Workers per place, split by status.</p>
+        <div class="sb-legend" id="where-legend"></div>
+        <div class="sb-chart dash-skeleton" id="where-chart" data-source="workers_by_place"></div>
+      </div>
+      <div class="sb-card" id="branches-card" data-needs="branches">
+        <h2>Branches against main</h2>
+        <p class="note">Commits ahead of main (right) and behind it (left, grey). Pushed branches from GitHub; local-only ones from the clone the refresh reads.</p>
+        <div class="sb-legend" id="branches-legend"></div>
+        <div class="sb-chart dash-skeleton" id="branches-chart" data-source="branches"></div>
+      </div>
+      <div class="sb-card sb-wide" id="branches-tbl" data-needs="branches">
+        <h2>Branch detail</h2>
+        <p class="note">Newest commit on each branch.</p>
+        <div class="sb-scroll">
+          <table id="branches-table" data-source="branches" data-row-key="branch">
+            <thead><tr><th data-field="branch" class="mono"><button>Branch</button></th><th data-field="where"><button>Where</button></th><th data-field="ahead" class="num" data-fmt="int"><button>Ahead</button></th><th data-field="behind" class="num" data-fmt="int"><button>Behind</button></th><th data-field="last_commit" data-fmt="time" class="hide-narrow"><button>Last commit</button></th><th data-field="last_message" class="hide-narrow"><button>Message</button></th></tr></thead><tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="sb-card sb-wide" id="hours-card">
+        <h2>Commits to main per hour</h2>
+        <p class="note">Over the refresh window, UTC. Hover a bar for the count.</p>
+        <div class="sb-chart dash-skeleton" id="hours-chart" data-source="commits_hourly"></div>
+      </div>
+      <div class="sb-card" id="commits-card">
+        <h2>Commit log</h2>
+        <p class="note">Main, newest first.</p>
+        <div class="sb-tools"><input class="sb-search" type="search" placeholder="Search commits" aria-label="Search commits" data-for="commits-table"></div>
+        <div class="sb-scroll">
+          <table id="commits-table" data-source="commits" data-row-key="sha">
+            <thead><tr><th data-field="sha" class="mono"><button>Commit</button></th><th data-field="time" data-fmt="time"><button>Time</button></th><th data-field="message"><button>Message</button></th></tr></thead><tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="sb-card" id="pcjobs-card" data-needs="jobs">
+        <h2>Jobs on <span class="v" data-source="project" data-field="pc_label" data-row="0">—</span></h2>
+        <p class="note">What the session on that machine was asked to do.</p>
+        <div class="sb-scroll">
+          <table id="jobs-table" data-source="jobs" data-row-key="job">
+            <thead><tr><th data-field="job"><button>Job</button></th><th data-field="status" data-pill="1"><button>Status</button></th><th data-field="note" class="hide-narrow"><button>Note</button></th></tr></thead><tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== QUALITY ===================== -->
+  <section class="sb-page" id="quality" role="tabpanel" aria-labelledby="tab-quality" hidden>
+    <div class="sb-tiles" data-needs="checks">
+      <div class="sb-tile" data-needs="checks"><div class="lab v" data-source="checks" data-field="check" data-where="role=unit">—</div><div class="num v dash-skeleton" data-source="checks" data-field="count" data-where="role=unit" data-fmt="int">—</div><div class="sub"><span class="v" data-source="checks" data-field="count_what" data-where="role=unit">—</span>, job <span class="v" data-source="checks" data-field="result" data-where="role=unit">—</span></div></div>
+      <div class="sb-tile"><div class="lab v" data-source="checks" data-field="check" data-where="role=sims">—</div><div class="num v dash-skeleton" data-source="checks" data-field="count" data-where="role=sims" data-fmt="int">—</div><div class="sub"><span class="v" data-source="checks" data-field="count_what" data-where="role=sims">—</span>, job <span class="v" data-source="checks" data-field="result" data-where="role=sims">—</span></div></div>
+      <div class="sb-tile"><div class="lab v" data-source="checks" data-field="check" data-where="role=lint">—</div><div class="num v dash-skeleton" data-source="checks" data-field="count" data-where="role=lint" data-fmt="int">—</div><div class="sub"><span class="v" data-source="checks" data-field="count_what" data-where="role=lint">—</span>, job <span class="v" data-source="checks" data-field="result" data-where="role=lint">—</span></div></div>
+      <div class="sb-tile"><div class="lab v" data-source="checks" data-field="check" data-where="role=bots">—</div><div class="num v dash-skeleton" data-source="checks" data-field="count" data-where="role=bots" data-fmt="int">—</div><div class="sub"><span class="v" data-source="checks" data-field="count_what" data-where="role=bots">—</span>, all <span class="v" data-source="checks" data-field="result" data-where="role=bots">—</span></div></div>
+      <div class="sb-tile"><div class="lab"><span class="v" data-source="project" data-field="checks_workflow" data-row="0">—</span> pass rate</div><div class="num v dash-skeleton" data-source="run_rates" data-field="pass_rate" data-where-tpl="workflow={checks_workflow}" data-fmt="pct">—</div><div class="sub">of <span class="v" data-source="run_rates" data-field="runs" data-where-tpl="workflow={checks_workflow}" data-fmt="int">—</span> finished runs</div></div>
+    </div>
+    <p class="empty-note" data-needs="checks">Counts are from main at commit <span class="v mono" data-source="checks" data-field="sha" data-where="role=unit">—</span>, whose checks run started <span class="v" data-source="checks" data-field="run_at" data-where="role=unit" data-fmt="time">—</span>. Tests count test functions; sims count the sim files the suite runs.</p>
+    <div class="sb-grid">
+      <div class="sb-card sb-wide" id="strip-card">
+        <h2>Every workflow run, pass or fail</h2>
+        <p class="note">One cell per run, oldest left, newest right; all branches. Hover a cell for its commit and time.</p>
+        <div class="sb-legend" id="strip-legend"></div>
+        <div class="sb-chart dash-skeleton" id="strip-chart" data-source="runs"></div>
+      </div>
+      <div class="sb-card sb-wide" id="dur-card">
+        <h2>Run duration on main</h2>
+        <p class="note">Minutes from start to finish for the <span class="v" data-source="project" data-field="checks_workflow" data-row="0">—</span> and <span class="v" data-source="project" data-field="perf_workflow" data-row="0">—</span> workflows, on a log scale so one slow run doesn't flatten the rest. Red dots failed.</p>
+        <div class="sb-legend" id="dur-legend"></div>
+        <div class="sb-chart dash-skeleton" id="dur-chart" data-source="runs project"></div>
+      </div>
+      <div class="sb-card" id="rates-card">
+        <h2>Pass rate by workflow</h2>
+        <p class="note">Finished runs among the last hundred.</p>
+        <table id="rates-table" data-source="run_rates" data-row-key="workflow">
+          <thead><tr><th data-field="workflow"><button>Workflow</button></th><th data-field="runs" class="num" data-fmt="int"><button>Runs</button></th><th data-field="success" class="num" data-fmt="int"><button>Passed</button></th><th data-field="failure" class="num" data-fmt="int"><button>Failed</button></th><th data-field="other" class="num hide-narrow" data-fmt="int"><button>Other</button></th><th data-field="pass_rate" class="num" data-fmt="pct"><button>Pass rate</button></th></tr></thead><tbody></tbody>
+        </table>
+      </div>
+      <div class="sb-card" id="runner-jobs-card" data-needs="runner_jobs">
+        <h2>Perf runner jobs</h2>
+        <p class="note">From the self-hosted runner's own logs.</p>
+        <table id="runner-jobs-table" data-source="runner_jobs" data-row-key="started">
+          <thead><tr><th data-field="started" data-fmt="time"><button>Started</button></th><th data-field="result" data-pill="1"><button>Result</button></th><th data-field="failed_step"><button>Failed step</button></th><th data-field="cause" class="hide-narrow"><button>Cause</button></th></tr></thead><tbody></tbody>
+        </table>
+      </div>
+      <div class="sb-card sb-wide" id="runs-card">
+        <h2>Recent runs</h2>
+        <p class="note">The last hundred workflow runs, newest at the bottom; click a header to sort.</p>
+        <div class="sb-tools"><input class="sb-search" type="search" placeholder="Search runs" aria-label="Search runs" data-for="runs-table"><div class="sb-chips" id="runs-chips" data-for="runs-table" data-field="workflow"></div></div>
+        <div class="sb-scroll">
+          <table id="runs-table" data-source="runs" data-row-key="run_id">
+            <thead><tr><th data-field="workflow"><button>Workflow</button></th><th data-field="branch" class="mono hide-narrow"><button>Branch</button></th><th data-field="sha" class="mono"><button>Commit</button></th><th data-field="result" data-pill="1"><button>Result</button></th><th data-field="started" data-fmt="time"><button>Started</button></th><th data-field="duration_s" class="num" data-fmt="dur"><button>Duration</button></th></tr></thead><tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== PERFORMANCE ===================== -->
+  <section class="sb-page" id="performance" role="tabpanel" aria-labelledby="tab-performance" hidden>
+    <div class="sb-tiles">
+      <div class="sb-tile" data-needs="perf_fps"><div class="lab"><span class="v" data-source="project" data-field="perf_scenario_short" data-row="0">—</span>, <span class="v" data-source="perf_fps" data-field="tier" data-row="0">—</span></div><div class="num"><span class="v dash-skeleton" data-source="perf_fps" data-field="fps" data-row="0" data-fmt="int">—</span> fps</div><div class="sub"><span class="v" data-source="perf_fps" data-field="avg_ms" data-row="0" data-fmt="dec2">—</span> ms average frame</div></div>
+      <div class="sb-tile" data-needs="perf_fps"><div class="lab"><span class="v" data-source="project" data-field="perf_scenario_short" data-row="0">—</span>, <span class="v" data-source="perf_fps" data-field="tier" data-row="1">—</span></div><div class="num"><span class="v dash-skeleton" data-source="perf_fps" data-field="fps" data-row="1" data-fmt="int">—</span> fps</div><div class="sub"><span class="v" data-source="perf_fps" data-field="avg_ms" data-row="1" data-fmt="dec2">—</span> ms average frame</div></div>
+      <div class="sb-tile" data-needs="soak"><div class="lab">Soak average fps</div><div class="num v dash-skeleton" data-source="soak_summary" data-field="mean_fps" data-row="0" data-fmt="dec1">—</div><div class="sub"><span class="v" data-source="soak_summary" data-field="fights" data-row="0" data-fmt="int">—</span> <span class="v" data-source="project" data-field="match_word" data-row="0">—</span>s, slowest <span class="v" data-source="soak_summary" data-field="min_fps" data-row="0" data-fmt="dec1">—</span> fps</div></div>
+      <div class="sb-tile" data-needs="soak"><div class="lab">Worst single frame in soak</div><div class="num"><span class="v dash-skeleton" data-source="soak_summary" data-field="worst_frame_ms" data-row="0" data-fmt="int">—</span> ms</div><div class="sub">memory <span class="v" data-source="soak_summary" data-field="mem_first_mb" data-row="0" data-fmt="dec1">—</span> → <span class="v" data-source="soak_summary" data-field="mem_last_mb" data-row="0" data-fmt="dec1">—</span> MB</div></div>
+      <div class="sb-tile" data-needs="match_start"><div class="lab"><span class="v cap" data-source="project" data-field="match_word" data-row="0">—</span>-start freeze</div><div class="num"><span class="v dash-skeleton" id="p-freeze-num" data-source="freeze_summary" data-field="ms" data-where="stat=warm_median" data-fmt="int">—</span> ms</div><div class="sub">build alone <span class="v" data-source="build_total" data-field="total_ms" data-row="0" data-fmt="int">—</span> ms; target ≤ <span class="v" data-source="project" data-field="freeze_target_ms" data-row="0" data-fmt="int">—</span> ms</div></div>
+      <div class="sb-tile" data-needs="runner_perf"><div class="lab">Runner, <span class="v" data-source="runner_heavy" data-field="tier" data-row="0">—</span> graphics</div><div class="num v dash-skeleton" data-source="runner_heavy" data-field="draw_calls" data-row="0" data-fmt="int">—</div><div class="sub">draw calls; <span class="v" data-source="runner_heavy" data-field="video_mem_mb" data-row="0" data-fmt="dec1">—</span> MB video memory</div></div>
+    </div>
+    <p class="empty-note" id="perf-empty" hidden>No performance data yet. It appears here once the perf runner or a PC session uploads its datasets.</p>
+    <div class="sb-grid">
+      <div class="sb-card sb-wide" id="ft-card" data-needs="perf">
+        <h2>Frame times, <span class="v" data-source="project" data-field="perf_scenario" data-row="0">—</span></h2>
+        <p class="note"><span class="v" data-source="project" data-field="perf_machine" data-row="0">—</span>. The dashed line is the <span class="v" data-source="project" data-field="fps_target" data-row="0" data-fmt="int">—</span> fps frame budget.</p>
+        <div class="sb-legend" id="ft-legend"></div>
+        <div class="sb-chart dash-skeleton" id="ft-chart" data-source="perf project"></div>
+      </div>
+      <div class="sb-card" id="soak-fps-card" data-needs="soak">
+        <h2>Soak: fps per <span class="v" data-source="project" data-field="match_word" data-row="0">—</span></h2>
+        <p class="note"><span class="v cap" data-source="project" data-field="soak_label" data-row="0">—</span>. The dashed line is <span class="v" data-source="project" data-field="fps_target" data-row="0" data-fmt="int">—</span> fps.</p>
+        <div class="sb-chart dash-skeleton" id="soak-fps-chart" data-source="soak project"></div>
+      </div>
+      <div class="sb-card" id="soak-worst-card" data-needs="soak">
+        <h2>Soak: worst frame per <span class="v" data-source="project" data-field="match_word" data-row="0">—</span></h2>
+        <p class="note">Bars past the <span class="v" data-source="project" data-field="freeze_target_ms" data-row="0" data-fmt="int">—</span> ms dashed line are hitches a player can feel.</p>
+        <div class="sb-chart dash-skeleton" id="soak-worst-chart" data-source="soak project"></div>
+      </div>
+      <div class="sb-card" id="soak-mem-card" data-needs="soak">
+        <h2>Soak: memory over the run</h2>
+        <p class="note">Static and video memory in MB after each one. Flat means nothing leaks.</p>
+        <div class="sb-legend" id="soak-mem-legend"></div>
+        <div class="sb-chart dash-skeleton" id="soak-mem-chart" data-source="soak"></div>
+      </div>
+      <div class="sb-card" id="scripts-card" data-needs="scripts">
+        <h2>Script cost per frame</h2>
+        <p class="note">Each game script timed alone, ms per frame or per physics tick.</p>
+        <div class="sb-legend" id="scripts-legend"></div>
+        <div class="sb-chart dash-skeleton" id="scripts-chart" data-source="scripts"></div>
+      </div>
+      <div class="sb-card sb-wide" id="build-card" data-needs="build_parts">
+        <h2><span class="v cap" data-source="project" data-field="match_word" data-row="0">—</span>-start freeze: what a new one builds</h2>
+        <p class="note">Average of warm rounds, by part; <b class="v" data-source="build_total" data-field="total_ms" data-row="0" data-fmt="dec1">—</b> ms in all. Hover a part for its node count and the suggested fix.</p>
+        <div class="sb-chart short dash-skeleton" id="build-chart" data-source="build_parts"></div>
+        <div class="sb-legend" id="build-legend" data-source="build_parts"></div>
+      </div>
+      <div class="sb-card" id="freeze-card" data-needs="match_start">
+        <h2><span class="v cap" data-source="project" data-field="match_word" data-row="0">—</span>-start freeze, one by one</h2>
+        <p class="note">Building it plus drawing its first frame. The dashed line is the <span class="v" data-source="project" data-field="freeze_target_ms" data-row="0" data-fmt="int">—</span> ms target.</p>
+        <div class="sb-legend" id="freeze-legend"></div>
+        <div class="sb-chart dash-skeleton" id="freeze-chart" data-source="fight_freeze project"></div>
+      </div>
+      <div class="sb-card" id="hitch-card" data-needs="hitch_frames">
+        <h2>Frames over <span class="v" data-source="project" data-field="hitch_ms" data-row="0" data-fmt="int">—</span> ms</h2>
+        <p class="note">With the likely cause from what happened that frame.</p>
+        <div class="sb-scroll">
+          <table id="hitch-table" data-source="hitch_frames" data-row-key="fight,frame">
+            <thead><tr><th data-field="fight" class="num" data-fmt="int"><button>#</button></th><th data-field="frame" class="num" data-fmt="int"><button>Frame</button></th><th data-field="ms" class="num" data-fmt="dec1"><button>ms</button></th><th data-field="cause"><button>Likely cause</button></th></tr></thead><tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="sb-card sb-wide" id="runner-perf-card" data-needs="runner_perf">
+        <h2>What the perf runner recorded</h2>
+        <p class="note">The perf workflow's latest passing run: per-tier costs and scene load.</p>
+        <div class="sb-scroll">
+          <table id="runner-perf-table" data-source="runner_perf" data-row-key="tier">
+            <thead><tr><th data-field="tier"><button>Tier</button></th><th data-field="physics_ms" class="num" data-fmt="dec2"><button>Physics ms</button></th><th data-field="effects_ms" class="num" data-fmt="dec2"><button>Effects ms</button></th><th data-field="old_counter_ms" class="num hide-narrow" data-fmt="dec2"><button>Old counter ms</button></th><th data-field="draw_calls" class="num" data-fmt="int"><button>Draw calls</button></th><th data-field="triangles" class="num" data-fmt="int"><button>Triangles</button></th><th data-field="video_mem_mb" class="num" data-fmt="dec1"><button>Video MB</button></th><th data-field="run" class="hide-narrow" data-fmt="time"><button>Run</button></th></tr></thead><tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== BALANCE ===================== -->
+  <section class="sb-page" id="balance" role="tabpanel" aria-labelledby="tab-balance" hidden>
+    <p class="empty-note" id="balance-empty" hidden>No balance studies yet.</p>
+    <div class="sb-grid" id="balance-studies" data-source="balance"></div>
+    <div class="sb-card" id="matrix-card">
+      <h2>Full matrix</h2>
+      <p class="note">Every pairing, from <span class="v mono" data-source="project" data-field="balance_matrix_path" data-row="0">—</span> on main. Darker: the row side wins more.</p>
+      <div class="sb-chart dash-skeleton" id="matrix-chart" data-source="balance_matrix"></div>
+    </div>
+  </section>
+
+  <!-- ===================== ASSETS ===================== -->
+  <section class="sb-page" id="assets" role="tabpanel" aria-labelledby="tab-assets" hidden>
+    <div class="sb-tiles">
+      <div class="sb-tile" data-needs="models"><div class="lab">Models built</div><div class="num v dash-skeleton" data-source="models_summary" data-field="models" data-row="0" data-fmt="int">—</div><div class="sub">in <span class="v" data-source="models_summary" data-field="groups" data-row="0" data-fmt="int">—</span> groups</div></div>
+      <div class="sb-tile" data-needs="models"><div class="lab">Over budget</div><div class="num v dash-skeleton" id="over-num" data-source="models_summary" data-field="over_budget" data-row="0" data-fmt="int">—</div><div class="sub">above their group's <span class="v" data-source="project" data-field="asset_budget_label" data-row="0">—</span></div></div>
+      <div class="sb-tile" data-needs="models"><div class="lab">Triangles, all models</div><div class="num v dash-skeleton" data-source="models_summary" data-field="triangles" data-row="0" data-fmt="int">—</div><div class="sub">one copy of each</div></div>
+      <div class="sb-tile" data-needs="assets_glb"><div class="lab"><span class="v" data-source="project" data-field="assets_label" data-row="0">—</span> on main</div><div class="num v dash-skeleton" data-source="asset_total" data-field="files" data-row="0" data-fmt="int">—</div><div class="sub">in <span class="v" data-source="asset_total" data-field="folders" data-row="0" data-fmt="int">—</span> asset folders</div></div>
+    </div>
+    <div class="sb-grid">
+      <div class="sb-card sb-wide" id="models-card" data-needs="models">
+        <h2>Triangles per model against budget</h2>
+        <p class="note">The grey tick is the group's <span class="v" data-source="project" data-field="asset_budget_label" data-row="0">—</span>; a bar past it turns red.</p>
+        <div class="sb-legend" id="models-legend"></div>
+        <div class="sb-chart dash-skeleton" id="models-chart" data-source="models"></div>
+      </div>
+      <div class="sb-card" id="groups-card" data-needs="models">
+        <h2>By group</h2>
+        <p class="note">Count, total and largest model against the budget.</p>
+        <table id="groups-table" data-source="model_groups" data-row-key="group">
+          <thead><tr><th data-field="group"><button>Group</button></th><th data-field="models" class="num" data-fmt="int"><button>Models</button></th><th data-field="triangles" class="num" data-fmt="int"><button>Triangles</button></th><th data-field="max_triangles" class="num" data-fmt="int"><button>Largest</button></th><th data-field="budget" class="num" data-fmt="int"><button>Budget</button></th><th data-field="over_budget" class="num" data-fmt="int"><button>Over</button></th></tr></thead><tbody></tbody>
+        </table>
+      </div>
+      <div class="sb-card" id="glb-card" data-needs="assets_glb">
+        <h2><span class="v" data-source="project" data-field="assets_label" data-row="0">—</span> per asset folder</h2>
+        <p class="note">Counted from main's file tree.</p>
+        <div class="sb-chart dash-skeleton" id="glb-chart" data-source="assets_glb project"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== GOALS ===================== -->
+  <section class="sb-page" id="goals" role="tabpanel" aria-labelledby="tab-goals" hidden>
+    <div class="sb-tiles">
+      <div class="sb-tile"><div class="lab">Met</div><div class="num ok v dash-skeleton" data-source="goal_counts" data-field="n" data-where="status_class=Met" data-fmt="int">—</div></div>
+      <div class="sb-tile"><div class="lab">Missed</div><div class="num bad v dash-skeleton" data-source="goal_counts" data-field="n" data-where="status_class=Missed" data-fmt="int">—</div></div>
+      <div class="sb-tile"><div class="lab">Unmeasured</div><div class="num warn v dash-skeleton" data-source="goal_counts" data-field="n" data-where="status_class=Unmeasured" data-fmt="int">—</div></div>
+      <div class="sb-tile"><div class="lab">No target yet</div><div class="num v dash-skeleton" data-source="goal_counts" data-field="n" data-where="status_class=No target" data-fmt="int">—</div></div>
+      <div class="sb-tile"><div class="lab">Met only weakly</div><div class="num v dash-skeleton" data-source="goal_counts" data-field="n" data-where="status_class=Weak" data-fmt="int">—</div></div>
+    </div>
+    <div class="sb-card" id="goals-card">
+      <h2>Every target, measured against what we have</h2>
+      <p class="note">Click a header to sort; search or filter by status.</p>
+      <div class="sb-tools"><input class="sb-search" type="search" placeholder="Search goals" aria-label="Search goals" data-for="goals-table"><div class="sb-chips" id="goals-chips" data-for="goals-table" data-field="status_class"></div></div>
+      <div class="sb-scroll">
+        <table id="goals-table" data-source="goals" data-row-key="target">
+          <thead><tr><th data-field="target"><button>Target</button></th><th data-field="measured"><button>Measured</button></th><th data-field="status_class" data-pill="1"><button>Status</button></th><th data-field="status" class="hide-narrow"><button>Detail</button></th><th data-field="source" class="hide-narrow"><button>Source</button></th></tr></thead><tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+/* Shared helpers on window.SB: formatting, marks, tables, tooltips and charts. */
+(() => {
+  const SB = (window.SB = {});
+  const num = (v) => (typeof v === 'number' ? v : Number(v));
+  const multi = (d) => (d.getUTCHours() === 0 && d.getUTCMinutes() === 0 ? d3.utcFormat('%b %-d')(d) : d3.utcFormat('%H:%M')(d));
+  const F = {
+    int: (v) => d3.format(',')(Math.round(num(v))),
+    dec1: (v) => d3.format(',.1f')(num(v)),
+    dec2: (v) => d3.format(',.2f')(num(v)),
+    dec3: (v) => d3.format(',.3f')(num(v)),
+    pct: (v) => d3.format('.0%')(num(v)),
+    usd: (v) => '$' + d3.format(',.2f')(num(v)),
+    time:(v) => d3.utcFormat('%b %-d, %H:%M UTC')(new Date(v)),
+    hm: (v) => d3.utcFormat('%H:%M UTC')(new Date(v)),
+    day: (v) => d3.utcFormat('%b %-d')(new Date(String(v).slice(0, 10) + 'T00:00:00Z')),
+    dur: (v) => { const s = num(v); return s < 60 ? s + ' s' : d3.format('.1f')(s / 60) + ' min'; },
+  };
+  SB.F = F;
+  SB.multi = multi;
+  SB.fmt = (kind, v) => {
+    if (v === null || v === undefined || v === '') return '—';
+    const f = F[kind];
+    if (!f) return String(v);
+    const out = f(v);
+    return out === 'NaN' || out === 'Invalid Date' ? String(v) : out;
+  };
+  SB.rows = (id) => { const d = dash.data(id); return d.status === 'ok' && Array.isArray(d.data) ? d.data.filter((r) => !(r && r._empty)) : null; };
+  SB.match = (row, where) => where.split('&').every((p) => { const i = p.indexOf('='); const k = decodeURIComponent(p.slice(0, i)); const v = decodeURIComponent(p.slice(i + 1)); return String(row[k]) === v; });
+  SB.cls = (v) => {
+    const s = String(v).toLowerCase();
+    if (['success', 'met', 'finished', 'done', 'succeeded', 'merged'].includes(s)) return 'p-ok';
+    if (['failure', 'missed', 'failed', 'blocking', 'timed_out', 'startup_failure'].includes(s)) return 'p-bad';
+    if (['unmeasured', 'waiting', 'weak', 'in_progress', 'queued', 'optional', 'pending'].includes(s)) return 'p-warn';
+    if (s === 'running') return 'p-run';
+    return 'p-muted';
+  };
+
+  /* Every element with class v and a data-source: fill from its row. */
+  SB.fillMarks = () => {
+    document.querySelectorAll('#dash-root .v[data-source]').forEach((el) => {
+      const d = dash.data(el.dataset.source);
+      if (d.status !== 'ok') {
+        if (d.status === 'loading') el.classList.add('dash-skeleton');
+        else { el.classList.remove('dash-skeleton'); el.textContent = '—'; }
+        return;
+      }
+      el.classList.remove('dash-skeleton');
+      const rows = Array.isArray(d.data) ? d.data : [];
+      const row = el.dataset.where ? rows.find((r) => SB.match(r, el.dataset.where)) : rows[Number(el.dataset.row || 0)];
+      el.textContent = SB.fmt(el.dataset.fmt, row ? row[el.dataset.field] : null);
+    });
+  };
+
+  /* A chart box's state: true when every source is ok. */
+  SB.ready = (el, ids) => {
+    const ds = ids.map((id) => dash.data(id));
+    if (ds.every((d) => d.status === 'ok')) { el.classList.remove('dash-skeleton'); return true; }
+    el.replaceChildren();
+    if (ds.some((d) => d.status === 'loading')) { el.classList.add('dash-skeleton'); return false; }
+    el.classList.remove('dash-skeleton');
+    const f = document.createElement('div');
+    f.className = 'sb-fail';
+    f.textContent = 'Failed to load';
+    el.appendChild(f);
+    return false;
+  };
+
+  /* Sortable, searchable table from rows; headers carry data-field, data-fmt, data-pill. */
+  SB.table = (table, rows) => {
+    const ths = [...table.querySelectorAll('thead th')];
+    const key = table.dataset.rowKey.split(',');
+    const tbody = table.tBodies[0] || table.appendChild(document.createElement('tbody'));
+    if (!table._wired) {
+      table._wired = true;
+      table._sort = { i: -1, dir: 1 };
+      ths.forEach((th, i) => th.querySelector('button').addEventListener('click', () => {
+        const st = table._sort;
+        st.dir = st.i === i ? -st.dir : (th.classList.contains('num') ? -1 : 1);
+        st.i = i;
+        SB.table(table, table._rows);
+      }));
+    }
+    table._rows = rows;
+    const st = table._sort;
+    ths.forEach((th, i) => { if (i === st.i) th.setAttribute('aria-sort', st.dir > 0 ? 'ascending' : 'descending'); else th.removeAttribute('aria-sort'); });
+    let list = rows.slice();
+    if (st.i >= 0) {
+      const f = ths[st.i].dataset.field;
+      const isNum = list.every((r) => r[f] === null || r[f] === undefined || typeof r[f] === 'number');
+      list.sort((a, b) => {
+        const x = a[f], y = b[f];
+        if (x === null || x === undefined) return 1;
+        if (y === null || y === undefined) return -1;
+        return (isNum ? x - y : String(x).localeCompare(String(y))) * st.dir;
+      });
+    }
+    tbody.replaceChildren(...list.map((r) => {
+      const tr = document.createElement('tr');
+      tr.dataset.key = key.length === 1 ? String(r[key[0]]) : key.map((k) => encodeURIComponent(String(r[k]))).join(',');
+      tr._row = r;
+      ths.forEach((th) => {
+        const td = document.createElement('td');
+        td.className = th.className;
+        const v = r[th.dataset.field];
+        if (th.dataset.pill) {
+          const s = document.createElement('span');
+          s.className = 'pill ' + SB.cls(v);
+          s.textContent = SB.fmt(th.dataset.fmt, v);
+          td.appendChild(s);
+        } else td.textContent = SB.fmt(th.dataset.fmt, v);
+        tr.appendChild(td);
+      });
+      return tr;
+    }));
+    SB.filter(table);
+  };
+  SB.filter = (table) => {
+    const q = (table._q || '').toLowerCase();
+    const chips = table._chips || {};
+    for (const tr of table.tBodies[0] ? table.tBodies[0].rows : []) {
+      const r = tr._row || {};
+      const okQ = !q || tr.textContent.toLowerCase().includes(q);
+      const okC = Object.entries(chips).every(([f, v]) => v === null || String(r[f]) === v);
+      tr.hidden = !(okQ && okC);
+    }
+  };
+  /* Chips listing a field's values (from data) that filter a table. */
+  SB.chips = (box, rows) => {
+    const table = document.getElementById(box.dataset.for);
+    const f = box.dataset.field;
+    table._chips = table._chips || {};
+    const cur = table._chips[f] === undefined ? null : table._chips[f];
+    const vals = [...new Set(rows.map((r) => String(r[f])))];
+    const mk = (label, val) => {
+      const b = document.createElement('button');
+      b.className = 'sb-chip';
+      b.type = 'button';
+      b.textContent = label;
+      b.setAttribute('aria-pressed', String(cur === val));
+      b.addEventListener('click', () => { table._chips[f] = val; SB.chips(box, rows); SB.filter(table); });
+      return b;
+    };
+    box.replaceChildren(mk('All', null), ...vals.map((v) => mk(v, v)));
+  };
+  document.querySelectorAll('#dash-root .sb-search').forEach((inp) => inp.addEventListener('input', () => {
+    const t = document.getElementById(inp.dataset.for);
+    t._q = inp.value;
+    SB.filter(t);
+  }));
+
+  SB.legend = (box, items) => {
+    box.replaceChildren(...items.map((it) => {
+      const s = document.createElement('span');
+      s.className = 'it';
+      const sw = document.createElement('span');
+      sw.className = 'sw';
+      sw.style.background = it.color;
+      s.appendChild(sw);
+      s.appendChild(document.createTextNode(it.name));
+      if (it.value !== undefined) { const b = document.createElement('b'); b.textContent = it.value; s.appendChild(b); }
+      return s;
+    }));
+  };
+
+  SB.tip = (box) => {
+    const t = document.createElement('div');
+    t.className = 'sb-tip';
+    t.hidden = true;
+    box.appendChild(t);
+    return {
+      show(ev, head, lines) {
+        t.replaceChildren();
+        const h = document.createElement('div');
+        h.className = 'k';
+        h.textContent = head;
+        t.appendChild(h);
+        for (const l of lines) {
+          const r = document.createElement('div');
+          r.className = 'ln';
+          if (l.color) { const s = document.createElement('span'); s.className = 'sw'; s.style.background = l.color; r.appendChild(s); }
+          const n = document.createElement('span');
+          n.textContent = l.name || '';
+          r.appendChild(n);
+          const b = document.createElement('b');
+          b.textContent = l.value;
+          r.appendChild(b);
+          t.appendChild(r);
+        }
+        t.hidden = false;
+        const br = box.getBoundingClientRect();
+        let x = ev.clientX - br.left + 12;
+        let y = ev.clientY - br.top + 12;
+        if (x + t.offsetWidth > box.clientWidth) x = Math.max(0, ev.clientX - br.left - t.offsetWidth - 12);
+        if (y + t.offsetHeight > box.clientHeight) y = Math.max(0, ev.clientY - br.top - t.offsetHeight - 12);
+        t.style.left = x + 'px';
+        t.style.top = y + 'px';
+      },
+      hide() { t.hidden = true; },
+    };
+  };
+
+  SB.svg = (el, h) => {
+    el.replaceChildren();
+    const W = Math.max(260, Math.floor(el.clientWidth || 600));
+    const svg = d3.select(el).append('svg').attr('class', 'sb-svg').attr('width', '100%').attr('height', h).attr('viewBox', `0 0 ${W} ${h}`);
+    if (!el._drawn) { el._drawn = true; svg.classed('sb-anim', true); }
+    return { svg, W };
+  };
+  SB.measure = (svg, texts) => {
+    const g = svg.append('g');
+    let m = 0;
+    for (const s of texts) m = Math.max(m, g.append('text').text(s).node().getComputedTextLength());
+    g.remove();
+    return Math.ceil(m);
+  };
+  SB.clip = (t, max) => {
+    const n = t.node();
+    let s = t.text();
+    if (n.getComputedTextLength() <= max) return;
+    while (s.length > 1 && n.getComputedTextLength() > max) { s = s.slice(0, -1); t.text(s + '…'); }
+  };
+  SB.axis = (g) => {
+    g.attr('font-size', null).attr('font-family', null);
+    g.selectAll('.domain').attr('stroke', 'var(--cds-chart-axis)');
+    g.selectAll('.tick line').attr('stroke', 'var(--cds-chart-grid)');
+  };
+  SB.color = (c) => { const s = document.createElement('span'); s.style.color = c; document.body.appendChild(s); const out = getComputedStyle(s).color; s.remove(); return out; };
+
+  /* Horizontal bars: stacked keys, or grouped keys side by side; optional per-row tick and reference line. */
+  SB.hbar = (el, rows, o) => {
+    const keys = o.keys;
+    const grouped = !!o.grouped;
+    const rowH = o.rowH || (grouped ? 16 * keys.length + 12 : 26);
+    const H = rows.length * rowH + 28;
+    const { svg, W } = SB.svg(el, H);
+    const labels = rows.map(o.label);
+    const ml = Math.min(Math.round(W * 0.42), SB.measure(svg, labels) + 12);
+    const val = (r, k) => +r[k.key] || 0;
+    const tot = (r) => (grouped ? d3.max(keys, (k) => val(r, k)) : d3.sum(keys, (k) => val(r, k)));
+    const ends = grouped ? rows.flatMap((r) => keys.map((k) => o.fmt(val(r, k)))) : rows.map((r) => o.fmt(tot(r)));
+    const mr = SB.measure(svg, ends) + 14;
+    const vmax = d3.max([d3.max(rows, tot) || 0, o.ref || 0, o.tick ? d3.max(rows, (r) => o.tick(r) || 0) : 0]) || 1;
+    const x = d3.scaleLinear([0, vmax], [ml, W - mr]).nice();
+    const axisFmt = o.axisFmt || d3.format('~s');
+    const nt = Math.max(2, Math.floor((W - ml - mr) / 70));
+    const gx = svg.append('g').attr('transform', `translate(0,${H - 22})`).call(d3.axisBottom(x).ticks(nt).tickFormat(axisFmt).tickSize(-(H - 26)).tickSizeOuter(0));
+    SB.axis(gx);
+    gx.select('.domain').remove();
+    const tip = SB.tip(el);
+    const g = svg.append('g');
+    rows.forEach((r, i) => {
+      const y0 = 2 + i * rowH;
+      const t = g.append('text').attr('x', ml - 8).attr('y', y0 + rowH / 2).attr('dy', '0.32em').attr('text-anchor', 'end').text(labels[i]);
+      SB.clip(t, ml - 12);
+      if (grouped) {
+        keys.forEach((k, j) => {
+          const by = y0 + 6 + j * 16;
+          const v = val(r, k);
+          g.append('rect').attr('x', x(0)).attr('y', by).attr('width', Math.max(0, x(v) - x(0))).attr('height', 13).attr('rx', 3).attr('fill', k.color);
+          g.append('text').attr('class', 'val').attr('x', x(v) + 4).attr('y', by + 6.5).attr('dy', '0.32em').text(o.fmt(v));
+        });
+      } else {
+        const bh = Math.min(18, rowH - 8);
+        const by = y0 + (rowH - bh) / 2;
+        let acc = 0;
+        keys.forEach((k) => {
+          const v = val(r, k);
+          g.append('rect').attr('x', x(acc)).attr('y', by).attr('width', Math.max(0, x(acc + v) - x(acc))).attr('height', bh).attr('rx', keys.length > 1 ? 2 : 4).attr('fill', o.color ? o.color(r, k) : k.color);
+          acc += v;
+        });
+        if (o.tick) {
+          const tv = o.tick(r);
+          if (tv !== null && tv !== undefined) g.append('line').attr('x1', x(tv)).attr('x2', x(tv)).attr('y1', by - 3).attr('y2', by + bh + 3).attr('stroke', 'var(--cds-chart-reference)').attr('stroke-width', 2);
+        }
+        const endX = Math.max(x(acc), o.tick && o.tick(r) ? x(o.tick(r)) + 2 : 0);
+        g.append('text').attr('class', 'val').attr('x', endX + 4).attr('y', by + bh / 2).attr('dy', '0.32em').text(o.fmt(acc));
+      }
+      g.append('rect').attr('x', 0).attr('y', y0).attr('width', W).attr('height', rowH).attr('fill', 'transparent')
+        .on('mousemove', (ev) => tip.show(ev, String(labels[i]), o.tip ? o.tip(r) : keys.map((k) => ({ color: keys.length > 1 ? k.color : null, name: k.name, value: o.fmt(val(r, k)) }))))
+        .on('mouseleave', () => tip.hide());
+    });
+    if (o.ref !== undefined && o.ref !== null) {
+      svg.append('line').attr('pointer-events', 'none').attr('x1', x(o.ref)).attr('x2', x(o.ref)).attr('y1', 0).attr('y2', H - 22).attr('stroke', 'var(--cds-chart-reference)').attr('stroke-dasharray', '4 3');
+    }
+  };
+
+  /* Vertical bars over an ordered x; labels every k bars where they fit. */
+  SB.vbars = (el, rows, o) => {
+    const H = o.H || 200;
+    const { svg, W } = SB.svg(el, H);
+    const vmax = Math.max(d3.max(rows, o.y) || 0, o.ref || 0) || 1;
+    const y = d3.scaleLinear([0, vmax], [H - 24, 8]).nice();
+    let yt = y.ticks(4);
+    if (o.int) yt = yt.filter(Number.isInteger);
+    const ml = SB.measure(svg, yt.map(o.yFmt)) + 10;
+    const x = d3.scaleBand(rows.map((_, i) => i), [ml, W - 6]).padding(0.2);
+    const gy = svg.append('g').attr('transform', `translate(${ml},0)`).call(d3.axisLeft(y).tickValues(yt).tickFormat(o.yFmt).tickSize(-(W - ml - 6)));
+    SB.axis(gy);
+    gy.select('.domain').remove();
+    svg.append('line').attr('x1', ml).attr('x2', W - 6).attr('y1', H - 24).attr('y2', H - 24).attr('stroke', 'var(--cds-chart-axis)');
+    const labs = rows.map(o.xLabel);
+    const lw = SB.measure(svg, labs) + 12;
+    const k = (o.ks || [1, 2, 5, 10, 20, 50]).find((kk) => x.step() * kk >= lw) || rows.length;
+    rows.forEach((r, i) => {
+      if (!o.labelAt(r, i, k)) return;
+      const cx = x(i) + x.bandwidth() / 2;
+      const anchor = cx - lw / 2 < 0 ? 'start' : cx + lw / 2 > W ? 'end' : 'middle';
+      svg.append('text').attr('x', anchor === 'start' ? x(i) : anchor === 'end' ? x(i) + x.bandwidth() : cx).attr('y', H - 8).attr('text-anchor', anchor).text(labs[i]);
+    });
+    const tip = SB.tip(el);
+    const bars = svg.append('g').selectAll('rect').data(rows).join('rect')
+      .attr('x', (_, i) => x(i)).attr('width', x.bandwidth())
+      .attr('y', (r) => y(o.y(r))).attr('height', (r) => Math.max(0, y(0) - y(o.y(r))))
+      .attr('rx', Math.min(4, x.bandwidth() / 2)).attr('fill', (r) => (o.color ? o.color(r) : dash.colors[0]));
+    if (o.ref) svg.append('line').attr('pointer-events', 'none').attr('x1', ml).attr('x2', W - 6).attr('y1', y(o.ref)).attr('y2', y(o.ref)).attr('stroke', 'var(--cds-chart-reference)').attr('stroke-dasharray', '4 3');
+    svg.append('g').selectAll('rect').data(rows).join('rect')
+      .attr('x', (_, i) => x(i) - (x.step() - x.bandwidth()) / 2).attr('width', x.step()).attr('y', 0).attr('height', H - 24).attr('fill', 'transparent')
+      .on('mousemove', (ev, r) => { bars.attr('opacity', (b) => (b === r ? 1 : 0.45)); tip.show(ev, o.head(r), o.tip(r)); })
+      .on('mouseleave', () => { bars.attr('opacity', 1); tip.hide(); });
+  };
+
+  /* Lines: series [{name, color, points: [{x, y, row}]}], nearest-point tooltip, optional end labels. */
+  SB.lines = (el, series, o) => {
+    const H = o.H || 220;
+    const { svg, W } = SB.svg(el, H);
+    const all = series.flatMap((s) => s.points);
+    if (!all.length) return;
+    let lo = d3.min(all, (p) => p.y), hi = d3.max(all, (p) => p.y);
+    if (o.ref !== undefined && o.ref !== null) { lo = Math.min(lo, o.ref); hi = Math.max(hi, o.ref); }
+    if (o.zero) lo = 0;
+    let y, yt;
+    if (o.log) {
+      y = d3.scaleLog([lo * 0.8, hi * 1.25], [H - 24, 8]);
+      yt = [0.25, 0.5, 1, 2, 5, 10, 20, 50, 100, 200].filter((t) => t >= lo * 0.8 && t <= hi * 1.25);
+    } else {
+      y = d3.scaleLinear([lo, hi], [H - 24, 8]).nice();
+      yt = y.ticks(4);
+    }
+    const ml = SB.measure(svg, yt.map(o.yFmt)) + 10;
+    const endTxt = o.endLabels ? series.map((s) => s.name + ' ' + o.yFmt(s.points[s.points.length - 1].y)) : [];
+    const mr = o.endLabels ? SB.measure(svg, endTxt) + 12 : 14;
+    const x = (o.time ? d3.scaleUtc() : d3.scaleLinear()).domain(d3.extent(all, (p) => p.x)).range([ml, W - mr]);
+    const nx = Math.max(2, Math.floor((W - ml - mr) / 90));
+    const gx = svg.append('g').attr('transform', `translate(0,${H - 24})`).call(d3.axisBottom(x).ticks(nx).tickFormat(o.xFmt).tickSizeOuter(0));
+    SB.axis(gx);
+    const gy = svg.append('g').attr('transform', `translate(${ml},0)`).call(d3.axisLeft(y).tickValues(yt).tickFormat(o.yFmt).tickSize(-(W - ml - mr)));
+    SB.axis(gy);
+    gy.select('.domain').remove();
+    if (o.ref !== undefined && o.ref !== null) svg.append('line').attr('x1', ml).attr('x2', W - mr).attr('y1', y(o.ref)).attr('y2', y(o.ref)).attr('stroke', 'var(--cds-chart-reference)').attr('stroke-dasharray', '4 3');
+    const line = d3.line().x((p) => x(p.x)).y((p) => y(p.y));
+    for (const s of series) {
+      svg.append('path').attr('d', line(s.points)).attr('fill', 'none').attr('stroke', s.color).attr('stroke-width', 2).attr('stroke-linecap', 'round').attr('stroke-linejoin', 'round');
+      if (s.points.length <= 60) svg.append('g').selectAll('circle').data(s.points).join('circle').attr('cx', (p) => x(p.x)).attr('cy', (p) => y(p.y)).attr('r', 2.5).attr('fill', (p) => (o.dotColor ? o.dotColor(p, s) : s.color));
+    }
+    if (o.endLabels) {
+      const pos = series.map((s, i) => ({ i, y: y(s.points[s.points.length - 1].y) })).sort((a, b) => a.y - b.y);
+      for (let j = 1; j < pos.length; j++) if (pos[j].y - pos[j - 1].y < 14) pos[j].y = pos[j - 1].y + 14;
+      for (const p of pos) svg.append('text').attr('class', 'val').attr('x', W - mr + 6).attr('y', Math.min(H - 28, p.y)).attr('dy', '0.32em').text(endTxt[p.i]);
+    }
+    const tip = SB.tip(el);
+    const rule = svg.append('line').attr('y1', 8).attr('y2', H - 24).attr('stroke', 'var(--cds-chart-axis)').attr('opacity', 0);
+    const dot = svg.append('circle').attr('r', 4.5).attr('opacity', 0).attr('stroke', 'var(--color-bg)').attr('stroke-width', 1.5);
+    const flat = series.flatMap((s) => s.points.map((p) => ({ p, s, px: x(p.x), py: y(p.y) })));
+    const dl = d3.Delaunay.from(flat, (d) => d.px, (d) => d.py);
+    svg.append('rect').attr('x', ml).attr('y', 0).attr('width', Math.max(0, W - mr - ml)).attr('height', H - 24).attr('fill', 'transparent')
+      .on('mousemove', (ev) => {
+        const [mx, my] = d3.pointer(ev);
+        const d = flat[dl.find(mx, my)];
+        rule.attr('x1', d.px).attr('x2', d.px).attr('opacity', 1);
+        dot.attr('cx', d.px).attr('cy', d.py).attr('fill', d.s.color).attr('opacity', 1);
+        tip.show(ev, o.head(d.p, d.s), o.tip(d.p, d.s));
+      })
+      .on('mouseleave', () => { rule.attr('opacity', 0); dot.attr('opacity', 0); tip.hide(); });
+  };
+
+  /* Before/after dots per row on a 0-1 scale, with an optional band and reference line. */
+  SB.dumbbell = (el, rows, o) => {
+    const rowH = 34;
+    const H = rows.length * rowH + 30;
+    const { svg, W } = SB.svg(el, H);
+    const labels = rows.map(o.label);
+    const ends = rows.map((r) => F.pct(o.a(r)) + ' → ' + F.pct(o.b(r)));
+    const ml = Math.min(Math.round(W * 0.35), SB.measure(svg, labels) + 12);
+    const mr = SB.measure(svg, ends) + 16;
+    const x = d3.scaleLinear([0, 1], [ml, W - mr]);
+    const gx = svg.append('g').attr('transform', `translate(0,${H - 22})`).call(d3.axisBottom(x).tickValues([0, 0.25, 0.5, 0.75, 1]).tickFormat(F.pct).tickSize(-(H - 26)).tickSizeOuter(0));
+    SB.axis(gx);
+    gx.select('.domain').remove();
+    if (o.band) svg.append('rect').attr('x', x(o.band[0])).attr('width', x(o.band[1]) - x(o.band[0])).attr('y', 0).attr('height', H - 22).attr('fill', 'var(--cds-chart-muted)').attr('opacity', 0.16);
+    if (o.ref !== undefined && o.ref !== null) svg.append('line').attr('x1', x(o.ref)).attr('x2', x(o.ref)).attr('y1', 0).attr('y2', H - 22).attr('stroke', 'var(--cds-chart-reference)').attr('stroke-dasharray', '4 3');
+    const tip = SB.tip(el);
+    rows.forEach((r, i) => {
+      const cy = 2 + i * rowH + rowH / 2;
+      const a = o.a(r), b = o.b(r);
+      const t = svg.append('text').attr('x', ml - 8).attr('y', cy).attr('dy', '0.32em').attr('text-anchor', 'end').text(labels[i]);
+      SB.clip(t, ml - 12);
+      svg.append('line').attr('x1', x(a)).attr('x2', x(b)).attr('y1', cy).attr('y2', cy).attr('stroke', 'var(--cds-chart-muted)').attr('stroke-width', 3).attr('stroke-linecap', 'round');
+      svg.append('circle').attr('cx', x(a)).attr('cy', cy).attr('r', 5.5).attr('fill', 'var(--cds-chart-muted)');
+      svg.append('circle').attr('cx', x(b)).attr('cy', cy).attr('r', 5.5).attr('fill', dash.colors[0]);
+      svg.append('text').attr('class', 'val').attr('x', W - mr + 10).attr('y', cy).attr('dy', '0.32em').text(ends[i]);
+      svg.append('rect').attr('x', 0).attr('y', cy - rowH / 2).attr('width', W).attr('height', rowH).attr('fill', 'transparent')
+        .on('mousemove', (ev) => tip.show(ev, String(labels[i]), o.tip(r)))
+        .on('mouseleave', () => tip.hide());
+    });
+  };
+})();
+</script>
+<script>
+/* Calculations: every derived number on the board. Project-specific names and targets come from the project dataset. */
+dash.calc('worker_counts', {
+  inputs: ['workers'], title: 'Workers by status', description: 'Workers counted by status, plus the total.',
+  fn: (workers) => {
+    workers = workers.filter((r) => !r._empty);
+    const by = { Running: 0, Finished: 0, Stopped: 0 };
+    for (const w of workers) by[w.status] = (by[w.status] || 0) + 1;
+    return [...Object.entries(by).map(([status, n]) => ({ status, n })), { status: 'All', n: workers.length }];
+  },
+});
+dash.calc('workers_by_place', {
+  inputs: ['workers'], title: 'Workers by place and status', description: 'Workers per place they run, split by status.',
+  fn: (workers) => {
+    workers = workers.filter((r) => !r._empty);
+    const by = {};
+    for (const w of workers) {
+      const p = by[w.where] || (by[w.where] = { where: w.where, Running: 0, Finished: 0, Stopped: 0 });
+      p[w.status] = (p[w.status] || 0) + 1;
+    }
+    return Object.values(by);
+  },
+});
+dash.calc('commits_by_day', {
+  inputs: ['commits'], title: 'Commits to main per day', description: 'Commits to main per UTC day, newest day first.',
+  fn: (commits) => {
+    commits = commits.filter((r) => !r._empty);
+    const by = {};
+    for (const c of commits) by[c.day] = (by[c.day] || 0) + 1;
+    return Object.entries(by).map(([day, n]) => ({ day, n })).sort((a, b) => (a.day < b.day ? 1 : -1));
+  },
+});
+dash.calc('commits_hourly', {
+  inputs: ['commits'], title: 'Commits to main per hour', description: 'Commits to main per UTC hour, empty hours as zero.',
+  fn: (commits) => {
+    commits = commits.filter((r) => !r._empty);
+    if (!commits.length) return [];
+    const by = {};
+    for (const c of commits) by[c.hour] = (by[c.hour] || 0) + 1;
+    const hours = Object.keys(by).sort();
+    const out = [];
+    for (let t = Date.parse(hours[0]); t <= Date.parse(hours[hours.length - 1]); t += 3600000) {
+      const hour = new Date(t).toISOString().slice(0, 13) + ':00:00Z';
+      out.push({ hour, n: by[hour] || 0 });
+    }
+    return out;
+  },
+});
+dash.calc('perf_fps', {
+  inputs: ['perf', 'project'], title: 'Frame rate in the perf scenario', description: 'Frames per second from the average frame time (the project’s perf_avg_measure), per graphics tier, slowest tier first.',
+  fn: (perf, project) => perf
+    .filter((r) => !r._empty && project.length && r.measure === project[0].perf_avg_measure)
+    .map((r) => ({ tier: r.tier, avg_ms: r.ms, fps: Math.round(1000 / r.ms) }))
+    .sort((a, b) => a.fps - b.fps),
+});
+dash.calc('fight_freeze', {
+  inputs: ['match_start', 'project'], title: 'Freeze at each match start', description: 'Time to build each new match plus its first frame, one row per match.',
+  fn: (match_start, project) => {
+    match_start = match_start.filter((r) => !r._empty);
+    const word = project.length && project[0].match_word ? project[0].match_word : 'match';
+    return match_start.map((r) => ({ fight: r.fight, label: word.charAt(0).toUpperCase() + word.slice(1) + ' ' + r.fight, build_ms: r.build_ms, first_frame_ms: r.first_frame_ms, freeze_ms: Math.round((r.build_ms + r.first_frame_ms) * 10) / 10 }));
+  },
+});
+dash.calc('freeze_summary', {
+  inputs: ['fight_freeze'], title: 'Match-start freeze summary', description: 'Median freeze over matches after the first, the worst one, and the first one.',
+  fn: (fight_freeze) => {
+    const warm = fight_freeze.filter((r) => r.fight > 1).map((r) => r.freeze_ms).sort((a, b) => a - b);
+    const n = warm.length;
+    const median = n ? (n % 2 ? warm[(n - 1) / 2] : (warm[n / 2 - 1] + warm[n / 2]) / 2) : null;
+    const first = fight_freeze.find((r) => r.fight === 1);
+    return [
+      { stat: 'warm_median', ms: median },
+      { stat: 'worst', ms: fight_freeze.length ? Math.max(...fight_freeze.map((r) => r.freeze_ms)) : null },
+      { stat: 'first', ms: first ? first.freeze_ms : null },
+    ];
+  },
+});
+dash.calc('build_total', {
+  inputs: ['build_parts'], title: 'Match build time, all parts', description: 'Sum of the per-part build times of a new match.',
+  fn: (build_parts) => (build_parts.filter((r) => !r._empty).length ? [{ total_ms: Math.round(build_parts.filter((r) => !r._empty).reduce((s, r) => s + r.ms, 0) * 10) / 10 }] : []),
+});
+dash.calc('latest_runs', {
+  inputs: ['runs'], title: 'Latest run per workflow', description: 'The newest finished run of each workflow, any branch.',
+  fn: (runs) => {
+    runs = runs.filter((r) => !r._empty);
+    const by = {};
+    for (const r of runs) if (r.status === 'completed' && (!by[r.workflow] || r.started > by[r.workflow].started)) by[r.workflow] = r;
+    return Object.values(by).map((r) => ({ workflow: r.workflow, result: r.result, branch: r.branch, sha: r.sha, started: r.started }));
+  },
+});
+dash.calc('perf_streak', {
+  inputs: ['runs', 'project'], title: 'Perf runner record', description: 'Finished runs of the project’s perf workflow: the latest result, how many passed, and when the current streak began.',
+  fn: (runs, project) => {
+    runs = runs.filter((r) => !r._empty);
+    const wf = project.length ? project[0].perf_workflow : null;
+    const g = runs.filter((r) => wf && r.workflow === wf && r.status === 'completed').sort((a, b) => (a.started < b.started ? -1 : 1));
+    if (!g.length) return [];
+    const last = g[g.length - 1];
+    let i = g.length - 1;
+    while (i > 0 && g[i - 1].result === last.result) i--;
+    return [{ latest_result: last.result, latest_at: last.started, runs: g.length, green: g.filter((r) => r.result === 'success').length, streak: g.length - i, streak_since: g[i].started }];
+  },
+});
+dash.calc('run_rates', {
+  inputs: ['runs'], title: 'Pass rate by workflow', description: 'Finished runs per workflow: passed, failed, other (cancelled), and the share that passed.',
+  fn: (runs) => {
+    runs = runs.filter((r) => !r._empty);
+    const by = {};
+    for (const r of runs) {
+      if (r.status !== 'completed') continue;
+      const w = by[r.workflow] || (by[r.workflow] = { workflow: r.workflow, runs: 0, success: 0, failure: 0, other: 0 });
+      w.runs++;
+      if (r.result === 'success') w.success++;
+      else if (r.result === 'failure') w.failure++;
+      else w.other++;
+    }
+    return Object.values(by).map((w) => ({ ...w, pass_rate: w.runs ? w.success / w.runs : null }));
+  },
+});
+dash.calc('goal_counts', {
+  inputs: ['goals'], title: 'Goals by status', description: 'Targets counted by status.',
+  fn: (goals) => {
+    goals = goals.filter((r) => !r._empty);
+    const by = { Met: 0, Missed: 0, Unmeasured: 0, 'No target': 0, Weak: 0 };
+    for (const g of goals) by[g.status_class] = (by[g.status_class] || 0) + 1;
+    return Object.entries(by).map(([status_class, n]) => ({ status_class, n }));
+  },
+});
+dash.calc('needs_counts', {
+  inputs: ['needs_owner'], title: 'Needs the owner, by kind', description: 'Items waiting on the project owner, blocking or optional.',
+  fn: (needs_owner) => ['Blocking', 'Optional'].map((kind) => ({ kind, n: needs_owner.filter((r) => !r._empty && r.kind === kind).length })),
+});
+dash.calc('soak_summary', {
+  inputs: ['soak'], title: 'Soak summary', description: 'Matches run, mean and lowest fps, worst frame, and static memory after the first and last match.',
+  fn: (soak) => ((soak = soak.filter((r) => !r._empty)).length ? [{
+    fights: soak.length,
+    mean_fps: Math.round((soak.reduce((s, r) => s + r.fps, 0) / soak.length) * 10) / 10,
+    min_fps: Math.min(...soak.map((r) => r.fps)),
+    worst_frame_ms: Math.max(...soak.map((r) => r.worst_frame_ms)),
+    mem_first_mb: soak[0].static_mem_mb,
+    mem_last_mb: soak[soak.length - 1].static_mem_mb,
+  }] : []),
+});
+dash.calc('runner_heavy', {
+  inputs: ['runner_perf'], title: 'Perf runner, heaviest tier first', description: 'The perf runner’s rows ordered by draw calls, heaviest first.',
+  fn: (runner_perf) => runner_perf.filter((r) => !r._empty).sort((a, b) => b.draw_calls - a.draw_calls),
+});
+dash.calc('model_groups', {
+  inputs: ['models'], title: 'Models by group', description: 'Per group: models, total and largest triangle count, the budget, and how many exceed it.',
+  fn: (models) => {
+    models = models.filter((r) => !r._empty);
+    const by = {};
+    for (const m of models) {
+      const g = by[m.group] || (by[m.group] = { group: m.group, models: 0, triangles: 0, max_triangles: 0, budget: m.budget, over_budget: 0 });
+      g.models++;
+      g.triangles += m.triangles;
+      g.max_triangles = Math.max(g.max_triangles, m.triangles);
+      if (m.triangles > m.budget) g.over_budget++;
+    }
+    return Object.values(by);
+  },
+});
+dash.calc('models_summary', {
+  inputs: ['models'], title: 'Models in total', description: 'All models: count, groups, total triangles, and how many exceed their budget.',
+  fn: (models) => ((models = models.filter((r) => !r._empty)).length ? [{ models: models.length, groups: new Set(models.map((m) => m.group)).size, triangles: models.reduce((s, m) => s + m.triangles, 0), over_budget: models.filter((m) => m.triangles > m.budget).length }] : []),
+});
+dash.calc('asset_total', {
+  inputs: ['assets_glb'], title: 'Asset files on main', description: 'All asset files of the configured type on main, and the folders holding them.',
+  fn: (assets_glb) => ((assets_glb = assets_glb.filter((r) => !r._empty)).length ? [{ files: assets_glb.reduce((s, r) => s + r.files, 0), folders: assets_glb.length }] : []),
+});
+</script>
+<script>
+/* Page: tabs, fills, tables and charts. Names, targets and labels come from the project dataset. */
+(() => {
+  const SB = window.SB;
+  const C = () => dash.colors;
+  const TABS = ['overview', 'work', 'quality', 'performance', 'balance', 'assets', 'goals'];
+  const OPTIONAL_PERF = ['perf', 'soak', 'scripts', 'build_parts', 'match_start', 'hitch_frames', 'runner_perf'];
+  let current = 'overview';
+  const byId = (id) => document.getElementById(id);
+  const P = () => { const r = SB.rows('project'); return r && r[0] ? r[0] : {}; };
+  const has = (v) => v !== null && v !== undefined && v !== '';
+
+  /* A source is absent when it doesn't exist or loaded with no rows; a failed one stays visible to show the failure. */
+  const absent = (id) => {
+    const d = dash.data(id);
+    if (d.status === 'missing') return true;
+    return d.status === 'ok' && (!Array.isArray(d.data) || SB.rows(id).length === 0);
+  };
+
+  const show = (id, link) => {
+    current = id;
+    for (const t of TABS) {
+      byId(t).hidden = t !== id;
+      byId('tab-' + t).setAttribute('aria-selected', String(t === id));
+    }
+    if (link) dash.setLink(id);
+    drawCharts();
+  };
+  document.querySelectorAll('#dash-root .sb-tab').forEach((b) => b.addEventListener('click', () => show(b.dataset.tab, true)));
+
+  const tabs = () => {
+    const spec = P().tabs;
+    const labels = {};
+    if (has(spec)) for (const part of String(spec).split(';')) { const i = part.indexOf(':'); if (i > 0) labels[part.slice(0, i).trim()] = part.slice(i + 1).trim(); }
+    for (const t of TABS) {
+      const b = byId('tab-' + t);
+      b.textContent = labels[t] || (has(spec) ? '' : t.charAt(0).toUpperCase() + t.slice(1));
+      b.hidden = has(spec) && !labels[t];
+    }
+    if (byId('tab-' + current).hidden) { const first = TABS.find((t) => !byId('tab-' + t).hidden); if (first) show(first, false); }
+  };
+
+  const resolve = () => {
+    const p = P();
+    document.querySelectorAll('#dash-root [data-where-tpl]').forEach((el) => {
+      el.dataset.where = el.dataset.whereTpl.replace(/\{(\w+)\}/g, (_, k) => encodeURIComponent(has(p[k]) ? String(p[k]) : ''));
+    });
+  };
+
+  const needs = () => {
+    document.querySelectorAll('#dash-root [data-needs]').forEach((el) => {
+      el.hidden = el.dataset.needs.split(' ').every(absent);
+    });
+    const p = P();
+    byId('t-clock').hidden = !has(p.deadline_utc);
+    byId('matrix-card').hidden = !has(p.balance_matrix_path);
+    byId('perf-empty').hidden = !OPTIONAL_PERF.every(absent);
+    byId('balance-empty').hidden = !absent('balance');
+  };
+
+  const tick = () => {
+    const el = byId('countdown');
+    const end = Date.parse(P().deadline_utc);
+    if (!Number.isFinite(end)) { el.textContent = '—'; return; }
+    const ms = end - Date.now();
+    el.classList.toggle('bad', ms <= 0);
+    el.classList.toggle('warn', ms > 0 && ms < 3600000);
+    if (ms <= 0) { el.textContent = 'Passed'; return; }
+    const h = Math.floor(ms / 3600000);
+    const m = Math.floor((ms % 3600000) / 60000);
+    el.textContent = (h ? h + ' h ' : '') + m + ' min';
+  };
+  setInterval(tick, 30000);
+
+  const tables = () => {
+    document.querySelectorAll('#dash-root table[data-source]').forEach((t) => {
+      const rows = SB.rows(t.dataset.source);
+      if (rows) SB.table(t, rows);
+    });
+    document.querySelectorAll('#dash-root .sb-chips').forEach((box) => {
+      const t = byId(box.dataset.for);
+      const rows = SB.rows(t.dataset.source);
+      if (rows) SB.chips(box, rows);
+    });
+  };
+
+  const statusText = () => {
+    const target = P().freeze_target_ms;
+    const fr = SB.rows('freeze_summary');
+    const med = fr ? (fr.find((r) => r.stat === 'warm_median') || {}).ms : null;
+    const verdict = byId('freeze-verdict');
+    const known = has(med) && has(target);
+    const over = known && med > target;
+    verdict.textContent = !known ? '—' : over ? 'over the ' + target + ' ms target, not fixed yet' : 'within the ' + target + ' ms target';
+    verdict.className = over ? 'bad' : known ? 'ok' : '';
+    for (const id of ['t-freeze-num', 'p-freeze-num', 'freeze-inline']) byId(id).classList.toggle('bad', over);
+    const gs = SB.rows('perf_streak');
+    const res = gs && gs[0] ? gs[0].latest_result : null;
+    byId('t-gpu-num').classList.toggle('ok', res === 'success');
+    byId('t-gpu-num').classList.toggle('bad', !!res && res !== 'success');
+    const ch = SB.rows('checks');
+    const unit = ch ? ch.find((r) => r.role === 'unit') : null;
+    byId('t-tests-num').classList.toggle('bad', !!unit && unit.result !== 'success');
+    byId('t-tests-num').classList.toggle('ok', !!unit && unit.result === 'success');
+    const ms = SB.rows('models_summary');
+    byId('over-num').classList.toggle('bad', !!(ms && ms[0] && ms[0].over_budget > 0));
+  };
+
+  /* ---------- charts ---------- */
+  const hourly = (el) => {
+    if (!SB.ready(el, ['commits_hourly'])) return;
+    const rows = SB.rows('commits_hourly');
+    if (!rows.length) { el.replaceChildren(); return; }
+    SB.vbars(el, rows, {
+      y: (r) => r.n, int: true, yFmt: d3.format('d'),
+      xLabel: (r) => SB.multi(new Date(r.hour)),
+      labelAt: (r, i, k) => new Date(r.hour).getUTCHours() % k === 0,
+      ks: [1, 2, 3, 4, 6, 12, 24],
+      head: (r) => d3.utcFormat('%b %-d, %H:00 UTC')(new Date(r.hour)),
+      tip: (r) => [{ name: 'Commits', value: SB.F.int(r.n) }],
+    });
+  };
+
+  const GOAL_COL = () => ({ Met: 'var(--color-ok)', Missed: 'var(--color-bad)', Unmeasured: 'var(--color-warn)', 'No target': 'var(--cds-chart-muted)', Weak: C()[2] });
+  const goalsBar = (el) => {
+    if (!SB.ready(el, ['goal_counts'])) return;
+    const rows = SB.rows('goal_counts');
+    const col = GOAL_COL();
+    SB.legend(byId('ov-goals-legend'), rows.map((r) => ({ name: r.status_class, color: col[r.status_class] || C()[3], value: SB.F.int(r.n) })));
+    const total = d3.sum(rows, (r) => r.n) || 1;
+    const { svg, W } = SB.svg(el, 40);
+    const x = d3.scaleLinear([0, total], [0, W]);
+    const tip = SB.tip(el);
+    let acc = 0;
+    for (const r of rows) {
+      if (!r.n) continue;
+      const x0 = x(acc);
+      svg.append('rect').attr('x', x0 + 1).attr('y', 8).attr('width', Math.max(0, x(acc + r.n) - x0 - 2)).attr('height', 24).attr('rx', 4).attr('fill', col[r.status_class] || C()[3])
+        .on('mousemove', (ev) => tip.show(ev, r.status_class, [{ name: 'Targets', value: SB.F.int(r.n) }, { name: 'Share', value: SB.F.pct(r.n / total) }]))
+        .on('mouseleave', () => tip.hide());
+      acc += r.n;
+    }
+  };
+
+  const wherePlace = (el) => {
+    if (!SB.ready(el, ['workers_by_place'])) return;
+    const keys = [
+      { key: 'Running', name: 'Running', color: C()[0] },
+      { key: 'Finished', name: 'Finished', color: C()[1] },
+      { key: 'Stopped', name: 'Stopped', color: 'var(--cds-chart-muted)' },
+    ];
+    SB.legend(byId('where-legend'), keys);
+    SB.hbar(el, SB.rows('workers_by_place'), { keys, label: (r) => r.where, fmt: SB.F.int, axisFmt: d3.format('d'), rowH: 32 });
+  };
+
+  const branches = (el) => {
+    if (!SB.ready(el, ['branches'])) return;
+    const rows = SB.rows('branches');
+    if (!rows.length) { el.replaceChildren(); return; }
+    const colFor = (r) => (r.where === 'Pushed' ? C()[0] : C()[1]);
+    SB.legend(byId('branches-legend'), [{ name: 'Ahead, pushed', color: C()[0] }, { name: 'Ahead, local only', color: C()[1] }, { name: 'Behind main', color: 'var(--cds-chart-muted)' }]);
+    const rowH = 22;
+    const H = rows.length * rowH + 28;
+    const { svg, W } = SB.svg(el, H);
+    const labels = rows.map((r) => r.branch);
+    const ends = rows.map((r) => '+' + r.ahead + ' / −' + r.behind);
+    const ml = Math.min(Math.round(W * 0.42), SB.measure(svg, labels) + 12);
+    const mr = SB.measure(svg, ends) + 14;
+    const maxA = d3.max(rows, (r) => r.ahead) || 1;
+    const maxB = d3.max(rows, (r) => r.behind) || 1;
+    const x = d3.scaleLinear([-maxB, maxA], [ml, W - mr]);
+    const gx = svg.append('g').attr('transform', `translate(0,${H - 22})`).call(d3.axisBottom(x).ticks(Math.max(2, Math.floor((W - ml - mr) / 60))).tickFormat((v) => (Number.isInteger(v) ? String(Math.abs(v)) : '')).tickSize(-(H - 26)).tickSizeOuter(0));
+    SB.axis(gx);
+    gx.select('.domain').remove();
+    svg.append('line').attr('x1', x(0)).attr('x2', x(0)).attr('y1', 0).attr('y2', H - 22).attr('stroke', 'var(--cds-chart-axis)');
+    const tip = SB.tip(el);
+    rows.forEach((r, i) => {
+      const y0 = 2 + i * rowH;
+      const t = svg.append('text').attr('x', ml - 8).attr('y', y0 + rowH / 2).attr('dy', '0.32em').attr('text-anchor', 'end').text(labels[i]);
+      SB.clip(t, ml - 12);
+      svg.append('rect').attr('x', x(0)).attr('y', y0 + 4).attr('width', Math.max(0, x(r.ahead) - x(0))).attr('height', rowH - 8).attr('rx', 3).attr('fill', colFor(r));
+      svg.append('rect').attr('x', x(-r.behind)).attr('y', y0 + 4).attr('width', Math.max(0, x(0) - x(-r.behind))).attr('height', rowH - 8).attr('rx', 3).attr('fill', 'var(--cds-chart-muted)');
+      svg.append('text').attr('class', 'val').attr('x', W - mr + 8).attr('y', y0 + rowH / 2).attr('dy', '0.32em').text(ends[i]);
+      svg.append('rect').attr('x', 0).attr('y', y0).attr('width', W).attr('height', rowH).attr('fill', 'transparent')
+        .on('mousemove', (ev) => tip.show(ev, r.branch, [
+          { color: colFor(r), name: 'Ahead of main', value: SB.F.int(r.ahead) },
+          { color: 'var(--cds-chart-muted)', name: 'Behind main', value: SB.F.int(r.behind) },
+          { name: r.where, value: SB.F.time(r.last_commit) },
+          { name: '', value: r.last_message },
+        ]))
+        .on('mouseleave', () => tip.hide());
+    });
+  };
+
+  const RES_COL = { success: 'var(--color-ok)', failure: 'var(--color-bad)', in_progress: 'var(--color-warn)', queued: 'var(--color-warn)' };
+  const strip = (el) => {
+    if (!SB.ready(el, ['runs'])) return;
+    const runs = SB.rows('runs');
+    if (!runs.length) { el.replaceChildren(); return; }
+    SB.legend(byId('strip-legend'), [{ name: 'Passed', color: RES_COL.success }, { name: 'Failed', color: RES_COL.failure }, { name: 'Running', color: RES_COL.in_progress }, { name: 'Cancelled or other', color: 'var(--cds-chart-muted)' }]);
+    const wfs = [...new Set(runs.map((r) => r.workflow))].sort();
+    const by = wfs.map((w) => runs.filter((r) => r.workflow === w).sort((a, b) => (a.started < b.started ? -1 : 1)));
+    const rowH = 30;
+    const H = wfs.length * rowH + 6;
+    const { svg, W } = SB.svg(el, H);
+    const ends = by.map((l) => l.length + ' runs');
+    const ml = SB.measure(svg, wfs) + 12;
+    const mr = SB.measure(svg, ends) + 12;
+    const maxN = d3.max(by, (l) => l.length) || 1;
+    const cw = Math.max(2, Math.min(14, (W - ml - mr) / maxN));
+    const tip = SB.tip(el);
+    by.forEach((list, i) => {
+      const y0 = 3 + i * rowH;
+      svg.append('text').attr('x', ml - 8).attr('y', y0 + rowH / 2).attr('dy', '0.32em').attr('text-anchor', 'end').text(wfs[i]);
+      svg.append('text').attr('class', 'val').attr('x', W - mr + 8).attr('y', y0 + rowH / 2).attr('dy', '0.32em').text(ends[i]);
+      list.forEach((r, j) => {
+        const x0 = W - mr - (list.length - j) * cw;
+        svg.append('rect').attr('x', x0).attr('y', y0 + 5).attr('width', Math.max(1, cw - 1)).attr('height', rowH - 10).attr('rx', Math.min(2, cw / 3))
+          .attr('fill', RES_COL[r.result] || 'var(--cds-chart-muted)')
+          .on('mousemove', (ev) => tip.show(ev, r.workflow + ' · ' + SB.F.time(r.started), [
+            { color: RES_COL[r.result] || 'var(--cds-chart-muted)', name: 'Result', value: r.result },
+            { name: 'Branch', value: r.branch },
+            { name: 'Commit', value: r.sha },
+            { name: 'Duration', value: SB.fmt('dur', r.duration_s) },
+          ]))
+          .on('mouseleave', () => tip.hide());
+      });
+    });
+  };
+
+  const durations = (el) => {
+    if (!SB.ready(el, ['runs', 'project'])) return;
+    const p = P();
+    const main = p.main_branch || 'main';
+    const runs = SB.rows('runs').filter((r) => r.branch === main && has(r.duration_s));
+    const wfs = [p.checks_workflow, p.perf_workflow].filter(has);
+    const series = wfs.map((w, i) => ({
+      name: w, color: C()[i],
+      points: runs.filter((r) => r.workflow === w).map((r) => ({ x: new Date(r.started), y: Math.max(r.duration_s, 1) / 60, row: r })),
+    })).filter((s) => s.points.length);
+    SB.legend(byId('dur-legend'), series.map((s) => ({ name: s.name, color: s.color })).concat([{ name: 'Failed run', color: 'var(--color-bad)' }]));
+    if (!series.length) { el.replaceChildren(); return; }
+    SB.lines(el, series, {
+      time: true, log: true, H: 240,
+      yFmt: (v) => d3.format('~g')(v) + ' min', xFmt: SB.multi,
+      dotColor: (pt, s) => (pt.row.result === 'success' ? s.color : 'var(--color-bad)'),
+      head: (pt) => SB.F.time(pt.row.started),
+      tip: (pt, s) => [{ color: s.color, name: s.name, value: SB.fmt('dur', pt.row.duration_s) }, { name: 'Result', value: pt.row.result }, { name: 'Commit', value: pt.row.sha }],
+    });
+  };
+
+  const frameTimes = (el) => {
+    if (!SB.ready(el, ['perf', 'project'])) return;
+    const perf = SB.rows('perf');
+    if (!perf.length) { el.replaceChildren(); return; }
+    const measures = [...new Set(perf.map((r) => r.measure))];
+    const tiers = [...new Set(perf.map((r) => r.tier))];
+    const keys = tiers.map((t, i) => ({ key: t, name: t + ' graphics', color: C()[i % 8] }));
+    SB.legend(byId('ft-legend'), keys);
+    const rows = measures.map((m) => {
+      const r = { measure: m };
+      for (const t of tiers) { const hit = perf.find((q) => q.measure === m && q.tier === t); r[t] = hit ? hit.ms : null; }
+      return r;
+    });
+    const fps = P().fps_target;
+    SB.hbar(el, rows, { keys, grouped: true, label: (r) => r.measure, fmt: (v) => SB.F.dec1(v) + ' ms', axisFmt: d3.format('d'), ref: has(fps) ? 1000 / fps : null });
+  };
+
+  const soakFps = (el) => {
+    if (!SB.ready(el, ['soak', 'project'])) return;
+    const soak = SB.rows('soak');
+    if (!soak.length) { el.replaceChildren(); return; }
+    const p = P();
+    const word = p.match_word || 'match';
+    SB.lines(el, [{ name: 'fps', color: C()[0], points: soak.map((r) => ({ x: r.fight, y: r.fps, row: r })) }], {
+      ref: has(p.fps_target) ? p.fps_target : null, zero: true, yFmt: d3.format('d'), xFmt: d3.format('d'),
+      head: (pt) => word + ' ' + pt.row.fight + (has(pt.row.seed) ? ' (seed ' + pt.row.seed + ')' : ''),
+      tip: (pt) => [{ name: 'Frame rate', value: SB.F.dec1(pt.row.fps) + ' fps' }, { name: '95th pct frame', value: SB.F.dec2(pt.row.p95_frame_ms) + ' ms' }, { name: 'Worst frame', value: SB.F.dec1(pt.row.worst_frame_ms) + ' ms' }, { name: 'Length', value: SB.F.dec1(pt.row.game_seconds) + ' s' }],
+    });
+  };
+
+  const soakWorst = (el) => {
+    if (!SB.ready(el, ['soak', 'project'])) return;
+    const soak = SB.rows('soak');
+    if (!soak.length) { el.replaceChildren(); return; }
+    const p = P();
+    const target = has(p.freeze_target_ms) ? p.freeze_target_ms : null;
+    SB.vbars(el, soak, {
+      y: (r) => r.worst_frame_ms, ref: target, yFmt: (v) => d3.format('d')(v) + ' ms',
+      xLabel: (r) => String(r.fight), labelAt: (r, i, k) => (r.fight - 1) % k === 0, ks: [1, 2, 5, 10, 20],
+      color: (r) => (target !== null && r.worst_frame_ms > target ? 'var(--cds-chart-status-critical)' : C()[0]),
+      head: (r) => (p.match_word || 'match') + ' ' + r.fight,
+      tip: (r) => [{ name: 'Worst frame', value: SB.F.dec1(r.worst_frame_ms) + ' ms' }, { name: '95th pct frame', value: SB.F.dec2(r.p95_frame_ms) + ' ms' }],
+    });
+  };
+
+  const soakMem = (el) => {
+    if (!SB.ready(el, ['soak'])) return;
+    const soak = SB.rows('soak');
+    if (!soak.length) { el.replaceChildren(); return; }
+    const series = [
+      { name: 'Static', color: C()[0], points: soak.map((r) => ({ x: r.fight, y: r.static_mem_mb, row: r })) },
+      { name: 'Video', color: C()[1], points: soak.map((r) => ({ x: r.fight, y: r.video_mem_mb, row: r })) },
+    ];
+    SB.legend(byId('soak-mem-legend'), series.map((s) => ({ name: s.name + ' memory', color: s.color })));
+    SB.lines(el, series, {
+      zero: true, endLabels: true, yFmt: d3.format('d'), xFmt: d3.format('d'),
+      head: (pt) => 'After ' + (P().match_word || 'match') + ' ' + pt.row.fight,
+      tip: (pt) => [{ color: C()[0], name: 'Static', value: SB.F.dec1(pt.row.static_mem_mb) + ' MB' }, { color: C()[1], name: 'Video', value: SB.F.dec1(pt.row.video_mem_mb) + ' MB' }, { name: 'Nodes', value: SB.F.int(pt.row.nodes) }],
+    });
+  };
+
+  const scripts = (el) => {
+    if (!SB.ready(el, ['scripts'])) return;
+    const rows = SB.rows('scripts').slice().sort((a, b) => b.ms - a.ms);
+    if (!rows.length) { el.replaceChildren(); return; }
+    const kinds = [...new Set(rows.map((r) => r.kind))];
+    const kc = (k) => C()[kinds.indexOf(k) % 8];
+    SB.legend(byId('scripts-legend'), kinds.map((k) => ({ name: 'per ' + (k === 'physics' ? 'physics tick' : k), color: kc(k) })));
+    SB.hbar(el, rows, {
+      keys: [{ key: 'ms', name: 'ms' }], label: (r) => r.script, fmt: (v) => SB.F.dec3(v) + ' ms', axisFmt: d3.format('.2f'),
+      color: (r) => kc(r.kind), tip: (r) => [{ color: kc(r.kind), name: 'per ' + r.kind, value: SB.F.dec3(r.ms) + ' ms' }],
+    });
+  };
+
+  const buildParts = (el) => {
+    if (!SB.ready(el, ['build_parts'])) return;
+    const rows = SB.rows('build_parts');
+    if (!rows.length) { el.replaceChildren(); return; }
+    const total = d3.sum(rows, (r) => r.ms) || 1;
+    SB.legend(byId('build-legend'), rows.map((r, i) => ({ name: r.part, color: C()[i % 8], value: SB.F.dec1(r.ms) + ' ms' })));
+    const { svg, W } = SB.svg(el, 48);
+    const x = d3.scaleLinear([0, total], [0, W]);
+    const tip = SB.tip(el);
+    let acc = 0;
+    rows.forEach((r, i) => {
+      const x0 = x(acc), w = Math.max(0, x(acc + r.ms) - x0);
+      svg.append('rect').attr('x', x0).attr('y', 6).attr('width', Math.max(0, w - 1)).attr('height', 32).attr('rx', 3).attr('fill', C()[i % 8])
+        .on('mousemove', (ev) => tip.show(ev, r.part, [{ color: C()[i % 8], name: 'Build time', value: SB.F.dec1(r.ms) + ' ms' }, { name: 'Share', value: SB.F.pct(r.ms / total) }, { name: 'Scene nodes', value: SB.F.int(r.nodes) }, { name: 'Fix', value: r.fix }]))
+        .on('mouseleave', () => tip.hide());
+      const lab = svg.append('text').attr('class', 'inside').attr('x', x0 + 6).attr('y', 22).attr('dy', '0.32em').attr('pointer-events', 'none').text(SB.F.dec1(r.ms));
+      if (lab.node().getComputedTextLength() > w - 10) lab.remove();
+      acc += r.ms;
+    });
+  };
+
+  const freeze = (el) => {
+    if (!SB.ready(el, ['fight_freeze', 'project'])) return;
+    const rows = SB.rows('fight_freeze');
+    if (!rows.length) { el.replaceChildren(); return; }
+    const keys = [{ key: 'build_ms', name: 'Build', color: C()[0] }, { key: 'first_frame_ms', name: 'First frame', color: C()[1] }];
+    SB.legend(byId('freeze-legend'), keys);
+    const target = P().freeze_target_ms;
+    SB.hbar(el, rows, { keys, label: (r) => r.label, fmt: (v) => SB.F.int(v) + ' ms', axisFmt: d3.format('d'), ref: has(target) ? target : null, rowH: 28 });
+  };
+
+  /* One card per before/after study in the balance dataset. */
+  const studies = (box) => {
+    if (!SB.ready(box, ['balance'])) return;
+    const rows = SB.rows('balance');
+    const ids = [...new Set(rows.map((r) => r.study))];
+    box.replaceChildren();
+    for (const id of ids) {
+      const list = rows.filter((r) => r.study === id);
+      const s = list[0];
+      const card = document.createElement('div');
+      card.className = 'sb-card';
+      card.id = 'study-' + id;
+      const h = document.createElement('h2');
+      h.textContent = s.study_title || id;
+      const note = document.createElement('p');
+      note.className = 'note';
+      const bits = [s.study_note || ''];
+      if (has(s.band_lo) && has(s.band_hi)) bits.push('Shaded: ' + SB.F.pct(s.band_lo) + '–' + SB.F.pct(s.band_hi) + '.');
+      if (has(s.ref)) bits.push('Dashed: ' + SB.F.pct(s.ref) + (s.ref_label ? ' (' + s.ref_label + ')' : '') + '.');
+      note.textContent = bits.filter(Boolean).join(' ');
+      const legend = document.createElement('div');
+      legend.className = 'sb-legend';
+      SB.legend(legend, [{ name: 'Before', color: 'var(--cds-chart-muted)' }, { name: 'After', color: C()[0] }]);
+      const chart = document.createElement('div');
+      chart.className = 'sb-chart';
+      const from = document.createElement('p');
+      from.className = 'empty-note';
+      from.textContent = s.read_from ? 'Read from ' + s.read_from + '.' : '';
+      card.append(h, note, legend, chart, from);
+      box.appendChild(card);
+      SB.dumbbell(chart, list, {
+        label: (r) => r.matchup, a: (r) => r.before, b: (r) => r.after,
+        band: has(s.band_lo) && has(s.band_hi) ? [s.band_lo, s.band_hi] : null, ref: has(s.ref) ? s.ref : null,
+        tip: (r) => [
+          { color: 'var(--cds-chart-muted)', name: 'Before', value: SB.F.pct(r.before) + (has(r.before_wins) ? ' (' + r.before_wins + ' of ' + r.fights + ')' : '') },
+          { color: C()[0], name: 'After', value: SB.F.pct(r.after) + (has(r.after_wins) ? ' (' + r.after_wins + ' of ' + r.fights + ')' : '') },
+          { name: 'Change', value: d3.format('+.0f')((r.after - r.before) * 100) + ' points' },
+        ],
+      });
+    }
+  };
+
+  const matrix = (el) => {
+    if (!SB.ready(el, ['balance_matrix'])) return;
+    const rows = SB.rows('balance_matrix');
+    if (!rows.length) {
+      el.replaceChildren();
+      el.style.minHeight = '0';
+      const p = document.createElement('p');
+      p.className = 'empty-note';
+      p.textContent = 'Not on main yet. This fills itself on the next refresh after ' + (P().balance_matrix_path || 'the matrix file') + ' lands on main.';
+      el.appendChild(p);
+      return;
+    }
+    el.style.minHeight = '';
+    const cols = Object.keys(rows[0]);
+    const strCols = cols.filter((c) => typeof rows[0][c] === 'string');
+    const numCols = cols.filter((c) => typeof rows[0][c] === 'number');
+    if (!strCols.length || !numCols.length) { el.replaceChildren(); return; }
+    let cells;
+    if (strCols.length >= 2) {
+      const v = numCols.find((c) => /rate|win|pct|share/i.test(c)) || numCols[0];
+      cells = rows.map((r) => ({ r: r[strCols[0]], c: r[strCols[1]], v: r[v] }));
+    } else {
+      cells = rows.flatMap((r) => numCols.map((c) => ({ r: r[strCols[0]], c, v: r[c] })));
+    }
+    const rs = [...new Set(cells.map((d) => d.r))];
+    const cs = [...new Set(cells.map((d) => d.c))];
+    const vmax = d3.max(cells, (d) => d.v) > 1 ? 100 : 1;
+    const lo = SB.color(C()[1]), mid = SB.color('var(--color-panel)'), hi = SB.color(C()[0]);
+    const col = (v) => (v <= vmax / 2 ? d3.interpolateRgb(lo, mid)(v / (vmax / 2)) : d3.interpolateRgb(mid, hi)((v - vmax / 2) / (vmax / 2)));
+    const cell = 30;
+    const probe = SB.svg(el, 10);
+    const ml = SB.measure(probe.svg, rs) + 10;
+    const mt = Math.ceil(SB.measure(probe.svg, cs) * 0.72) + 16;
+    const cw = Math.max(18, Math.min(cell * 2, (probe.W - ml - 8) / cs.length));
+    const { svg } = SB.svg(el, mt + rs.length * cell + 4);
+    cs.forEach((c, j) => svg.append('text').attr('transform', `translate(${ml + j * cw + cw / 2},${mt - 6}) rotate(-45)`).text(c));
+    rs.forEach((r, i) => svg.append('text').attr('x', ml - 6).attr('y', mt + i * cell + cell / 2).attr('dy', '0.32em').attr('text-anchor', 'end').text(r));
+    const tip = SB.tip(el);
+    const fmt = vmax === 1 ? SB.F.pct : (v) => d3.format('.0f')(v) + '%';
+    for (const d of cells) {
+      if (typeof d.v !== 'number') continue;
+      const x0 = ml + cs.indexOf(d.c) * cw, y0 = mt + rs.indexOf(d.r) * cell;
+      svg.append('rect').attr('x', x0 + 1).attr('y', y0 + 1).attr('width', cw - 2).attr('height', cell - 2).attr('rx', 3).attr('fill', col(d.v))
+        .on('mousemove', (ev) => tip.show(ev, d.r + ' vs ' + d.c, [{ name: 'Win rate', value: fmt(d.v) }]))
+        .on('mouseleave', () => tip.hide());
+      if (cw >= 34) svg.append('text').attr('class', 'val').attr('x', x0 + cw / 2).attr('y', y0 + cell / 2).attr('dy', '0.32em').attr('text-anchor', 'middle').attr('pointer-events', 'none').text(fmt(d.v));
+    }
+  };
+
+  const models = (el) => {
+    if (!SB.ready(el, ['models'])) return;
+    const rows = SB.rows('models');
+    if (!rows.length) { el.replaceChildren(); return; }
+    const groups = [...new Set(rows.map((r) => r.group))];
+    const gc = (g) => C()[groups.indexOf(g) % 8];
+    SB.legend(byId('models-legend'), groups.map((g) => ({ name: g, color: gc(g) })).concat([{ name: 'Over budget', color: 'var(--cds-chart-status-critical)' }, { name: 'Budget', color: 'var(--cds-chart-reference)' }]));
+    SB.hbar(el, rows, {
+      keys: [{ key: 'triangles', name: 'Triangles' }], label: (r) => r.model, fmt: SB.F.int, rowH: 22, tick: (r) => r.budget,
+      color: (r) => (r.triangles > r.budget ? 'var(--cds-chart-status-critical)' : gc(r.group)),
+      tip: (r) => [{ color: gc(r.group), name: 'Group', value: r.group }, { name: 'Triangles', value: SB.F.int(r.triangles) }, { name: 'Budget', value: SB.F.int(r.budget) }, { name: 'File', value: SB.F.dec1(r.size_kb) + ' KB' }],
+    });
+  };
+
+  const assetFolders = (el) => {
+    if (!SB.ready(el, ['assets_glb', 'project'])) return;
+    const rows = SB.rows('assets_glb');
+    if (!rows.length) { el.replaceChildren(); return; }
+    SB.hbar(el, rows, { keys: [{ key: 'files', name: P().assets_label || 'files', color: C()[0] }], label: (r) => r.folder, fmt: SB.F.int, axisFmt: d3.format('d') });
+  };
+
+  const DRAW = {
+    overview: [['ov-hours-chart', hourly], ['ov-goals-chart', goalsBar]],
+    work: [['where-chart', wherePlace], ['branches-chart', branches], ['hours-chart', hourly]],
+    quality: [['strip-chart', strip], ['dur-chart', durations]],
+    performance: [['ft-chart', frameTimes], ['soak-fps-chart', soakFps], ['soak-worst-chart', soakWorst], ['soak-mem-chart', soakMem], ['scripts-chart', scripts], ['build-chart', buildParts], ['freeze-chart', freeze]],
+    balance: [['balance-studies', studies], ['matrix-chart', matrix]],
+    assets: [['models-chart', models], ['glb-chart', assetFolders]],
+    goals: [],
+  };
+  function drawCharts() {
+    for (const [id, fn] of DRAW[current] || []) {
+      const el = byId(id);
+      if (el.closest('[hidden]')) continue;
+      fn(el);
+    }
+  }
+
+  let opened = false;
+  dash.onData(() => {
+    resolve();
+    tabs();
+    needs();
+    SB.fillMarks();
+    statusText();
+    tick();
+    tables();
+    drawCharts();
+    if (!opened && SB.rows('project')) {
+      opened = true;
+      const want = location.hash.slice(1);
+      if (TABS.includes(want) && want !== current && !byId('tab-' + want).hidden) show(want, false);
+    }
+  });
+})();
+</script>

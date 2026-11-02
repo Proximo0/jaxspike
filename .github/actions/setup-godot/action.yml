@@ -1,0 +1,23 @@
+name: setup-godot
+description: Install the pinned headless-capable Godot editor binary as `godot` (cached between runs).
+runs:
+  using: composite
+  steps:
+    - uses: actions/cache@v4
+      id: cache
+      with:
+        path: ~/godot-bin
+        key: godot-${{ env.GODOT_VERSION }}-linux
+    - name: Download Godot
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        mkdir -p ~/godot-bin && cd ~/godot-bin
+        url="https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+        curl -fsSL -o godot.zip "$url"
+        unzip -q godot.zip && rm godot.zip
+        mv Godot_v${GODOT_VERSION}-stable_linux.x86_64 godot && chmod +x godot
+    - name: Put godot on PATH
+      shell: bash
+      run: |
+        echo "$HOME/godot-bin" >> "$GITHUB_PATH"

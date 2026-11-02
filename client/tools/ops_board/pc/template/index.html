@@ -1,0 +1,599 @@
+<style>
+.sb { display: grid; gap: var(--cds-gap-lg); font-family: var(--font-anthropic-sans); font-variant-numeric: tabular-nums; }
+.sb-head h1 { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: var(--cds-font-size-title); margin: 0; text-wrap: balance; }
+.sb-head .sb-machine { margin: var(--cds-gap-xs) 0 0; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+.sb-head p { margin: var(--cds-gap-xs) 0 0; color: var(--color-fg-muted); font-size: var(--cds-font-size-body); max-width: 75ch; }
+.sb-tabs { display: flex; gap: var(--cds-gap-xs); flex-wrap: wrap; border-bottom: 1px solid var(--color-border-line); }
+.sb-tabs button { font: inherit; font-size: var(--cds-font-size-body); background: none; border: 0; border-bottom: 2px solid transparent; color: var(--color-fg-muted); padding: var(--cds-pad-xs) var(--cds-pad-sm); cursor: pointer; }
+.sb-tabs button[aria-selected="true"] { color: var(--color-fg); border-bottom-color: var(--color-fg); }
+.sb-tabs button:focus-visible { outline: 2px solid var(--color-fg); outline-offset: 2px; }
+.sb-page { display: grid; gap: var(--cds-gap-lg); }
+.sb-page[hidden] { display: none; }
+.sb-kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--cds-gap-md); }
+@media (min-width: 640px) { .sb-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 1100px) { .sb-kpis.six { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+.sb-kpi, .sb-card { background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-lg); min-width: 0; }
+.sb-kpi .lbl { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+.sb-kpi .val { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: var(--cds-font-size-title); margin-top: var(--cds-gap-xs); }
+.sb-kpi .sub { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); margin-top: var(--cds-gap-xs); }
+.sb-kpi .val.good { color: var(--color-ok); }
+.sb-kpi .val.warn { color: var(--color-warn); }
+.sb-kpi .val.bad { color: var(--color-bad); }
+.sb-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr)); gap: var(--cds-gap-md); }
+.sb-card h2 { font-size: var(--cds-font-size-heading); font-weight: var(--cds-font-weight-medium); margin: 0; }
+.sb-card .note { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); margin: var(--cds-gap-xs) 0 var(--cds-gap-md); max-width: 75ch; }
+.sb-chart { position: relative; min-height: 200px; }
+.sb-tip { position: absolute; pointer-events: none; background: var(--cds-surface-popover); border: 1px solid var(--cds-border); border-radius: var(--cds-radius); box-shadow: var(--cds-shadow-popover); padding: var(--cds-pad-xs) var(--cds-pad-sm); font-size: var(--cds-font-size-caption); white-space: nowrap; z-index: 2; }
+.sb-tip .k { color: var(--cds-text-secondary); }
+.sb-legend { display: flex; gap: var(--cds-gap-md); flex-wrap: wrap; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); margin-bottom: var(--cds-gap-sm); }
+.sb-legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; background: var(--sw); vertical-align: -1px; }
+.sb-table { width: 100%; border-collapse: collapse; font-size: var(--cds-font-size-body); }
+.sb-table th { text-align: left; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); font-weight: var(--cds-font-weight-medium); padding: var(--cds-pad-xs) var(--cds-pad-sm); border-bottom: 1px solid var(--color-border-line); }
+.sb-table td { padding: var(--cds-pad-xs) var(--cds-pad-sm); border-bottom: 1px solid var(--color-border-line); vertical-align: top; }
+.sb-pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: var(--cds-font-size-caption); border: 1px solid currentColor; white-space: nowrap; }
+.sb-pill.done { color: var(--color-ok); }
+.sb-pill.run { color: var(--color-warn); }
+.sb-pill.block { color: var(--color-bad); }
+.sb-fail { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: inherit; color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); }
+.sb-fail::before { content: ""; width: .375rem; height: .375rem; border-radius: 50%; background: var(--color-bad); }
+[data-dash-source-state=empty] { color: transparent; }
+[data-dash-source-state=refreshing] { opacity: .5; transition: opacity var(--cds-dur-slow); }
+.sb-scroll { overflow-x: auto; }
+</style>
+
+<div class="sb">
+  <header class="sb-head" id="top">
+    <h1 id="board-title" data-source="project" data-field="name" data-row="0">—</h1><p class="sb-machine"><span data-source="project" data-field="machine" data-row="0">—</span> · <span data-source="project" data-field="gpu" data-row="0">—</span> · <span data-source="project" data-field="engine" data-row="0">—</span></p>
+    <p id="takeaway" data-source="soak_summary">—</p>
+  </header>
+
+  <nav class="sb-tabs" role="tablist" aria-label="Dashboard pages">
+    <button role="tab" id="tab-build" aria-selected="true" aria-controls="build">Build</button>
+    <button role="tab" id="tab-overview" aria-selected="false" aria-controls="overview">Overview</button>
+    <button role="tab" id="tab-performance" aria-selected="false" aria-controls="performance">Performance</button>
+    <button role="tab" id="tab-stutter" aria-selected="false" aria-controls="stutter">Stutter</button>
+    <button role="tab" id="tab-assets" aria-selected="false" aria-controls="assets">Assets</button>
+    <button role="tab" id="tab-pipeline" aria-selected="false" aria-controls="pipeline">Pipeline</button>
+  </nav>
+
+  <!-- Build -->
+  <section class="sb-page" id="build" role="tabpanel" aria-labelledby="tab-build">
+    <div class="sb-kpis six">
+      <div class="sb-kpi"><div class="lbl">Top-priority items open</div><div class="val bad dash-skeleton" data-source="backlog_summary" data-field="p0_open" data-row="0">—</div><div class="sub">of <span data-source="backlog_summary" data-field="open" data-row="0">—</span> open items</div></div>
+      <div class="sb-kpi"><div class="lbl">Branches waiting to merge</div><div class="val warn dash-skeleton" data-source="branch_summary" data-field="waiting" data-row="0">—</div><div class="sub"><span data-source="branch_summary" data-field="commits" data-row="0">—</span> commits ahead of main</div></div>
+      <div class="sb-kpi"><div class="lbl">Asset groups not in the game</div><div class="val dash-skeleton" data-source="asset_summary" data-field="not_wired" data-row="0">—</div><div class="sub">of <span data-source="asset_summary" data-field="groups" data-row="0">—</span> groups on main</div></div>
+      <div class="sb-kpi"><div class="lbl">Changes on main, last 25</div><div class="val dash-skeleton" data-source="build_summary" data-field="changes" data-row="0">—</div><div class="sub">plus <span data-source="build_summary" data-field="merges" data-row="0">—</span> merges</div></div>
+      <div class="sb-kpi"><div class="lbl">Latest main commit</div><div class="val dash-skeleton" data-source="build_summary" data-field="last_sha" data-row="0">—</div><div class="sub"><span data-source="build_summary" data-field="last_age" data-row="0">—</span></div></div>
+      <div class="sb-kpi"><div class="lbl">GPU runner, last run</div><div class="val dash-skeleton" data-source="runner_summary" data-field="last_result" data-row="0">—</div><div class="sub"><span data-source="runner_summary" data-field="passed" data-row="0">—</span> of <span data-source="runner_summary" data-field="runs" data-row="0">—</span> runs passed</div></div>
+    </div>
+    <section class="sb-card" id="backlog">
+      <h2>Priorities</h2>
+      <p class="note">What to do next, most important first. P0 blocks a smooth game; P1 is the next layer of polish; P2 is housekeeping. Owner says who acts: the cloud workers, this build machine, or you.</p>
+      <div class="sb-scroll">
+        <table class="sb-table" data-source="backlog" data-row-key="item">
+          <thead><tr><th data-field="priority">Priority</th><th data-field="item">Item</th><th data-field="owner">Owner</th><th data-field="status">Status</th><th data-field="note">Why</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+    <div class="sb-grid">
+      <section class="sb-card" id="branches">
+        <h2>Waiting to merge</h2>
+        <p class="note">Branches with commits that main doesn't have yet, newest first.</p>
+        <div class="sb-scroll">
+          <table class="sb-table" data-source="branches" data-row-key="branch">
+            <thead><tr><th data-field="branch">Branch</th><th data-field="ahead">Ahead</th><th data-field="last_commit">Last commit</th><th data-field="subject">Latest change</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+      <section class="sb-card" id="asset-status">
+        <h2>Assets: on main vs in the game</h2>
+        <p class="note">Each asset folder on main, and whether any game code or project file loads it. "Not wired in" means built and merged but players can't see it yet.</p>
+        <div class="sb-scroll">
+          <table class="sb-table" data-source="asset_status" data-row-key="group">
+            <thead><tr><th data-field="group">Folder</th><th data-field="files_on_main">Files</th><th data-field="code_files_using">Used by</th><th data-field="status">Status</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+    <section class="sb-card" id="commits">
+      <h2>Recent changes on main</h2>
+      <p class="note">The last 25 commits on main, newest first.</p>
+      <div class="sb-scroll">
+        <table class="sb-table" data-source="builds" data-row-key="sha">
+          <thead><tr><th data-field="sha">Commit</th><th data-field="date">When (UTC)</th><th data-field="kind">Kind</th><th data-field="subject">Change</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </section>
+
+  <!-- Overview -->
+  <section class="sb-page" id="overview" role="tabpanel" aria-labelledby="tab-overview" hidden>
+    <div class="sb-kpis six">
+      <div class="sb-kpi"><div class="lbl">Average fps, soak test</div><div class="val dash-skeleton" data-source="soak_summary" data-field="avg_fps" data-row="0">—</div><div class="sub"><span data-source="project" data-field="soak_setup" data-row="0">—</span>, <span data-source="soak_summary" data-field="fights" data-row="0">—</span> matches</div></div>
+      <div class="sb-kpi"><div class="lbl">Match start freeze</div><div class="val bad dash-skeleton" data-source="start_summary" data-field="avg_build_ms" data-row="0">—</div><div class="sub">ms per match, average (target under 17)</div></div>
+      <div class="sb-kpi"><div class="lbl">Memory after last match</div><div class="val dash-skeleton" data-source="soak_summary" data-field="last_static_mb" data-row="0">—</div><div class="sub">MB, first match <span data-source="soak_summary" data-field="first_static_mb" data-row="0">—</span></div></div>
+      <div class="sb-kpi"><div class="lbl">Models built</div><div class="val dash-skeleton" data-source="model_summary" data-field="count" data-row="0">—</div><div class="sub">Over budget: <span data-source="model_summary" data-field="over_budget" data-row="0">—</span></div></div>
+      <div class="sb-kpi"><div class="lbl">GPU runner, last run</div><div class="val dash-skeleton" data-source="runner_summary" data-field="last_result" data-row="0">—</div><div class="sub"><span data-source="runner_summary" data-field="passed" data-row="0">—</span> of <span data-source="runner_summary" data-field="runs" data-row="0">—</span> runs passed</div></div>
+      <div class="sb-kpi"><div class="lbl">Jobs done</div><div class="val dash-skeleton" data-source="job_summary" data-field="done" data-row="0">—</div><div class="sub">Open: <span data-source="job_summary" data-field="open" data-row="0">—</span></div></div>
+    </div>
+    <section class="sb-card" id="jobs">
+      <h2>Jobs</h2>
+      <p class="note">Work asked of the build machine and where each stands.</p>
+      <div class="sb-scroll">
+        <table class="sb-table" data-source="jobs" data-row-key="job">
+          <thead><tr><th data-field="job">Job</th><th data-field="status">Status</th><th data-field="note">Note</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </section>
+
+  <!-- Performance -->
+  <section class="sb-page" id="performance" role="tabpanel" aria-labelledby="tab-performance" hidden>
+    <div class="sb-grid">
+      <section class="sb-card" id="soak-fps">
+        <h2>Frame rate per match</h2>
+        <p class="note">Each point is one match in the soak test (bots playing back to back). Line: average fps. Bars: 95th-percentile frame time (right axis).</p>
+        <div class="sb-chart" data-source="soak"></div>
+      </section>
+      <section class="sb-card" id="soak-mem">
+        <h2>Memory across the soak</h2>
+        <p class="note">Static and video memory after each match. Flat lines mean nothing is leaking.</p>
+        <div class="sb-legend"><span id="lg-static">Static memory</span><span id="lg-video">Video memory</span></div>
+        <div class="sb-chart" data-source="soak"></div>
+      </section>
+    </div>
+    <div class="sb-grid">
+      <section class="sb-card" id="heavy">
+        <h2>Heaviest scene, low vs high graphics</h2>
+        <p class="note">Milliseconds in the heaviest measured moment of play. The old counter reported the slowest frame of each second, so it overstated frame time.</p>
+        <div class="sb-legend"><span id="lg-low">Low graphics</span><span id="lg-high">High graphics</span></div>
+        <div class="sb-chart" data-source="perf"></div>
+      </section>
+      <section class="sb-card" id="scripts">
+        <h2>Where script time goes</h2>
+        <p class="note">Milliseconds per frame or physics tick for each game script, timed one by one. All together is well under 1 ms.</p>
+        <div class="sb-chart" data-source="scripts"></div>
+      </section>
+    </div>
+  </section>
+
+  <!-- Stutter -->
+  <section class="sb-page" id="stutter" role="tabpanel" aria-labelledby="tab-stutter" hidden>
+    <div class="sb-grid">
+      <section class="sb-card" id="start-cost">
+        <h2>Freeze at the start of each match</h2>
+        <p class="note">Time to build each new match and to draw its first frame, stacked, in milliseconds. The first match also pays one-time shader compiles. A frame over 16.7 ms is a dropped frame at 60 fps.</p>
+        <div class="sb-legend"><span id="lg-build">Build</span><span id="lg-first">First frame</span></div>
+        <div class="sb-chart" data-source="match_start"></div>
+      </section>
+      <section class="sb-card" id="build-parts">
+        <h2>What the build spends its time on</h2>
+        <p class="note">Each part of a new match, timed separately (warm rounds). Red bars have a known fix, shown in the tooltip.</p>
+        <div class="sb-chart" data-source="build_parts"></div>
+      </section>
+    </div>
+    <section class="sb-card" id="hitches">
+      <h2>Every frame over 25 ms</h2>
+      <p class="note">From the hitch finder. Frames away from a match start are usually first-time effects (shaders or resources loaded on first use).</p>
+      <div class="sb-scroll">
+        <table class="sb-table" data-source="hitch_frames" data-row-key="fight,frame">
+          <thead><tr><th data-field="fight">Match</th><th data-field="frame">Frame</th><th data-field="ms">Frame time (ms)</th><th data-field="cause">Cause</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </section>
+
+  <!-- Assets -->
+  <section class="sb-page" id="assets" role="tabpanel" aria-labelledby="tab-assets" hidden>
+    <div class="sb-kpis" id="asset-kpis"></div>
+    <section class="sb-card" id="models">
+      <h2>Models built in Houdini</h2>
+      <p class="note">Triangles per model against its phone budget (tick mark). Hover a bar for its file size.</p>
+      <div class="sb-legend" id="models-legend"></div>
+      <div class="sb-chart" data-source="models"></div>
+    </section>
+  </section>
+
+  <!-- Pipeline -->
+  <section class="sb-page" id="pipeline" role="tabpanel" aria-labelledby="tab-pipeline" hidden>
+    <section class="sb-card" id="runner">
+      <h2>GPU runner history</h2>
+      <p class="note">Every job the self-hosted GPU runner has taken, from its local logs.</p>
+      <div class="sb-scroll">
+        <table class="sb-table" data-source="runner_jobs" data-row-key="started">
+          <thead><tr><th data-field="started">Started (UTC)</th><th data-field="result">Result</th><th data-field="failed_step">Failed step</th><th data-field="cause">Cause</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+    <section class="sb-card" id="runner-perf">
+      <h2>Latest runner measurements</h2>
+      <p class="note">What the automated GPU job recorded on its passing run. Its frame-time column still uses the old once-a-second counter, so read physics, effects and draw counts from here and real frame rate from the Performance tab.</p>
+      <div class="sb-scroll">
+        <table class="sb-table" data-source="runner_perf" data-row-key="tier">
+          <thead><tr><th data-field="tier">Graphics</th><th data-field="physics_ms">Physics (ms)</th><th data-field="effects_ms">Effects (ms)</th><th data-field="draw_calls">Draw calls</th><th data-field="triangles">Triangles</th><th data-field="video_mem_mb">Video memory (MB)</th><th data-field="old_counter_ms">Old counter (ms)</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </section>
+</div>
+
+<script>
+dash.calc('soak_summary', {
+  inputs: ['soak'],
+  title: 'Soak summary',
+  description: 'Match count, average and lowest fps, and static memory after the first and last match.',
+  fn: (soak) => {
+    if (!soak.length) return [];
+    const fps = soak.map(r => Number(r.fps));
+    return [{
+      fights: soak.length,
+      avg_fps: Math.round(fps.reduce((a, b) => a + b, 0) / fps.length),
+      min_fps: Math.round(Math.min(...fps)),
+      first_static_mb: Number(soak[0].static_mem_mb),
+      last_static_mb: Number(soak[soak.length - 1].static_mem_mb),
+    }];
+  },
+});
+dash.calc('start_summary', {
+  inputs: ['match_start'],
+  title: 'Match start summary',
+  description: 'Average match build time and first-frame time, warm matches only (the first match pays one-time shader compiles).',
+  fn: (match_start) => {
+    const warm = match_start.filter(r => Number(r.fight) > 1);
+    if (!warm.length) return [];
+    const avg = k => Math.round(warm.reduce((a, r) => a + Number(r[k]), 0) / warm.length);
+    return [{ avg_build_ms: avg('build_ms'), avg_first_frame_ms: avg('first_frame_ms') }];
+  },
+});
+dash.calc('model_summary', {
+  inputs: ['models'],
+  title: 'Models summary',
+  description: 'How many models were built and how many exceed their triangle budget.',
+  fn: (models) => [{ count: models.length, over_budget: models.filter(m => Number(m.triangles) > Number(m.budget)).length }],
+});
+dash.calc('job_summary', {
+  inputs: ['jobs'],
+  title: 'Jobs summary',
+  description: 'Jobs marked Done, and jobs not yet done.',
+  fn: (jobs) => [{ done: jobs.filter(j => j.status === 'Done').length, open: jobs.filter(j => j.status !== 'Done').length }],
+});
+dash.calc('backlog_summary', {
+  inputs: ['backlog'],
+  title: 'Priorities summary',
+  description: 'Open backlog items (status not Done) and how many of them are P0.',
+  fn: (backlog) => {
+    const open = backlog.filter(b => b.status !== 'Done');
+    return [{ open: open.length, p0_open: open.filter(b => b.priority === 'P0').length }];
+  },
+});
+dash.calc('branch_summary', {
+  inputs: ['branches'],
+  title: 'Branches summary',
+  description: 'Branches with commits not on main, and the total commits they carry.',
+  fn: (branches) => [{ waiting: branches.length, commits: branches.reduce((a, b) => a + Number(b.ahead), 0) }],
+});
+dash.calc('asset_summary', {
+  inputs: ['asset_status'],
+  title: 'Asset wiring summary',
+  description: 'Asset folders on main, and how many no game code or project file loads.',
+  fn: (asset_status) => [{ groups: asset_status.length, not_wired: asset_status.filter(a => Number(a.code_files_using) === 0).length }],
+});
+dash.calc('build_summary', {
+  inputs: ['builds'],
+  title: 'Main branch summary',
+  description: 'Changes and merges among the last 25 commits on main, and the newest commit.',
+  fn: (builds) => {
+    if (!builds.length) return [];
+    const last = [...builds].sort((a, b) => String(b.date).localeCompare(String(a.date)))[0];
+    return [{ changes: builds.filter(b => b.kind !== 'Merge').length, merges: builds.filter(b => b.kind === 'Merge').length, last_sha: last.sha, last_age: 'at ' + String(last.date).replace('T', ' ').replace('Z', ' UTC') }];
+  },
+});
+dash.calc('runner_summary', {
+  inputs: ['runner_jobs'],
+  title: 'Runner summary',
+  description: 'Runs taken by the GPU runner, how many passed, and the latest result.',
+  fn: (runner_jobs) => {
+    if (!runner_jobs.length) return [];
+    const sorted = [...runner_jobs].sort((a, b) => String(a.started).localeCompare(String(b.started)));
+    return [{ runs: sorted.length, passed: sorted.filter(r => r.result === 'Succeeded').length, last_result: sorted[sorted.length - 1].result }];
+  },
+});
+
+// Shared helpers for the charts below.
+window.sbTip = (box) => {
+  let t = box.querySelector('.sb-tip');
+  if (!t) { t = document.createElement('div'); t.className = 'sb-tip'; t.hidden = true; box.appendChild(t); }
+  return {
+    show(lines, x, y) {
+      t.replaceChildren();
+      lines.forEach(([k, v], i) => { const d = document.createElement('div'); if (i === 0) d.className = 'k'; d.textContent = v === undefined ? k : k + ': ' + v; t.appendChild(d); });
+      t.hidden = false;
+      const w = t.offsetWidth, bw = box.clientWidth;
+      t.style.left = Math.max(0, Math.min(bw - w, x + 12)) + 'px';
+      t.style.top = Math.max(0, y - t.offsetHeight - 8) + 'px';
+    },
+    hide() { t.hidden = true; },
+  };
+};
+window.sbFail = (el) => { el.replaceChildren(); const d = document.createElement('div'); d.className = 'sb-fail'; d.textContent = 'Failed to load'; el.appendChild(d); };
+window.sbAxis = (g) => g.attr('font-size', null).attr('font-family', null)
+  .call(s => s.selectAll('text').attr('fill', 'var(--color-fg-muted)').style('font-size', 'var(--cds-font-size-caption)'))
+  .call(s => s.selectAll('.domain').attr('stroke', 'var(--cds-chart-axis)'))
+  .call(s => s.selectAll('.tick line').attr('stroke', 'var(--cds-chart-grid)'));
+window.sbLabelWidth = (svg, labels) => {
+  const probe = svg.append('text').style('font-size', 'var(--cds-font-size-caption)');
+  const w = d3.max(labels, s => (probe.text(s), probe.node().getComputedTextLength())) || 0;
+  probe.remove();
+  return w;
+};
+// Horizontal bars: rows [{label, value, color, tip: [[k, v]...], ref?}], fmt for end labels.
+window.sbHBars = (box, rows, fmt, rowH = 22) => {
+  box.replaceChildren();
+  const W = box.clientWidth, H = rows.length * rowH + 26;
+  box.style.minHeight = H + 'px';
+  const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`);
+  const lw = sbLabelWidth(svg, rows.map(r => r.label)) + 10;
+  const endw = sbLabelWidth(svg, rows.map(r => fmt(r.value))) + 10;
+  const m = { t: 4, r: endw, b: 22, l: Math.min(lw, W * 0.45) };
+  const y = d3.scaleBand(rows.map(r => r.label), [m.t, H - m.b]).padding(0.22);
+  const x = d3.scaleLinear([0, d3.max(rows, r => Math.max(r.value, r.ref || 0)) || 1], [m.l, W - m.r]).nice();
+  svg.append('g').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(x).ticks(Math.max(2, Math.floor((W - m.l - m.r) / 80))).tickSize(-(H - m.t - m.b))).call(sbAxis).call(g => g.select('.domain').remove());
+  svg.append('g').selectAll('text').data(rows).join('text').attr('x', m.l - 8).attr('y', r => y(r.label) + y.bandwidth() / 2).attr('dy', '0.35em').attr('text-anchor', 'end').attr('fill', 'var(--color-fg)').style('font-size', 'var(--cds-font-size-caption)').text(r => r.label);
+  const tip = sbTip(box);
+  svg.append('g').selectAll('rect').data(rows).join('rect').attr('x', m.l).attr('y', r => y(r.label)).attr('height', y.bandwidth()).attr('width', r => Math.max(1, x(r.value) - m.l)).attr('rx', 3).attr('fill', r => r.color)
+    .on('mousemove', (e, r) => { const [px, py] = d3.pointer(e, box); tip.show(r.tip, px, py); }).on('mouseleave', () => tip.hide());
+  svg.append('g').selectAll('line').data(rows.filter(r => r.ref)).join('line').attr('x1', r => x(r.ref)).attr('x2', r => x(r.ref)).attr('y1', r => y(r.label) - 1).attr('y2', r => y(r.label) + y.bandwidth() + 1).attr('stroke', 'var(--cds-chart-reference)').attr('stroke-width', 2);
+  svg.append('g').selectAll('text').data(rows).join('text').attr('x', r => Math.max(x(r.value), r.ref ? x(r.ref) : 0) + 4).attr('y', r => y(r.label) + y.bandwidth() / 2).attr('dy', '0.35em').attr('fill', 'var(--color-fg-muted)').style('font-size', 'var(--cds-font-size-caption)').text(r => fmt(r.value));
+};
+// Fills a data-row-key table from rows with a per-cell formatter.
+window.sbTable = (sel, st, cols, cell) => {
+  const tb = document.querySelector(sel + ' tbody');
+  tb.replaceChildren();
+  if (st.status !== 'ok') return;
+  st.data.forEach(r => {
+    const tr = document.createElement('tr');
+    cols.forEach(c => { const td = document.createElement('td'); const v = cell ? cell(c, r) : null; if (v instanceof Node) td.appendChild(v); else td.textContent = v ?? String(r[c]); tr.appendChild(td); });
+    tb.appendChild(tr);
+  });
+};
+window.sbPill = (status) => {
+  const p = document.createElement('span');
+  p.className = 'sb-pill ' + (status === 'Done' || status === 'Succeeded' ? 'done' : status === 'Blocked' || status === 'Failed' ? 'block' : 'run');
+  p.textContent = status;
+  return p;
+};
+
+// Tabs: one page at a time, linkable by id.
+(() => {
+  const tabs = [...document.querySelectorAll('.sb-tabs [role=tab]')];
+  const show = (id) => {
+    tabs.forEach(t => { const on = t.getAttribute('aria-controls') === id; t.setAttribute('aria-selected', on); document.getElementById(t.getAttribute('aria-controls')).hidden = !on; });
+    dash.setLink(id);
+    window.dispatchEvent(new Event('resize'));
+  };
+  tabs.forEach(t => t.addEventListener('click', () => show(t.getAttribute('aria-controls'))));
+  window.sbShowTab = show;
+  const named = location.hash.slice(1);
+  if (tabs.some(t => t.getAttribute('aria-controls') === named)) show(named);
+})();
+</script>
+
+<script>
+dash.onData(() => {
+  // Headline figures, takeaway, job table.
+  const fill = (id, fmt) => {
+    const st = dash.data(id);
+    document.querySelectorAll(`[data-source="${id}"][data-field]`).forEach(el => {
+      el.classList.toggle('dash-skeleton', st.status === 'loading');
+      const row = st.status === 'ok' && st.data[0];
+      el.textContent = row && row[el.dataset.field] !== undefined ? fmt(row[el.dataset.field]) : '—';
+    });
+  };
+  const num = v => typeof v === 'number' ? v.toLocaleString('en', { maximumFractionDigits: 1 }) : String(v);
+  ['project', 'soak_summary', 'start_summary', 'model_summary', 'job_summary', 'runner_summary', 'backlog_summary', 'branch_summary', 'asset_summary', 'build_summary'].forEach(id => fill(id, num));
+  const tk = document.getElementById('takeaway');
+  const s = dash.data('soak_summary'), st = dash.data('start_summary');
+  if (s.status === 'ok' && s.data[0] && st.status === 'ok' && st.data[0]) {
+    const r = s.data[0], b = st.data[0];
+    const grow = r.last_static_mb - r.first_static_mb;
+    const mem = Math.abs(grow) < 5 ? "memory stays flat" : `memory grows ${grow.toFixed(0)} MB across the soak`;
+    const freeze = b.avg_build_ms + b.avg_first_frame_ms;
+    tk.textContent = `Matches run at ${r.avg_fps} fps on average (slowest ${r.min_fps}) and ${mem}. ` +
+      (freeze > 50 ? `Each new match freezes for about ${Math.round(freeze)} ms at the start, the biggest thing to fix next.` : `Match starts are smooth (about ${Math.round(freeze)} ms).`);
+  } else tk.textContent = '—';
+  sbTable('#jobs', dash.data('jobs'), ['job', 'status', 'note'], (c, r) => c === 'status' ? sbPill(r.status) : null);
+  // Build tab tables.
+  const rank = { P0: 0, P1: 1, P2: 2 };
+  const bl = dash.data('backlog');
+  const blSorted = bl.status === 'ok' ? { ...bl, data: [...bl.data].sort((a, b) => (rank[a.priority] ?? 9) - (rank[b.priority] ?? 9)) } : bl;
+  sbTable('#backlog', blSorted, ['priority', 'item', 'owner', 'status', 'note'], (c, r) => {
+    if (c === 'priority') { const p = document.createElement('span'); p.className = 'sb-pill ' + (r.priority === 'P0' ? 'block' : r.priority === 'P1' ? 'run' : ''); p.textContent = r.priority; return p; }
+    if (c === 'status') return sbPill(r.status === 'Done' ? 'Done' : r.status);
+    return null;
+  });
+  const when = v => String(v).replace('T', ' ').replace('Z', '');
+  sbTable('#branches', dash.data('branches'), ['branch', 'ahead', 'last_commit', 'subject'], (c, r) => c === 'last_commit' ? when(r.last_commit) : null);
+  sbTable('#asset-status', dash.data('asset_status'), ['group', 'files_on_main', 'code_files_using', 'status'], (c, r) => {
+    if (c !== 'status') return null;
+    const p = document.createElement('span'); p.className = 'sb-pill ' + (r.status === 'In game' ? 'done' : 'block'); p.textContent = r.status; return p;
+  });
+  sbTable('#commits', dash.data('builds'), ['sha', 'date', 'kind', 'subject'], (c, r) => c === 'date' ? when(r.date) : null);
+});
+</script>
+
+<script>
+dash.onData(() => {
+  // Performance: soak fps and memory.
+  const st = dash.data('soak');
+  const boxes = document.querySelectorAll('#soak-fps .sb-chart, #soak-mem .sb-chart');
+  boxes.forEach(b => b.replaceChildren());
+  document.getElementById('lg-static').style.setProperty('--sw', dash.colors[0]);
+  document.getElementById('lg-video').style.setProperty('--sw', dash.colors[1]);
+  if (st.status === 'error') { boxes.forEach(sbFail); return; }
+  if (st.status !== 'ok' || !st.data.length || !boxes[0].clientWidth) return;
+  const rows = st.data.map(r => ({ fight: +r.fight, fps: +r.fps, p95: +r.p95_frame_ms, worst: +r.worst_frame_ms, stat: +r.static_mem_mb, vid: +r.video_mem_mb, secs: +r.game_seconds }));
+  {
+    const box = boxes[0], W = box.clientWidth, H = 220, m = { t: 10, r: 48, b: 26, l: 40 };
+    const x = d3.scaleBand(rows.map(r => r.fight), [m.l, W - m.r]).padding(0.25);
+    const y = d3.scaleLinear([0, d3.max(rows, r => r.fps) * 1.1], [H - m.b, m.t]).nice();
+    const y2 = d3.scaleLinear([0, d3.max(rows, r => r.p95) * 2], [H - m.b, m.t]).nice();
+    const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`);
+    svg.append('g').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(5).tickSize(-(W - m.l - m.r))).call(sbAxis).call(g => g.select('.domain').remove());
+    svg.append('g').attr('transform', `translate(${W - m.r},0)`).call(d3.axisRight(y2).ticks(4).tickFormat(v => v + ' ms')).call(sbAxis).call(g => g.select('.domain').remove()).call(g => g.selectAll('.tick line').remove());
+    const step = Math.ceil(rows.length / Math.max(2, Math.floor((W - m.l - m.r) / 36)));
+    svg.append('g').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(x).tickValues(rows.map(r => r.fight).filter((f, i) => i % step === 0)).tickFormat(f => '#' + f).tickSizeOuter(0)).call(sbAxis);
+    svg.append('g').selectAll('rect').data(rows).join('rect').attr('x', r => x(r.fight)).attr('width', x.bandwidth()).attr('y', r => y2(r.p95)).attr('height', r => H - m.b - y2(r.p95)).attr('rx', 3).attr('fill', 'var(--cds-chart-muted)');
+    svg.append('path').datum(rows).attr('fill', 'none').attr('stroke', dash.colors[0]).attr('stroke-width', 2).attr('stroke-linejoin', 'round').attr('stroke-linecap', 'round').attr('d', d3.line(r => x(r.fight) + x.bandwidth() / 2, r => y(r.fps)));
+    const dot = svg.append('circle').attr('r', 4).attr('fill', dash.colors[0]).attr('opacity', 0);
+    const tip = sbTip(box);
+    svg.append('rect').attr('x', m.l).attr('y', m.t).attr('width', W - m.l - m.r).attr('height', H - m.t - m.b).attr('fill', 'transparent')
+      .on('mousemove', (e) => {
+        const [px] = d3.pointer(e); const i = Math.max(0, Math.min(rows.length - 1, Math.floor((px - m.l) / x.step()))); const r = rows[i];
+        dot.attr('cx', x(r.fight) + x.bandwidth() / 2).attr('cy', y(r.fps)).attr('opacity', 1);
+        tip.show([['Match #' + r.fight], ['Average', r.fps.toFixed(1) + ' fps'], ['95th pct frame', r.p95.toFixed(2) + ' ms'], ['Worst frame', r.worst.toFixed(1) + ' ms'], ['Game time', r.secs.toFixed(1) + ' s']], x(r.fight), y(r.fps));
+      })
+      .on('mouseleave', () => { dot.attr('opacity', 0); tip.hide(); });
+  }
+  {
+    const box = boxes[1], W = box.clientWidth, H = 220, m = { t: 10, r: 16, b: 26, l: 48 };
+    const x = d3.scaleLinear(d3.extent(rows, r => r.fight), [m.l, W - m.r]);
+    const y = d3.scaleLinear([0, d3.max(rows, r => Math.max(r.stat, r.vid)) * 1.15], [H - m.b, m.t]).nice();
+    const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`);
+    svg.append('g').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(5).tickFormat(v => v + ' MB').tickSize(-(W - m.l - m.r))).call(sbAxis).call(g => g.select('.domain').remove());
+    svg.append('g').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(x).ticks(Math.min(8, rows.length)).tickFormat(f => '#' + f).tickSizeOuter(0)).call(sbAxis);
+    [['stat', 0], ['vid', 1]].forEach(([k, c]) => svg.append('path').datum(rows).attr('fill', 'none').attr('stroke', dash.colors[c]).attr('stroke-width', 2).attr('stroke-linejoin', 'round').attr('stroke-linecap', 'round').attr('d', d3.line(r => x(r.fight), r => y(r[k]))));
+    const rule = svg.append('line').attr('y1', m.t).attr('y2', H - m.b).attr('stroke', 'var(--cds-chart-reference)').attr('opacity', 0);
+    const tip = sbTip(box);
+    svg.append('rect').attr('x', m.l).attr('y', m.t).attr('width', W - m.l - m.r).attr('height', H - m.t - m.b).attr('fill', 'transparent')
+      .on('mousemove', (e) => {
+        const [px] = d3.pointer(e); const f = Math.round(x.invert(px)); const r = rows.find(q => q.fight === f) || rows[rows.length - 1];
+        rule.attr('x1', x(r.fight)).attr('x2', x(r.fight)).attr('opacity', 1);
+        tip.show([['Match #' + r.fight], ['Static', r.stat.toFixed(1) + ' MB'], ['Video', r.vid.toFixed(1) + ' MB']], x(r.fight), y(r.stat));
+      })
+      .on('mouseleave', () => { rule.attr('opacity', 0); tip.hide(); });
+  }
+});
+</script>
+
+<script>
+dash.onData(() => {
+  // Performance: heavy case (grouped bars) and script cost.
+  const st = dash.data('perf');
+  const box = document.querySelector('#heavy .sb-chart');
+  box.replaceChildren();
+  document.getElementById('lg-low').style.setProperty('--sw', dash.colors[0]);
+  document.getElementById('lg-high').style.setProperty('--sw', dash.colors[2]);
+  if (st.status === 'error') sbFail(box);
+  else if (st.status === 'ok' && box.clientWidth) {
+    const rows = st.data.map(r => ({ tier: r.tier, measure: r.measure, ms: +r.ms }));
+    const measures = [...new Set(rows.map(r => r.measure))];
+    const W = box.clientWidth, rowH = 34, H = measures.length * rowH + 30;
+    box.style.minHeight = H + 'px';
+    const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`);
+    const m = { t: 4, r: 48, b: 24, l: Math.min(sbLabelWidth(svg, measures) + 10, W * 0.45) };
+    const y = d3.scaleBand(measures, [m.t, H - m.b]).padding(0.2);
+    const yi = d3.scaleBand(['Low', 'High'], [0, y.bandwidth()]).padding(0.1);
+    const x = d3.scaleLinear([0, d3.max(rows, r => r.ms)], [m.l, W - m.r]).nice();
+    svg.append('g').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(x).ticks(5).tickFormat(v => v + ' ms').tickSize(-(H - m.t - m.b))).call(sbAxis).call(g => g.select('.domain').remove());
+    svg.append('g').selectAll('text').data(measures).join('text').attr('x', m.l - 8).attr('y', s => y(s) + y.bandwidth() / 2).attr('dy', '0.35em').attr('text-anchor', 'end').attr('fill', 'var(--color-fg)').style('font-size', 'var(--cds-font-size-caption)').text(s => s);
+    const tip = sbTip(box);
+    svg.append('g').selectAll('rect').data(rows).join('rect')
+      .attr('x', m.l).attr('y', r => y(r.measure) + yi(r.tier)).attr('height', yi.bandwidth()).attr('width', r => Math.max(1, x(r.ms) - m.l)).attr('rx', 3)
+      .attr('fill', r => r.measure.startsWith('Old counter') ? 'var(--cds-chart-muted)' : (r.tier === 'Low' ? dash.colors[0] : dash.colors[2]))
+      .on('mousemove', (e, r) => { const [px, py] = d3.pointer(e, box); tip.show([[r.measure], [r.tier + ' graphics', r.ms.toFixed(2) + ' ms']], px, py); })
+      .on('mouseleave', () => tip.hide());
+    svg.append('g').selectAll('text').data(rows).join('text').attr('x', r => x(r.ms) + 4).attr('y', r => y(r.measure) + yi(r.tier) + yi.bandwidth() / 2).attr('dy', '0.35em').attr('fill', 'var(--color-fg-muted)').style('font-size', 'var(--cds-font-size-caption)').text(r => r.ms.toFixed(1));
+  }
+  const sc = dash.data('scripts');
+  const sbox = document.querySelector('#scripts .sb-chart');
+  if (sc.status === 'error') sbFail(sbox);
+  else if (sc.status === 'ok' && sbox.clientWidth) {
+    const rows = sc.data.map(r => ({ label: r.script, value: +r.ms, kind: r.kind })).sort((a, b) => b.value - a.value)
+      .map((r, i) => ({ ...r, color: i === 0 ? dash.colors[0] : 'var(--cds-chart-muted)', tip: [[r.label], [r.kind === 'physics' ? 'Per physics tick' : 'Per frame', r.value.toFixed(3) + ' ms']] }));
+    sbHBars(sbox, rows, v => v.toFixed(3) + ' ms', 26);
+  } else sbox.replaceChildren();
+});
+</script>
+
+<script>
+dash.onData(() => {
+  // Stutter: fight start costs, build parts, hitch table.
+  const st = dash.data('match_start');
+  const box = document.querySelector('#start-cost .sb-chart');
+  box.replaceChildren();
+  document.getElementById('lg-build').style.setProperty('--sw', dash.colors[3]);
+  document.getElementById('lg-first').style.setProperty('--sw', dash.colors[4]);
+  if (st.status === 'error') sbFail(box);
+  else if (st.status === 'ok' && box.clientWidth) {
+    const rows = st.data.map(r => ({ fight: +r.fight, build: +r.build_ms, first: +r.first_frame_ms }));
+    const W = box.clientWidth, H = 240, m = { t: 10, r: 12, b: 26, l: 52 };
+    const x = d3.scaleBand(rows.map(r => r.fight), [m.l, W - m.r]).padding(0.3);
+    const y = d3.scaleLinear([0, d3.max(rows, r => r.build + r.first)], [H - m.b, m.t]).nice();
+    const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`);
+    svg.append('g').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(5).tickFormat(v => v + ' ms').tickSize(-(W - m.l - m.r))).call(sbAxis).call(g => g.select('.domain').remove());
+    svg.append('g').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(x).tickFormat(f => 'Match ' + f).tickSizeOuter(0)).call(sbAxis);
+    const tip = sbTip(box);
+    const g = svg.append('g').selectAll('g').data(rows).join('g')
+      .on('mousemove', (e, r) => { const [px, py] = d3.pointer(e, box); tip.show([['Match ' + r.fight], ['Build', r.build.toFixed(1) + ' ms'], ['First frame', r.first.toFixed(1) + ' ms'], ['Total freeze', (r.build + r.first).toFixed(0) + ' ms']], px, py); })
+      .on('mouseleave', () => tip.hide());
+    g.append('rect').attr('x', r => x(r.fight)).attr('width', x.bandwidth()).attr('y', r => y(r.build)).attr('height', r => H - m.b - y(r.build)).attr('fill', dash.colors[3]);
+    g.append('rect').attr('x', r => x(r.fight)).attr('width', x.bandwidth()).attr('y', r => y(r.build + r.first)).attr('height', r => y(r.build) - y(r.build + r.first)).attr('rx', 3).attr('fill', dash.colors[4]);
+    svg.append('g').selectAll('text').data(rows).join('text').attr('x', r => x(r.fight) + x.bandwidth() / 2).attr('y', r => y(r.build + r.first) - 4).attr('text-anchor', 'middle').attr('fill', 'var(--color-fg-muted)').style('font-size', 'var(--cds-font-size-caption)').text(r => Math.round(r.build + r.first) + ' ms');
+  }
+  const bp = dash.data('build_parts');
+  const bbox = document.querySelector('#build-parts .sb-chart');
+  if (bp.status === 'error') sbFail(bbox);
+  else if (bp.status === 'ok' && bbox.clientWidth) {
+    const rows = bp.data.map(r => ({ label: r.part, value: +r.ms, color: r.fix !== '-' ? 'var(--cds-chart-status-critical)' : 'var(--cds-chart-muted)',
+      tip: [[r.part], ['Build time', (+r.ms).toFixed(1) + ' ms'], ['Scene objects', String(r.nodes)], ['Fix', r.fix]] }));
+    sbHBars(bbox, rows, v => v.toFixed(0) + ' ms', 28);
+  } else bbox.replaceChildren();
+  sbTable('#hitches', dash.data('hitch_frames'), ['fight', 'frame', 'ms', 'cause'], (c, r) => c === 'ms' ? Number(r.ms).toFixed(1) : null);
+});
+</script>
+
+<script>
+dash.onData(() => {
+  // Assets: per-group tiles and the triangle budget chart.
+  const st = dash.data('models');
+  const box = document.querySelector('#models .sb-chart');
+  const legend = document.getElementById('models-legend');
+  const kpis = document.getElementById('asset-kpis');
+  legend.replaceChildren(); kpis.replaceChildren();
+  if (st.status === 'error') return sbFail(box);
+  if (st.status !== 'ok') return box.replaceChildren();
+  const rows = st.data.map(r => ({ model: r.model, group: r.group, tris: +r.triangles, kb: +r.size_kb, budget: +r.budget }));
+  const groups = [...new Set(rows.map(r => r.group))];
+  const color = g => dash.colors[groups.indexOf(g) % dash.colors.length];
+  groups.forEach(g => {
+    const s = document.createElement('span'); s.textContent = g; s.style.setProperty('--sw', color(g)); legend.appendChild(s);
+    const gr = rows.filter(r => r.group === g);
+    const k = document.createElement('div'); k.className = 'sb-kpi';
+    const l = document.createElement('div'); l.className = 'lbl'; l.textContent = g;
+    const v = document.createElement('div'); v.className = 'val'; v.textContent = String(gr.length);
+    const sub = document.createElement('div'); sub.className = 'sub'; sub.textContent = `${d3.format(',')(d3.sum(gr, r => r.tris))} triangles, largest ${d3.format(',')(d3.max(gr, r => r.tris))}`;
+    k.append(l, v, sub); kpis.appendChild(k);
+  });
+  if (!box.clientWidth) return;
+  sbHBars(box, rows.map(r => ({ label: r.model, value: r.tris, ref: r.budget, color: r.tris > r.budget ? 'var(--cds-chart-status-critical)' : color(r.group),
+    tip: [[r.model], ['Group', r.group], ['Triangles', d3.format(',')(r.tris)], ['Budget', d3.format(',')(r.budget)], ['File size', r.kb ? r.kb.toFixed(1) + ' KB' : 'not recorded']] })), v => d3.format(',')(v), 19);
+});
+</script>
+
+<script>
+dash.onData(() => {
+  // Pipeline: runner history and latest runner measurements.
+  sbTable('#runner', dash.data('runner_jobs'), ['started', 'result', 'failed_step', 'cause'], (c, r) => c === 'result' ? sbPill(r.result) : c === 'started' ? String(r.started).replace('T', ' ').replace('Z', '') : null);
+  const fmt = d3.format(',');
+  sbTable('#runner-perf', dash.data('runner_perf'), ['tier', 'physics_ms', 'effects_ms', 'draw_calls', 'triangles', 'video_mem_mb', 'old_counter_ms'],
+    (c, r) => c === 'triangles' || c === 'draw_calls' ? fmt(Number(r[c])) : c === 'tier' ? r.tier : Number(r[c]).toFixed(1));
+});
+</script>

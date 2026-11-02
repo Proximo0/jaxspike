@@ -1,0 +1,15 @@
+{
+ "project": {"title": "Project settings", "description": "Name, repo, workflow names, tab labels and targets the board reads. Written by refresh.py from the board config.", "schedule": "Rebuilt with refresh.py, then re-uploaded", "staleAfterHours": 24},
+ "workers": {"title": "Workers and threads", "description": "Every worker: what it builds, where it runs, model, status and branch. Kept by the lead in workers_src.json.", "schedule": "Rebuilt with refresh.py, then re-uploaded", "staleAfterHours": 6},
+ "needs_owner": {"title": "Waiting on the owner", "description": "What needs the project owner, blocking or optional. Kept by the lead in needs_owner_src.json.", "schedule": "Rebuilt with refresh.py, then re-uploaded", "staleAfterHours": 6},
+ "commits": {"title": "Commits on main", "description": "Commits to main over the refresh window (UTC), from the GitHub REST commits API.", "schedule": "Rebuilt with refresh.py, then re-uploaded", "staleAfterHours": 6},
+ "branches": {"title": "Branches against main", "description": "Each pushed branch compared with main (GitHub compare API), plus local-only branches in the refresh clone.", "schedule": "Rebuilt with refresh.py, then re-uploaded", "staleAfterHours": 6},
+ "runs": {"title": "GitHub Actions runs", "description": "The last 100 workflow runs from the Actions REST API, with duration in seconds.", "schedule": "Rebuilt with refresh.py, then re-uploaded", "staleAfterHours": 6},
+ "checks": {"title": "Latest checks on main", "description": "Job results of the newest finished checks run on main, with test, sim and script counts from main's tree.", "schedule": "Rebuilt with refresh.py, then re-uploaded", "staleAfterHours": 6},
+ "assets_glb": {"title": "Asset files on main", "description": "Asset files of the configured type per folder under the assets directory on main.", "schedule": "Rebuilt with refresh.py, then re-uploaded", "staleAfterHours": 24},
+ "goals": {"title": "Goals vs measured", "description": "The goals table from the configured markdown file, each status classed Met, Missed, Unmeasured, No target or Weak; rows tied to a workflow kept live from its runs.", "schedule": "Rebuilt with refresh.py, then re-uploaded", "staleAfterHours": 24},
+ "balance": {"title": "Balance studies", "description": "Before/after win rates per matchup for each configured study.", "schedule": "Rebuilt with refresh.py, then re-uploaded", "staleAfterHours": 48},
+ "balance_matrix": {"title": "Balance matrix", "description": "The balance matrix CSV from main once it exists; empty until then.", "schedule": "Rebuilt with refresh.py, then re-uploaded", "staleAfterHours": 48},
+ "threads": {"title": "Thread cost", "description": "Per-thread cost in USD, tokens and wall clock from each thread's cloud session record (thread_costs.py).", "schedule": "Daily cost routine, plus each lead refresh", "staleAfterHours": 30},
+ "threads_total": {"title": "Thread cost total", "description": "Totals over the threads dataset.", "schedule": "Daily cost routine, plus each lead refresh", "staleAfterHours": 30}
+}

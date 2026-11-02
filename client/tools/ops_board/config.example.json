@@ -1,0 +1,38 @@
+{
+ "project": {
+  "name": "My Game",
+  "board_title": "My Game ops board",
+  "owner": "Owner",
+  "pc_label": "Owner's PC",
+  "checks_workflow": "checks",
+  "perf_workflow": "gpu",
+  "tabs": "overview:Overview;work:Work;quality:Quality;performance:Performance;balance:Balance;assets:Assets;goals:Goals",
+  "deadline_utc": "",
+  "deadline_label": "",
+  "match_word": "match",
+  "fps_target": 60,
+  "freeze_target_ms": 33,
+  "hitch_ms": 25,
+  "perf_avg_measure": "Real frame, average",
+  "perf_scenario": "in the heaviest scene",
+  "perf_scenario_short": "heaviest scene",
+  "perf_machine": "Owner's PC, 1920x1080",
+  "soak_label": "back-to-back bot matches for 10 minutes",
+  "asset_budget_label": "triangle budget",
+  "assets_label": ".glb files",
+  "balance_matrix_path": ""
+ },
+ "main_branch": "main",
+ "out_dir": "out",
+ "commit_days": 2,
+ "updated_by": "Claude (lead, refresh.py)",
+ "sources": {"workers": "workers_src.json", "needs_owner": "needs_owner_src.json"},
+ "assets": {"dir": "assets", "ext": ".glb"},
+ "goals": {"md": "/abs/path/to/goals.md", "heading": "## Goals table", "live": [{"target_prefix": "GPU CI green", "workflow": "gpu"}]},
+ "balance": {"studies": [
+  {"id": "example", "title": "Weapon A win rate, before and after the change", "note": "40 fights per cell.", "band": [0.35, 0.65], "ref": 0.5, "ref_label": "even", "fights": 40, "source": {"md": "docs/balance_example.md"}}
+ ]},
+ "extra_files": [
+  {"dataset": "balance_matrix", "path": "docs/balance_matrix.csv", "format": "csv", "empty_if_missing": true}
+ ]
+}

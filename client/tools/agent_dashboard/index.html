@@ -1,0 +1,340 @@
+<style>
+.at { display: grid; gap: var(--cds-gap-lg); font-family: var(--font-anthropic-sans); }
+.at-head h1 { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: var(--cds-font-size-title); margin: 0; text-wrap: balance; }
+.at-take { color: var(--color-fg-muted); font-size: var(--cds-font-size-body); margin: var(--cds-gap-xs) 0 0; }
+.at-tiles { display: grid; gap: var(--cds-gap-md); grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr)); }
+.at-tile, .at-card { background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-lg); min-width: 0; }
+.at-tile .lbl { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+.at-tile .val { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: var(--cds-font-size-title); font-variant-numeric: tabular-nums; margin-top: var(--cds-gap-xs); }
+.at-tile .sub { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); margin-top: var(--cds-gap-xs); }
+.at-grid { display: grid; gap: var(--cds-gap-md); grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); }
+.at-card h2 { font-size: var(--cds-font-size-heading); font-weight: var(--cds-font-weight-medium); margin: 0; }
+.at-card .note { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); margin: var(--cds-gap-xs) 0 var(--cds-gap-md); }
+.at-chart { position: relative; min-height: 240px; }
+.at-chart.short { min-height: 180px; }
+.at-tip { position: absolute; pointer-events: none; background: var(--cds-surface-popover); border: 1px solid var(--cds-border); border-radius: var(--cds-radius); box-shadow: var(--cds-shadow-popover); padding: var(--cds-pad-xs) var(--cds-pad-sm); font-size: var(--cds-font-size-caption); white-space: nowrap; z-index: 2; }
+.at-tip .d { color: var(--cds-text-secondary); }
+.at-tip .sw { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; }
+.at-legend { display: flex; flex-wrap: wrap; gap: var(--cds-gap-md); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); margin-bottom: var(--cds-gap-sm); }
+.at-legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+.at-tablebox { max-height: 30rem; overflow: auto; }
+.at table { width: 100%; border-collapse: collapse; font-size: var(--cds-font-size-caption); font-variant-numeric: tabular-nums; }
+.at th { position: sticky; top: 0; background: var(--color-panel); text-align: left; font-weight: var(--cds-font-weight-medium); color: var(--color-fg-muted); padding: var(--cds-pad-xs) var(--cds-pad-sm); border-bottom: 1px solid var(--color-border-line); }
+.at td { padding: var(--cds-pad-xs) var(--cds-pad-sm); border-bottom: 1px solid var(--color-border-line); vertical-align: middle; }
+.at td.num, .at th.num { text-align: right; }
+.at .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; border: 1px solid currentColor; font-size: var(--cds-font-size-caption); }
+.at .pill.running { color: var(--color-ok); }
+.at .pill.idle { color: var(--color-warn); }
+.at .pill.done { color: var(--color-fg-muted); }
+.at .pill.success { color: var(--color-ok); }
+.at .pill.failure { color: var(--color-bad); }
+.at .pill.other { color: var(--color-warn); }
+.at .bar { position: relative; min-width: 6rem; }
+.at .bar i { position: absolute; left: 0; top: 50%; height: 6px; transform: translateY(-50%); border-radius: 3px; background: var(--cds-chart-muted); opacity: .6; }
+.at .bar span { position: relative; }
+.at .hide-narrow { }
+@media (max-width: 640px) { .at .hide-narrow { display: none; } }
+.at-fail { display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); min-height: inherit; }
+.at-fail::before { content: ""; width: .375rem; height: .375rem; border-radius: 50%; background: var(--color-bad); }
+[data-dash-source-state=empty] { color: transparent; }
+[data-dash-source-state=refreshing] { opacity: .5; transition: opacity var(--cds-dur-slow); }
+</style>
+
+<div class="at">
+  <header class="at-head" id="top">
+    <h1>Jaxspike agent tracker</h1>
+    <p class="at-take dash-skeleton" id="takeaway" data-source="summary" data-field="takeaway">—</p>
+  </header>
+
+  <section class="at-tiles" id="headline">
+    <div class="at-tile"><div class="lbl">Token pull, last full minute</div><div class="val dash-skeleton" data-source="summary" data-field="last_minute_tokens">—</div><div class="sub">all agents, all models</div></div>
+    <div class="at-tile"><div class="lbl">Average pull, last 10 minutes</div><div class="val dash-skeleton" data-source="summary" data-field="avg10_tokens">—</div><div class="sub">tokens per minute</div></div>
+    <div class="at-tile"><div class="lbl">Tokens so far</div><div class="val dash-skeleton" data-source="summary" data-field="total_tokens">—</div><div class="sub">input, cache and output</div></div>
+    <div class="at-tile"><div class="lbl">Agents running</div><div class="val dash-skeleton" data-source="summary" data-field="running_label">—</div><div class="sub">of all agents started</div></div>
+    <div class="at-tile"><div class="lbl">Cache hit rate</div><div class="val dash-skeleton" data-source="summary" data-field="cache_hit">—</div><div class="sub">share of input read from cache</div></div>
+    <div class="at-tile"><div class="lbl">Commits pushed</div><div class="val dash-skeleton" data-source="summary" data-field="commits">—</div><div class="sub dash-skeleton" data-source="summary" data-field="ci_label">—</div></div>
+  </section>
+
+  <section class="at-card" id="pull">
+    <h2>Token pull per minute</h2>
+    <p class="note">Every token the models processed each minute (input, cache reads and writes, output), stacked by model.</p>
+    <div class="at-legend" id="pull-legend" data-source="tokens"></div>
+    <div class="at-chart" id="pull-chart" data-source="tokens"></div>
+  </section>
+
+  <section class="at-grid">
+    <div class="at-card" id="models">
+      <h2>Tokens by model</h2>
+      <p class="note">Whole session. Cheap models should carry most of the worker load.</p>
+      <div class="at-chart short" id="model-chart" data-source="by_model"></div>
+    </div>
+    <div class="at-card" id="agent-tokens">
+      <h2>Tokens by agent</h2>
+      <p class="note">Whole session, largest first, colored by model.</p>
+      <div class="at-chart short" id="agent-chart" data-source="agents"></div>
+    </div>
+  </section>
+
+  <section class="at-card" id="agents">
+    <h2>Agents</h2>
+    <p class="note">The lead and every worker it started. Idle means no activity for 5 minutes.</p>
+    <div class="at-tablebox">
+      <table data-source="agents" data-row-key="id" id="agents-table">
+        <thead><tr>
+          <th data-field="agent">Agent</th>
+          <th data-field="model">Model</th>
+          <th data-field="status">Status</th>
+          <th class="num hide-narrow" data-field="minutes">Minutes</th>
+          <th class="num hide-narrow" data-field="turns">Turns</th>
+          <th class="num hide-narrow" data-field="tool_calls">Tool calls</th>
+          <th class="num" data-field="total_tokens">Tokens</th>
+          <th class="num hide-narrow" data-field="output_tokens">Output</th>
+          <th class="num hide-narrow" data-source="agent_cache" data-field="cache_hit">Cache hit</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="at-card" id="ci">
+    <h2>CI runs</h2>
+    <p class="note">The repo's checks workflow (unit tests, lint, sims) on every push, newest first.</p>
+    <div class="at-tablebox">
+      <table data-source="ci_runs" data-row-key="id" id="ci-table">
+        <thead><tr>
+          <th data-field="time">Started</th>
+          <th data-field="title">Commit</th>
+          <th data-field="result">Result</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<script>
+dash.calc('summary', {
+  inputs: ['agents', 'tokens', 'project'],
+  title: 'Headline figures',
+  description: 'Current and average token pull, totals, running agents, cache hit rate, commits and the latest CI result.',
+  fn: (agents, tokens, project) => {
+    const perMin = new Map();
+    for (const r of tokens) perMin.set(r.minute, (perMin.get(r.minute) || 0) + r.total_tokens);
+    const mins = [...perMin.keys()].sort();
+    const full = mins.slice(0, -1);
+    const last = full.length ? perMin.get(full[full.length - 1]) : 0;
+    const ten = full.slice(-10);
+    const avg10 = ten.length ? ten.reduce((s, m) => s + perMin.get(m), 0) / ten.length : 0;
+    const total = agents.reduce((s, a) => s + a.total_tokens, 0);
+    const running = agents.filter((a) => a.status === 'running').length;
+    const inTok = agents.reduce((s, a) => s + a.input_tokens + a.cache_read_tokens + a.cache_write_tokens, 0);
+    const cacheRead = agents.reduce((s, a) => s + a.cache_read_tokens, 0);
+    const commits = project.filter((r) => r.kind === 'commit').length;
+    const ci = project.filter((r) => r.kind === 'ci').sort((a, b) => (a.time < b.time ? 1 : -1));
+    const latest = ci.find((r) => r.status === 'completed' && r.conclusion !== 'cancelled');
+    const busiest = agents.filter((a) => a.role === 'worker').sort((a, b) => b.total_tokens - a.total_tokens)[0];
+    return [{
+      last_minute_tokens: last,
+      avg10_tokens: Math.round(avg10),
+      total_tokens: total,
+      running: running,
+      agents: agents.length,
+      running_label: running + ' / ' + agents.length,
+      cache_hit: inTok ? cacheRead / inTok : 0,
+      commits: commits,
+      ci_label: latest ? 'Last CI: ' + latest.conclusion : 'No CI result yet',
+      takeaway: running + ' of ' + agents.length + ' agents running; ' + (busiest ? busiest.agent + ' is the heaviest worker' : 'no workers yet') + '.',
+    }];
+  },
+});
+
+dash.calc('by_model', {
+  inputs: ['tokens'],
+  title: 'Tokens by model',
+  description: 'Total tokens per model over the whole session.',
+  fn: (tokens) => {
+    const m = new Map();
+    for (const r of tokens) m.set(r.model, (m.get(r.model) || 0) + r.total_tokens);
+    return [...m].map(([model, total_tokens]) => ({ model, total_tokens })).sort((a, b) => b.total_tokens - a.total_tokens);
+  },
+});
+
+dash.calc('agent_cache', {
+  inputs: ['agents'],
+  title: 'Cache hit per agent',
+  description: 'Cache reads as a share of all input tokens, per agent.',
+  fn: (agents) => agents.map((a) => {
+    const inTok = a.input_tokens + a.cache_read_tokens + a.cache_write_tokens;
+    return { id: a.id, cache_hit: inTok ? a.cache_read_tokens / inTok : 0 };
+  }),
+});
+
+dash.calc('ci_runs', {
+  inputs: ['project'],
+  title: 'CI runs',
+  description: 'The CI rows of the project file, newest first.',
+  fn: (project) => project.filter((r) => r.kind === 'ci')
+    .map((r) => ({ id: r.id, time: r.time, title: r.title, result: r.status === 'completed' ? r.conclusion : r.status }))
+    .sort((a, b) => (a.time < b.time ? 1 : -1)),
+});
+
+(() => {
+  const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
+  const fmtN = (v) => (v >= 10000 ? compact.format(v) : d3.format(',')(v));
+  const pct = d3.format('.1%');
+  const MODELS = ['opus', 'sonnet', 'haiku', 'fable'];
+  const colorOf = (m) => dash.colors[(MODELS.indexOf(m) + MODELS.length) % MODELS.length] || dash.colors[4];
+
+  const fail = (el) => { el.replaceChildren(); const d = document.createElement('div'); d.className = 'at-fail'; d.textContent = 'Failed to load'; el.appendChild(d); };
+  const settle = (el, st) => { if (st !== 'loading') el.classList.remove('dash-skeleton'); };
+
+  function tiles() {
+    const s = dash.data('summary');
+    document.querySelectorAll('[data-source="summary"]').forEach((el) => {
+      settle(el, s.status);
+      if (s.status !== 'ok' || !s.data.length) { el.textContent = '—'; return; }
+      const v = s.data[0][el.dataset.field];
+      const f = el.dataset.field;
+      el.textContent = f === 'cache_hit' ? pct(v) : typeof v === 'number' ? fmtN(v) : v;
+    });
+  }
+
+  function measure(svg, texts) {
+    let w = 0;
+    const g = svg.append('g');
+    for (const t of texts) { const n = g.append('text').attr('font-size', 11).text(t).node(); w = Math.max(w, n.getComputedTextLength()); }
+    g.remove();
+    return w;
+  }
+
+  function tipAt(box, html, x, y) {
+    let tip = box.querySelector('.at-tip');
+    if (!tip) { tip = document.createElement('div'); tip.className = 'at-tip'; box.appendChild(tip); }
+    tip.replaceChildren(...html);
+    const bw = box.clientWidth;
+    tip.style.left = Math.max(0, Math.min(x + 12, bw - tip.offsetWidth)) + 'px';
+    tip.style.top = Math.max(0, y - tip.offsetHeight - 8) + 'px';
+    tip.hidden = false;
+  }
+  const hideTip = (box) => { const t = box.querySelector('.at-tip'); if (t) t.hidden = true; };
+  const line = (cls, text, color) => { const d = document.createElement('div'); if (cls) d.className = cls; if (color) { const s = document.createElement('span'); s.className = 'sw'; s.style.background = color; d.appendChild(s); } d.appendChild(document.createTextNode(text)); return d; };
+
+  function pull() {
+    const box = document.getElementById('pull-chart');
+    const legend = document.getElementById('pull-legend');
+    const t = dash.data('tokens');
+    box.replaceChildren(); legend.replaceChildren();
+    if (t.status === 'error' || t.status === 'connect') { fail(box); return; }
+    if (t.status !== 'ok' || !t.data.length) return;
+    const models = MODELS.filter((m) => t.data.some((r) => r.model === m && r.total_tokens > 0));
+    for (const m of models) { const s = document.createElement('span'); const sw = document.createElement('span'); sw.className = 'sw'; sw.style.background = colorOf(m); s.append(sw, m); legend.appendChild(s); }
+    const byMin = d3.rollup(t.data, (v) => Object.fromEntries(v.map((r) => [r.model, r.total_tokens])), (r) => r.minute);
+    const rows = [...byMin].map(([minute, o]) => ({ minute: new Date(minute), ...Object.fromEntries(models.map((m) => [m, o[m] || 0])) })).sort((a, b) => a.minute - b.minute);
+    const stack = d3.stack().keys(models)(rows);
+    const W = box.clientWidth || 600, H = 240;
+    const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`);
+    const yMax = d3.max(rows, (r) => d3.sum(models, (m) => r[m])) || 1;
+    const y = d3.scaleLinear([0, yMax], [H - 22, 8]).nice();
+    const yTicks = y.ticks(4);
+    const ml = measure(svg, yTicks.map((v) => compact.format(v))) + 10;
+    const x = d3.scaleBand(rows.map((r) => r.minute), [ml, W - 4]).padding(0.15);
+    svg.append('g').selectAll('line').data(yTicks).join('line').attr('x1', ml).attr('x2', W - 4).attr('y1', y).attr('y2', y).attr('stroke', 'var(--cds-chart-grid)');
+    svg.append('g').selectAll('text').data(yTicks).join('text').attr('x', ml - 6).attr('y', (v) => y(v) + 4).attr('text-anchor', 'end').attr('font-size', 11).attr('fill', 'var(--color-fg-muted)').text((v) => compact.format(v));
+    const every = Math.max(1, Math.ceil(rows.length / Math.max(2, Math.floor((W - ml) / 70))));
+    svg.append('g').selectAll('text').data(rows.filter((_, i) => i % every === 0)).join('text').attr('x', (r) => x(r.minute) + x.bandwidth() / 2).attr('y', H - 6).attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', 'var(--color-fg-muted)').text((r) => d3.utcFormat('%H:%M')(r.minute));
+    svg.append('g').selectAll('g').data(stack).join('g').attr('fill', (s) => colorOf(s.key))
+      .selectAll('rect').data((s) => s).join('rect')
+      .attr('x', (d) => x(d.data.minute)).attr('width', x.bandwidth())
+      .attr('y', (d) => y(d[1])).attr('height', (d) => Math.max(0, y(d[0]) - y(d[1])));
+    svg.append('line').attr('x1', ml).attr('x2', W - 4).attr('y1', y(0)).attr('y2', y(0)).attr('stroke', 'var(--cds-chart-axis)');
+    svg.append('rect').attr('x', ml).attr('y', 0).attr('width', W - ml).attr('height', H).attr('fill', 'transparent')
+      .on('mousemove', (ev) => {
+        const [px] = d3.pointer(ev, svg.node());
+        const sx = px * (W / box.clientWidth);
+        const i = Math.max(0, Math.min(rows.length - 1, Math.floor((sx - ml) / x.step())));
+        const r = rows[i];
+        const parts = [line('d', d3.utcFormat('%H:%M UTC')(r.minute)), line('', 'Total ' + d3.format(',')(d3.sum(models, (m) => r[m])))];
+        for (const m of models) parts.push(line('', m + ' ' + d3.format(',')(r[m]), colorOf(m)));
+        const [bx, by] = d3.pointer(ev, box);
+        tipAt(box, parts, bx, by);
+      })
+      .on('mouseleave', () => hideTip(box));
+  }
+
+  function hbars(boxId, rows, label, value, color) {
+    const box = document.getElementById(boxId);
+    box.replaceChildren();
+    const W = box.clientWidth || 400, rowH = 26, H = rows.length * rowH + 8;
+    const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`);
+    const ml = Math.min(W * 0.45, measure(svg, rows.map(label)) + 10);
+    const mr = measure(svg, rows.map((r) => fmtN(value(r)))) + 10;
+    const x = d3.scaleLinear([0, d3.max(rows, value) || 1], [ml, W - mr]);
+    const g = svg.selectAll('g').data(rows).join('g').attr('transform', (_, i) => `translate(0,${i * rowH + 4})`);
+    g.append('text').attr('x', ml - 8).attr('y', 15).attr('text-anchor', 'end').attr('font-size', 11).attr('fill', 'var(--color-fg)').text(label);
+    g.append('rect').attr('x', ml).attr('y', 5).attr('height', 14).attr('rx', 4).attr('width', (r) => Math.max(1, x(value(r)) - ml)).attr('fill', color);
+    g.append('text').attr('x', (r) => x(value(r)) + 6).attr('y', 15).attr('font-size', 11).attr('fill', 'var(--color-fg-muted)').text((r) => fmtN(value(r)));
+  }
+
+  function models() {
+    const d = dash.data('by_model');
+    const box = document.getElementById('model-chart');
+    if (d.status === 'error') { fail(box); return; }
+    if (d.status !== 'ok') { box.replaceChildren(); return; }
+    hbars('model-chart', d.data, (r) => r.model, (r) => r.total_tokens, (r) => colorOf(r.model));
+  }
+
+  function agentBars() {
+    const d = dash.data('agents');
+    const box = document.getElementById('agent-chart');
+    if (d.status === 'error') { fail(box); return; }
+    if (d.status !== 'ok') { box.replaceChildren(); return; }
+    const rows = [...d.data].sort((a, b) => b.total_tokens - a.total_tokens);
+    hbars('agent-chart', rows, (r) => r.agent, (r) => r.total_tokens, (r) => colorOf(r.model));
+  }
+
+  function agentsTable() {
+    const d = dash.data('agents');
+    const c = dash.data('agent_cache');
+    const body = document.querySelector('#agents-table tbody');
+    body.replaceChildren();
+    if (d.status !== 'ok') return;
+    const cache = new Map((c.status === 'ok' ? c.data : []).map((r) => [r.id, r.cache_hit]));
+    const max = d3.max(d.data, (r) => r.total_tokens) || 1;
+    const order = { running: 0, idle: 1, done: 2 };
+    const rows = [...d.data].sort((a, b) => (order[a.status] - order[b.status]) || (b.total_tokens - a.total_tokens));
+    for (const r of rows) {
+      const tr = document.createElement('tr');
+      tr.dataset.key = r.id;
+      const td = (text, cls) => { const e = document.createElement('td'); if (cls) e.className = cls; e.textContent = text; tr.appendChild(e); return e; };
+      td(r.agent);
+      td(r.model);
+      const st = td(''); const p = document.createElement('span'); p.className = 'pill ' + r.status; p.textContent = r.status; st.appendChild(p);
+      td(d3.format(',.1f')(r.minutes), 'num hide-narrow');
+      td(d3.format(',')(r.turns), 'num hide-narrow');
+      td(d3.format(',')(r.tool_calls), 'num hide-narrow');
+      const tk = td('', 'num bar'); const i = document.createElement('i'); i.style.width = (100 * r.total_tokens / max) + '%'; const sp = document.createElement('span'); sp.textContent = fmtN(r.total_tokens); tk.append(i, sp);
+      td(fmtN(r.output_tokens), 'num hide-narrow');
+      td(cache.has(r.id) ? pct(cache.get(r.id)) : '—', 'num hide-narrow');
+      body.appendChild(tr);
+    }
+  }
+
+  function ciTable() {
+    const d = dash.data('ci_runs');
+    const body = document.querySelector('#ci-table tbody');
+    body.replaceChildren();
+    if (d.status !== 'ok') return;
+    for (const r of d.data.slice(0, 25)) {
+      const tr = document.createElement('tr');
+      tr.dataset.key = r.id;
+      const a = document.createElement('td'); a.textContent = d3.utcFormat('%b %-d %H:%M')(new Date(r.time)); tr.appendChild(a);
+      const b = document.createElement('td'); b.textContent = r.title; tr.appendChild(b);
+      const c = document.createElement('td'); const p = document.createElement('span');
+      p.className = 'pill ' + (r.result === 'success' ? 'success' : r.result === 'failure' ? 'failure' : 'other'); p.textContent = r.result; c.appendChild(p); tr.appendChild(c);
+      body.appendChild(tr);
+    }
+  }
+
+  dash.onData(() => { tiles(); pull(); models(); agentBars(); agentsTable(); ciTable(); });
+})();
+</script>

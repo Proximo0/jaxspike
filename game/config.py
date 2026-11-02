@@ -76,4 +76,9 @@ VIEW_H = 33
 PATH_RADIUS = 32
 PATH_STUCK_TICKS = 8
 SAVE_EVERY_TICKS = 2400
-PROTOCOL_VERSION = 1
+PROTOCOL_VERSION = 1  # becomes 2 when net/ lands protocol v2 (docs/m0_brief.md)
+
+# Protocol v2 visibility (game/view.py): entities per viewer per tick and viewer rows.
+N_ENTITIES = MAX_PLAYERS + MAX_MONSTERS + MAX_DROPS
+MAX_VIEWERS = MAX_PLAYERS
+VIEW_K = 256

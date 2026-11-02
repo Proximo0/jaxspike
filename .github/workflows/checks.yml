@@ -1,0 +1,74 @@
+# Every check as a parallel job matrix, one GitHub runner per job. Locally the client checks run together with
+# client/tools/check_all.sh and the engine tests with `python -m pytest tests -q`; here each one gets its own machine.
+name: checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GODOT_VERSION: 4.7.2
+  GODOT: godot
+
+jobs:
+  engine:
+    name: engine-${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: pytest, cmd: "python -m pytest tests -q -p no:cacheprovider" }
+          - { name: soak, cmd: "python bench/soak_check.py --batch 2 --chunks 2 --ticks 100 --seed 0" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: pip install -r requirements.txt
+      - name: Run ${{ matrix.name }}
+        env:
+          JAX_PLATFORMS: cpu
+        run: ${{ matrix.cmd }}
+
+  client:
+    name: client-${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: client
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: unit, cmd: "tools/run_tests.sh" }
+          - { name: lint, cmd: "tools/lint.sh" }
+          - { name: sims, cmd: "tools/run_sims.sh" }
+          # Play-bot fan-out: once tests/bot/bot.tscn exists, uncomment one row per shard and keep
+          # --nshards equal to the number of rows.
+          # - { name: bot-0, cmd: "timeout 300 godot --headless --fixed-fps 60 --path . res://tests/bot/bot.tscn -- --shard=0 --nshards=3 | tee out.log; grep -q '^BOT score=' out.log && ! grep -q '^BOT .* FAIL ' out.log" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-godot
+      - name: Run ${{ matrix.name }}
+        shell: bash
+        run: |
+          set -o pipefail
+          godot --headless --path . --import > /tmp/import.log 2>&1 || { cat /tmp/import.log; exit 1; }
+          bash -c "${{ matrix.cmd }}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ${{ matrix.name }}
+          path: client/out.log
+          if-no-files-found: ignore

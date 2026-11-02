@@ -1,0 +1,12 @@
+# Godot cache and generated output
+.godot/
+/build/
+/out/
+__pycache__/
+*.pyc
+
+# Credentials for online services and signing (docs/online.md): never commit them
+config/*credentials*
+*credentials*.cfg
+*.keystore
+*.jks
