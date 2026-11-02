@@ -14,6 +14,11 @@ const MAX_STALLS: int = 3
 const MONSTER_KIND_MIN: int = 1
 const MONSTER_KIND_MAX: int = 99
 const PICK_TRIES: int = 30
+const ARRIVE_TILES: int = 1
+const WALK_TIMEOUT_TICKS: int = 120
+const HIT_WINDOW_TICKS: int = 10
+const MIN_ATTACKS_FOR_HIT_CHECK: int = 5
+const MAX_PATH_MISS_RATIO: float = 0.5
 
 var _session: NetSession = NetSession.new(WsLink.new())
 var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
@@ -34,13 +39,25 @@ var _errors: int = 0
 var _reported_error: String = ""
 var _fails: Array[String] = []
 var _done: bool = false
+var _walks: int = 0
+var _path_miss: int = 0
+var _walk_tick: int = 0
+var _walk_notice: bool = false
+var _attacks: int = 0
+var _hits: int = 0
+var _attack_miss: int = 0
+var _probe_id: int = -1
+var _probe_hp: int = 0
+var _probe_tick: int = 0
+var _kills: int = 0
+var _kills_base: int = -1
 
 
 func _ready() -> void:
 	var url: String = Flags.get_arg("url")
 	if url.is_empty():
 		print("BOT skipped no --url")
-		print("BOT score=0 errors=0 stalls=0 moved=0")
+		print("BOT score=0 errors=0 stalls=0 moved=0 walks=0 path_miss=0 attacks=0 hits=0 attack_miss=0 kills=0")
 		_done = true
 		get_tree().quit(0)
 		return
@@ -64,6 +81,10 @@ func _physics_process(_delta: float) -> void:
 		if String(m["t"]) == "error":
 			_errors += 1
 			_reported_error = _session.last_error
+		elif String(m["t"]) == "snap":
+			var n: Variant = m.get("notice")
+			if typeof(n) == TYPE_STRING and (n == "too far" or n == "blocked"):
+				_walk_notice = true
 	if not _logged_in and _session.link.state() == NetLink.STATE_OPEN:
 		_session.login("bot%d" % _shard)
 		_logged_in = true
@@ -80,13 +101,15 @@ func _physics_process(_delta: float) -> void:
 			_finish(1)
 		return
 	_track_position()
-	if _walk_pending and _target == _last_pos:
-		_walk_pending = false
-	if now_ms >= _next_walk_ms:
+	_check_walk()
+	if now_ms >= _next_walk_ms and not _walk_pending:
 		_next_walk_ms = now_ms + int(WALK_INTERVAL_S * 1000.0)
 		_pick_and_walk()
-	if _monster_adjacent():
+	var adj: int = _adjacent_monster()
+	if adj >= 0:
 		_session.send_input(0, true, false)
+	_track_attack(adj)
+	_track_kills()
 	if elapsed_s >= _seconds:
 		_finish(_report())
 
@@ -107,6 +130,8 @@ func _track_position() -> void:
 	if _walk_pending and _target != pos and tick - _still_since_tick >= STALL_TICKS:
 		_stalls += 1
 		_walk_pending = false
+		if not _walk_notice:
+			_path_miss += 1
 		_still_since_tick = tick
 
 
@@ -123,11 +148,14 @@ func _pick_and_walk() -> void:
 			_target = t
 			_walk_pending = true
 			_still_since_tick = _session.store.tick
+			_walks += 1
+			_walk_tick = _session.store.tick
+			_walk_notice = false
 			_session.walk_to(t.x, t.y)
 			return
 
 
-func _monster_adjacent() -> bool:
+func _adjacent_monster() -> int:
 	for id: int in _session.store.ids():
 		var e: Dictionary = _session.store.get_ent(id)
 		var kind: int = int(e.get("kind", 0))
@@ -135,8 +163,45 @@ func _monster_adjacent() -> bool:
 			continue
 		var p: Vector2i = e["pos"]
 		if absi(p.x - _last_pos.x) + absi(p.y - _last_pos.y) == 1:
-			return true
-	return false
+			return id
+	return -1
+
+
+## Scores a walk once: arrived within ARRIVE_TILES or a too-far/blocked notice is fine, a timeout is a path_miss.
+func _check_walk() -> void:
+	if not _walk_pending:
+		return
+	var d: int = maxi(absi(_target.x - _last_pos.x), absi(_target.y - _last_pos.y))
+	if d <= ARRIVE_TILES or _walk_notice:
+		_walk_pending = false
+	elif _session.store.tick - _walk_tick >= WALK_TIMEOUT_TICKS:
+		_walk_pending = false
+		_path_miss += 1
+
+
+## Probes whether attacking an adjacent monster lowers its hp (or removes it) within HIT_WINDOW_TICKS.
+func _track_attack(adj: int) -> void:
+	var tick: int = _session.store.tick
+	if _probe_id >= 0:
+		var e: Dictionary = _session.store.get_ent(_probe_id)
+		if e.is_empty() or int(e.get("hp", 0)) < _probe_hp:
+			_hits += 1
+			_probe_id = -1
+		elif tick - _probe_tick >= HIT_WINDOW_TICKS:
+			_attack_miss += 1
+			_probe_id = -1
+	if _probe_id < 0 and adj >= 0:
+		_probe_id = adj
+		_probe_hp = int(_session.store.get_ent(adj).get("hp", 0))
+		_probe_tick = tick
+		_attacks += 1
+
+
+func _track_kills() -> void:
+	var k: int = int(_session.store.you.get("kills", 0))
+	if _kills_base < 0:
+		_kills_base = k
+	_kills = k - _kills_base
 
 
 func _report() -> int:
@@ -148,6 +213,10 @@ func _report() -> int:
 		_fail("zero movement over the whole run")
 	if _stalls > MAX_STALLS:
 		_fail("%d stalls (max %d)" % [_stalls, MAX_STALLS])
+	if _walks > 0 and float(_path_miss) > MAX_PATH_MISS_RATIO * float(_walks):
+		_fail("path_miss %d of %d walks" % [_path_miss, _walks])
+	if _attacks >= MIN_ATTACKS_FOR_HIT_CHECK and _hits == 0:
+		_fail("0 hits in %d attacks (%d attack_miss)" % [_attacks, _attack_miss])
 	return 1 if not _fails.is_empty() else 0
 
 
@@ -160,6 +229,7 @@ func _finish(code: int) -> void:
 	if _done:
 		return
 	_done = true
-	print("BOT score=%d errors=%d stalls=%d moved=%d" % [_session.store.snaps, _errors, _stalls, _moved])
+	print("BOT score=%d errors=%d stalls=%d moved=%d walks=%d path_miss=%d attacks=%d hits=%d attack_miss=%d kills=%d" % [
+		_session.store.snaps, _errors, _stalls, _moved, _walks, _path_miss, _attacks, _hits, _attack_miss, _kills])
 	_session.close()
 	get_tree().quit(code)

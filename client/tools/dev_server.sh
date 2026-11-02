@@ -5,7 +5,7 @@
 set -uo pipefail
 cd "$(dirname "$0")/../.."
 PORT="${1:-8765}"
-PY="${PYTHON:-C:/Users/crp27/jaxspike/venv/Scripts/python.exe}"
+case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) PY="${PYTHON:-$PWD/venv/Scripts/python.exe}" ;; *) PY="${PYTHON:-python3}" ;; esac
 LOG="${DEV_SERVER_LOG:-/tmp/dev_server.$PORT.log}"
 "$PY" -m net.server --host 127.0.0.1 --port "$PORT" >"$LOG" 2>&1 &
 PID=$!

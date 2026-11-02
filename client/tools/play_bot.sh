@@ -5,7 +5,7 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 GODOT="${GODOT:-godot}"
-PY="${PYTHON:-C:/Users/crp27/jaxspike/venv/Scripts/python.exe}"
+case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) PY="${PYTHON:-$PWD/../venv/Scripts/python.exe}" ;; *) PY="${PYTHON:-python3}" ;; esac
 PORT=$("$PY" -c "import socket; s=socket.socket(); s.bind(('127.0.0.1',0)); print(s.getsockname()[1])")
 export DEV_SERVER_LOG="/tmp/play_bot.$PORT.log"
 line=$(tools/dev_server.sh "$PORT") || { echo "$line"; echo "BOT server FAIL could not start"; exit 1; }
