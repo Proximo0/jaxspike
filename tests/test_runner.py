@@ -5,8 +5,19 @@ import pytest
 
 from bots import runner
 from game import persistence
-from game.config import MAX_MONSTERS, MAX_PLAYERS, MONSTER_HP, T_WATER
+from game.config import (
+    MAP,
+    MAX_MONSTERS,
+    MAX_PLAYERS,
+    MONSTER_HP,
+    MONSTER_KIND_ORC,
+    MONSTER_KIND_RAT,
+    T_TEMPLE,
+    T_WATER,
+)
+from game.map_gen import blocking, make_terrain, protection_zone
 from game.state import make_empty_world
+from game.world_layout import RAT_RING, TOWNS, dist_to_nearest_town, temple_tiles
 
 
 def test_persistence_roundtrip_exact(tmp_path):
@@ -31,7 +42,8 @@ def test_persistence_roundtrip_exact(tmp_path):
 
 def test_spawn_population_counts():
     w = make_empty_world(jax.random.PRNGKey(0))
-    w["walls"] = w["walls"].at[0, :].set(1).at[:, 0].set(1)
+    terrain = make_terrain(jax.random.PRNGKey(2))
+    w = {**w, "terrain": terrain, "walls": blocking(terrain), "pz": protection_zone(terrain)}
     w = runner.spawn_population(w, jax.random.PRNGKey(1))
     assert int(w["players"]["active"].sum()) == min(128, MAX_PLAYERS)
     assert int(w["monsters"]["active"].sum()) == min(512, MAX_MONSTERS)
@@ -39,10 +51,54 @@ def test_spawn_population_counts():
         pos = np.asarray(w[e]["pos"])[np.asarray(w[e]["active"])]
         assert (np.asarray(w["walls"])[pos[:, 0], pos[:, 1]] == 0).all()
         np.testing.assert_array_equal(pos, np.asarray(w[e]["spawn"])[np.asarray(w[e]["active"])])
+    ppos = np.asarray(w["players"]["pos"])[np.asarray(w["players"]["active"])]
+    assert (np.asarray(terrain)[ppos[:, 0], ppos[:, 1]] == T_TEMPLE).all()
     m = w["monsters"]
     kind = np.asarray(m["kind"])[np.asarray(m["active"])]
     assert set(kind.tolist()) <= {0, 1}
     np.testing.assert_array_equal(np.asarray(m["hp"])[np.asarray(m["active"])], np.asarray(MONSTER_HP)[kind])
+
+
+def _one_world():
+    return jax.tree_util.tree_map(lambda x: x[0], runner.make_world_batch(0, 1))
+
+
+def test_players_spawn_on_home_temple():
+    w = _one_world()
+    p = w["players"]
+    act = np.asarray(p["active"])
+    tiles = np.asarray(temple_tiles())
+    nt = len(TOWNS)
+    expect = np.stack([tiles[i % nt, i // nt] for i in range(int(act.sum()))])
+    np.testing.assert_array_equal(np.asarray(p["spawn"])[act], expect)
+    np.testing.assert_array_equal(np.asarray(p["pos"])[act], expect)
+    assert len({tuple(t) for t in expect.tolist()}) == len(expect)
+
+
+def test_monsters_spawn_off_pz_on_walkable():
+    w = _one_world()
+    m = w["monsters"]
+    pos = np.asarray(m["pos"])[np.asarray(m["active"])]
+    assert (np.asarray(w["walls"])[pos[:, 0], pos[:, 1]] == 0).all()
+    assert not np.asarray(w["pz"])[pos[:, 0], pos[:, 1]].any()
+
+
+def test_monster_kind_follows_zone():
+    m = _one_world()["monsters"]
+    act = np.asarray(m["active"])
+    pos = m["pos"][act]
+    near = np.asarray(dist_to_nearest_town(pos)) < RAT_RING * MAP
+    kind = np.asarray(m["kind"])[act]
+    np.testing.assert_array_equal(kind, np.where(near, MONSTER_KIND_RAT, MONSTER_KIND_ORC))
+    assert set(kind.tolist()) == {MONSTER_KIND_RAT, MONSTER_KIND_ORC}
+
+
+def test_world_batch_has_terrain_walls_pz():
+    ws = runner.make_world_batch(0, 2)
+    assert ws["terrain"].shape == ws["walls"].shape == ws["pz"].shape == (2, MAP, MAP)
+    for b in range(2):
+        np.testing.assert_array_equal(np.asarray(ws["walls"][b]), np.asarray(blocking(ws["terrain"][b])))
+        np.testing.assert_array_equal(np.asarray(ws["pz"][b]), np.asarray(protection_zone(ws["terrain"][b])))
 
 
 def _modules_exist():

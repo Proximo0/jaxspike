@@ -64,6 +64,21 @@ def test_monster_hits_adjacent_player():
     assert int(w["players"]["hp"][0]) == PLAYER_MAX_HP - MONSTER_DAMAGE[1]
 
 
+def test_monster_cannot_hit_player_on_pz():
+    w = _world(kind=1)
+    w = {**w, "pz": w["pz"].at[20, 20].set(True)}
+    w = combat(w, empty_inputs())
+    assert int(w["players"]["hp"][0]) == PLAYER_MAX_HP
+    assert int(w["monsters"]["attack_cd"][0]) == 0
+
+
+def test_player_on_pz_can_still_attack():
+    w = _world()
+    w = {**w, "pz": w["pz"].at[20, 20].set(True)}
+    w = combat(w, _attack())
+    assert int(w["monsters"]["hp"][0]) == MONSTER_HP[0] - PLAYER_ATTACK
+
+
 def test_player_death_counts():
     w = _world()
     w = {**w, "players": {**w["players"], "hp": w["players"]["hp"].at[0].set(1)}}

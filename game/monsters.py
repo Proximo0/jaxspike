@@ -28,9 +28,9 @@ def _respawn(m, occ):
 
 
 def _occupancy(world):
-    """Bool [MAP, MAP]: tiles holding a wall, a living player or an active monster. Dead players are not physical."""
+    """Bool [MAP, MAP]: tiles holding a wall, a protection-zone tile, a living player or an active monster. Dead players are not physical."""
     p, m = world["players"], world["monsters"]
-    occ = world["walls"] != 0
+    occ = (world["walls"] != 0) | world["pz"]
     occ = occ.at[p["pos"][:, 0], p["pos"][:, 1]].max(p["active"] & ~p["dead"])
     return occ.at[m["pos"][:, 0], m["pos"][:, 1]].max(m["active"])
 

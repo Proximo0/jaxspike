@@ -6,7 +6,7 @@ from game.monsters import monster_ai
 from game.state import make_empty_world
 
 
-def build(players=(), monsters=(), walls=()):
+def build(players=(), monsters=(), walls=(), pz=()):
     w = make_empty_world(jax.random.PRNGKey(0))
     p, m = w["players"], w["monsters"]
     for i, pos in enumerate(players):
@@ -19,6 +19,8 @@ def build(players=(), monsters=(), walls=()):
         m["hp"] = m["hp"].at[i].set(20)
     for x, y in walls:
         w["walls"] = w["walls"].at[x, y].set(1)
+    for x, y in pz:
+        w["pz"] = w["pz"].at[x, y].set(True)
     return w
 
 
@@ -46,6 +48,16 @@ def test_dead_player_not_targeted():
 def test_wall_blocks_uses_fallback_axis():
     # Monster at (24,21), player at (20,20): x preferred, wall at (23,21) forces y step.
     w = monster_ai(build(players=[(20, 20)], monsters=[(24, 21)], walls=[(23, 21)]))
+    assert mpos(w, 0) == (24, 20)
+
+
+def test_monster_does_not_enter_pz():
+    w = monster_ai(build(players=[(20, 20)], monsters=[(24, 20)], pz=[(23, 20)]))
+    assert mpos(w, 0) == (24, 20)
+
+
+def test_monster_steps_around_pz_tile():
+    w = monster_ai(build(players=[(20, 20)], monsters=[(24, 21)], pz=[(23, 21)]))
     assert mpos(w, 0) == (24, 20)
 
 

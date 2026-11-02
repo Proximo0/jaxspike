@@ -8,35 +8,41 @@ from game.config import (
     MAX_MONSTERS,
     MAX_PLAYERS,
     MONSTER_HP,
+    MONSTER_KIND_ORC,
+    MONSTER_KIND_RAT,
     PLAYER_MAX_HP,
 )
 from game.state import make_empty_world, next_key
+from game.world_layout import RAT_RING, TOWNS, dist_to_nearest_town, temple_tiles
 
 POP_PLAYERS = min(128, MAX_PLAYERS)
 POP_MONSTERS = min(512, MAX_MONSTERS)
 
 
-def _distinct_walkable(walls, key, n):
-    """Pick n distinct open tiles (x, y) at random, as int32 [n, 2].
+def _distinct_tiles(allowed, key, n):
+    """Pick n distinct allowed tiles (x, y) at random, as int32 [n, 2].
 
-    Ranks every tile by a random score and takes the lowest n open ones. Tiles are
+    Ranks every tile by a random score and takes the lowest n allowed ones. Tiles are
     never shared, so no two entities spawn on the same tile. Memory is one value
     per tile, which avoids the per-spawn tables that ran out of GPU memory at batch 16.
     """
     scores = jax.random.uniform(key, (MAP * MAP,))
-    scores = jnp.where(walls.reshape(-1) == 0, scores, 2.0)
+    scores = jnp.where(allowed.reshape(-1), scores, 2.0)
     idx = jnp.argsort(scores)[:n]
     return jnp.stack([idx // MAP, idx % MAP], axis=1).astype(jnp.int32)
 
 
 def spawn_population(world, key):
-    """Activate the first 128 players and 512 monsters on distinct random walkable tiles."""
-    kt, kk = jax.random.split(key)
-    walls = world["walls"]
-    tiles = _distinct_walkable(walls, kt, POP_PLAYERS + POP_MONSTERS)
-    ppos = tiles[:POP_PLAYERS]
-    mpos = tiles[POP_PLAYERS:]
-    kind = jax.random.randint(kk, (POP_MONSTERS,), 0, 2, dtype=jnp.int32)
+    """Activate players on their home temples and monsters on distinct walkable non-pz tiles.
+
+    Player i gets town i % NT and temple tile i // NT. Monsters near a town are rats, the rest orcs.
+    """
+    nt = len(TOWNS)
+    i = jnp.arange(POP_PLAYERS)
+    ppos = temple_tiles()[i % nt, i // nt]
+    mpos = _distinct_tiles((world["walls"] == 0) & ~world["pz"], key, POP_MONSTERS)
+    near = dist_to_nearest_town(mpos) < RAT_RING * MAP
+    kind = jnp.where(near, MONSTER_KIND_RAT, MONSTER_KIND_ORC).astype(jnp.int32)
     hp = jnp.asarray(MONSTER_HP, jnp.int32)[kind]
 
     p, m = world["players"], world["monsters"]
@@ -67,7 +73,13 @@ def make_world_batch(seed, batch):
     def one(key):
         k_world, k_walls, k_spawn = jax.random.split(key, 3)
         world = make_empty_world(k_world)
-        world = {**world, "walls": map_gen.make_walls(k_walls)}
+        terrain = map_gen.make_terrain(k_walls)
+        world = {
+            **world,
+            "terrain": terrain,
+            "walls": map_gen.blocking(terrain),
+            "pz": map_gen.protection_zone(terrain),
+        }
         return spawn_population(world, k_spawn)
 
     return jax.vmap(one)(keys)

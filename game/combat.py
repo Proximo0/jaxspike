@@ -61,6 +61,7 @@ def combat(world, inputs):
     ptable, _ = build_grid(p["pos"], alive)
     ptgt, pdist = nearest_in_block(ptable, m["pos"], p["pos"])
     mhit = m["active"] & (m["hp"] > 0) & (m["attack_cd"] == 0) & (pdist <= 1) & alive[ptgt]
+    mhit = mhit & ~world["pz"][p["pos"][ptgt, 0], p["pos"][ptgt, 1]]  # protection zone
     dmg_tbl = jnp.array(MONSTER_DAMAGE, jnp.int32)
     ptgt_w = jnp.where(mhit, ptgt, MAX_PLAYERS)
     dmg_p = jnp.zeros_like(p["hp"]).at[ptgt_w].add(dmg_tbl[m["kind"]], mode="drop")
