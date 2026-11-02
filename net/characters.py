@@ -10,7 +10,10 @@ from pathlib import Path
 import numpy as np
 
 from game.config import INV_SLOTS, MAP, PLAYER_MAX_HP
+from game.data.items import N_ITEMS
 from game.world_layout import TOWNS
+from net import char_fields
+from net.kafra import character_storage, new_storage
 
 _NAME_RE = re.compile(r"[a-z0-9_]{3,16}")
 _INT_FIELDS = ("town", "hp", "kills", "deaths")
@@ -27,7 +30,7 @@ def new_character(town: int, tile: tuple[int, int]) -> dict:
     xy = np.array(tile, dtype=np.int32)
     return {"town": int(town), "pos": xy.copy(), "spawn": xy.copy(),
             "hp": PLAYER_MAX_HP, "inv": np.zeros(INV_SLOTS, np.int32),
-            "kills": 0, "deaths": 0}
+            "kills": 0, "deaths": 0, **char_fields.fresh_ro_fields(), "storage": new_storage()}
 
 
 def save(chars_dir: Path, name: str, fields: dict, guard=None) -> None:
@@ -65,6 +68,11 @@ def load(chars_dir: Path, name: str) -> dict | None:
             return None
         if not 0 <= out["town"] < len(TOWNS):
             return None
+        inv = np.asarray(out["inv"])
+        if inv.dtype.kind not in "iu" or not ((0 <= inv) & (inv < N_ITEMS)).all():
+            return None
+        out.update(char_fields.validate_ro(out, inv))  # every RO key is optional: clamp or fall back to fresh
+        out["storage"] = character_storage(out)
     except (OSError, ValueError, TypeError, EOFError, zlib.error, zipfile.BadZipFile):
         return None
     return out

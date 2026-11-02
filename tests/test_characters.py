@@ -15,7 +15,7 @@ def test_new_character_defaults():
     assert c["inv"].shape == (INV_SLOTS,) and c["inv"].dtype == np.int32 and not c["inv"].any()
 
 def test_save_load_exact(tmp_path):
-    c = new_character(1, (5, 6)); c["hp"] = 77; c["inv"][3] = ITEM_MEAT; c["kills"] = 9
+    c = new_character(1, (5, 6)); c["hp"] = 77; c["inv"][3] = ITEM_MEAT; c["items_inv_count"][3] = 1; c["kills"] = 9
     save(tmp_path, "bob", c)
     r = load(tmp_path, "bob")
     assert set(r) == set(c)
@@ -60,3 +60,46 @@ def test_load_validates(tmp_path):
     assert load(tmp_path, "badtown") is None
     save(tmp_path, "badinv", {**good, "inv": np.zeros(3, np.int32)})
     assert load(tmp_path, "badinv") is None
+
+
+def test_ro_fields_round_trip(tmp_path):
+    from net import char_fields
+    c = new_character(1, (5, 6))
+    assert set(char_fields.RO_KEYS) <= set(c) and "storage" in c
+    c["stats_str"] = 40; c["stats_base_level"] = 12; c["stats_sp"] = 3; c["skills_learned"][4] = 2
+    c["items_zeny"] = 1234; c["craft_exp"][0] = 120
+    save(tmp_path, "ro", c)
+    r = load(tmp_path, "ro")
+    assert r["stats_str"] == 40 and r["stats_base_level"] == 12 and r["items_zeny"] == 1234
+    assert r["skills_learned"][4] == 2 and r["craft_level"][0] == 2
+    assert r["storage"].shape == (100,)
+
+
+def test_old_format_file_loads_with_fresh_ro(tmp_path):
+    from net import char_fields
+    c = new_character(0, (5, 6)); c["inv"][2] = ITEM_MEAT
+    old = {k: c[k] for k in ("town", "pos", "spawn", "hp", "inv", "kills", "deaths")}
+    save(tmp_path, "old", old)
+    r = load(tmp_path, "old")
+    assert r is not None
+    fresh = char_fields.fresh_ro_fields(c["inv"])
+    for k in char_fields.RO_KEYS:
+        np.testing.assert_array_equal(r[k], fresh[k])
+    assert r["items_inv_count"][2] == 1 and not r["storage"].any()
+
+
+def test_bad_ro_values_fall_back_or_clamp(tmp_path):
+    c = new_character(0, (5, 6))
+    save(tmp_path, "a", {**c, "stats_str": 500, "stats_sp": 10**6, "stats_job": 99})
+    r = load(tmp_path, "a")
+    assert r["stats_str"] == 99 and r["stats_job"] == 6 and r["stats_sp"] <= r["stats_max_sp"]
+    save(tmp_path, "b", {**c, "stats_base_exp": 10**9})
+    assert load(tmp_path, "b")["stats_base_exp"] == 0
+    save(tmp_path, "c", {**c, "items_inv_cards": np.zeros(3, np.int32), "craft_level": np.zeros(2, np.int32)})
+    r = load(tmp_path, "c")
+    assert r["items_inv_cards"].shape == (INV_SLOTS, 4) and r["craft_level"].shape == (6,)
+    save(tmp_path, "d", {**c, "inv": np.full(INV_SLOTS, 999, np.int32)})
+    assert load(tmp_path, "d") is None
+    part = {k: v for k, v in c.items() if k != "items_zeny"}
+    save(tmp_path, "e", part)
+    assert load(tmp_path, "e")["items_zeny"] == 0
