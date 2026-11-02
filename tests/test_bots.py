@@ -1,8 +1,8 @@
 import jax
 import jax.numpy as jnp
 
-from bots.policies import bot_inputs
-from game.config import ITEM_MEAT, MAX_PLAYERS, PLAYER_MAX_HP
+from bots.policies import HUNT_RADIUS, bot_inputs
+from game.config import HUNT_RETREAT_HP, ITEM_MEAT, MAP, MAX_PLAYERS, PLAYER_MAX_HP
 from game.state import make_empty_world
 
 
@@ -104,3 +104,70 @@ def test_bot_eats_below_half_hp():
 def test_bot_eat_needs_meat_and_life():
     assert not bool(bot_inputs(_meat_world(10, meat=False), KEY)["eat"][0])
     assert not bool(bot_inputs(_meat_world(10, dead=True), KEY)["eat"][0])
+
+
+def _hunt_world(pos, hp=PLAYER_MAX_HP, pz=False, monster_pos=None, wall=None):
+    """Player 0 (home town 0) with a gate-distance field that grows with x: gates lie to the west."""
+    w = _world(pos, monster_pos)
+    xs = jnp.arange(MAP)[:, None] + jnp.zeros((MAP, MAP), jnp.int32)
+    field = jnp.broadcast_to(jnp.abs(xs - 40).astype(jnp.int16), w["dist_town"].shape)
+    p = {**w["players"], "hp": w["players"]["hp"].at[0].set(hp)}
+    w = {**w, "players": p, "dist_town": field,
+         "pz": w["pz"].at[pos[0], pos[1]].set(pz)}
+    if wall is not None:
+        w["walls"] = w["walls"].at[wall[0], wall[1]].set(1)
+    return w
+
+
+def test_hunting_bot_walks_away_from_gate():
+    out = bot_inputs(_hunt_world((50, 50)), KEY)
+    assert int(out["move"][0]) == 4  # east: larger distance
+
+
+def test_healthy_bot_in_town_heads_for_gate():
+    out = bot_inputs(_hunt_world((50, 50), pz=True), KEY)
+    assert int(out["move"][0]) == 3  # west: smaller distance
+
+
+def test_hurt_bot_goes_home_and_ignores_monster():
+    out = bot_inputs(_hunt_world((50, 50), hp=HUNT_RETREAT_HP - 1, monster_pos=(51, 50)), KEY)
+    assert int(out["move"][0]) == 3 and not bool(out["attack"][0])
+
+
+def test_resting_bot_stays_in_town():
+    out = bot_inputs(_hunt_world((50, 50), hp=PLAYER_MAX_HP - 1, pz=True), KEY)
+    assert int(out["move"][0]) == 0
+
+
+def test_bot_far_beyond_hunt_radius_turns_back():
+    out = bot_inputs(_hunt_world((40 + 2 * HUNT_RADIUS + 5, 50)), KEY)
+    assert int(out["move"][0]) == 3
+
+
+def test_bot_at_hunt_radius_keeps_a_heading():
+    w = _hunt_world((40 + HUNT_RADIUS + 5, 50))
+    a = int(bot_inputs(w, KEY)["move"][0])
+    b = int(bot_inputs(w, jax.random.PRNGKey(9))["move"][0])
+    assert a == b and 1 <= a <= 4  # same tick, different keys: the heading does not change
+    moves = {int(bot_inputs({**w, "tick": jnp.int32(t * 50)}, KEY)["move"][0]) for t in range(8)}
+    assert len(moves) >= 2
+
+
+def test_bot_does_not_step_into_wall():
+    for pos in ((50, 50), (40 + HUNT_RADIUS + 5, 50)):
+        for k in range(6):
+            out = bot_inputs(_hunt_world(pos, wall=(pos[0] + 1, pos[1])), jax.random.PRNGKey(k))
+            assert int(out["move"][0]) != 4
+
+
+def test_healthy_bot_outside_still_fights():
+    out = bot_inputs(_hunt_world((50, 50), monster_pos=(51, 50)), KEY)
+    assert bool(out["attack"][0]) and int(out["move"][0]) == 4
+
+
+def test_bot_on_gate_apron_does_not_walk_back_into_town():
+    # Apron at x=40 (dist 0); the gate tile to the west is pz with dist 1, the road east has dist 1 too.
+    w = _hunt_world((40, 50))
+    w["pz"] = w["pz"].at[39, 50].set(True)
+    for k in range(6):
+        assert int(bot_inputs(w, jax.random.PRNGKey(k))["move"][0]) != 3

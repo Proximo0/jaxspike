@@ -6,6 +6,7 @@ import pytest
 from bots import runner
 from game import persistence
 from game.config import (
+    GATE_APRON_TILES,
     MAP,
     MAX_MONSTERS,
     MAX_PLAYERS,
@@ -15,9 +16,9 @@ from game.config import (
     T_TEMPLE,
     T_WATER,
 )
-from game.map_gen import blocking, make_terrain, protection_zone
+from game.map_gen import blocking, distance_fields, make_terrain, protection_zone
 from game.state import make_empty_world
-from game.world_layout import RAT_RING, TOWNS, dist_to_nearest_town, temple_tiles
+from game.world_layout import RAT_RING, TOWNS, temple_tiles
 
 
 def test_persistence_roundtrip_exact(tmp_path):
@@ -43,14 +44,18 @@ def test_persistence_roundtrip_exact(tmp_path):
 def test_spawn_population_counts():
     w = make_empty_world(jax.random.PRNGKey(0))
     terrain = make_terrain(jax.random.PRNGKey(2))
-    w = {**w, "terrain": terrain, "walls": blocking(terrain), "pz": protection_zone(terrain)}
+    w = {**w, "terrain": terrain, "walls": blocking(terrain), "pz": protection_zone(terrain),
+         "dist_town": distance_fields(terrain)}
     w = runner.spawn_population(w, jax.random.PRNGKey(1))
     assert int(w["players"]["active"].sum()) == min(128, MAX_PLAYERS)
-    assert int(w["monsters"]["active"].sum()) == min(512, MAX_MONSTERS)
+    assert int(w["monsters"]["active"].sum()) == runner.POP_MONSTERS
     for e in ("players", "monsters"):
         pos = np.asarray(w[e]["pos"])[np.asarray(w[e]["active"])]
         assert (np.asarray(w["walls"])[pos[:, 0], pos[:, 1]] == 0).all()
         np.testing.assert_array_equal(pos, np.asarray(w[e]["spawn"])[np.asarray(w[e]["active"])])
+    mpos = np.asarray(w["monsters"]["pos"])[np.asarray(w["monsters"]["active"])]
+    gate_dist = np.asarray(w["dist_town"]).min(axis=0)[mpos[:, 0], mpos[:, 1]]
+    assert (gate_dist > GATE_APRON_TILES).all()
     ppos = np.asarray(w["players"]["pos"])[np.asarray(w["players"]["active"])]
     assert (np.asarray(terrain)[ppos[:, 0], ppos[:, 1]] == T_TEMPLE).all()
     m = w["monsters"]
@@ -84,10 +89,11 @@ def test_monsters_spawn_off_pz_on_walkable():
 
 
 def test_monster_kind_follows_zone():
-    m = _one_world()["monsters"]
+    w = _one_world()
+    m = w["monsters"]
     act = np.asarray(m["active"])
-    pos = m["pos"][act]
-    near = np.asarray(dist_to_nearest_town(pos)) < RAT_RING * MAP
+    pos = np.asarray(m["pos"])[act]
+    near = np.asarray(w["dist_town"]).min(axis=0)[pos[:, 0], pos[:, 1]] < RAT_RING * MAP
     kind = np.asarray(m["kind"])[act]
     np.testing.assert_array_equal(kind, np.where(near, MONSTER_KIND_RAT, MONSTER_KIND_ORC))
     assert set(kind.tolist()) == {MONSTER_KIND_RAT, MONSTER_KIND_ORC}

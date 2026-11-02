@@ -4,9 +4,9 @@ For the next lead. Read this, then docs/brief.md (module contracts and phase ord
 
 ## State
 - Project: `C:\Users\crp27\jaxspike`. Python venv `venv` (CPU jax 0.12.0.1, pytest, pygame not available). GPU runs use WSL Ubuntu with `~/jaxgpu` (JAX CUDA).
-- Modules: `game/` (config, state, spatial, world_layout, map_gen, movement, monsters, combat, loot, survival, step), `bots/` (policies, runner), `game/persistence.py`, `bench/` (soak_check with `--batch/--chunks/--ticks/--seed`, bench_step), `tests/` (95 passing), `play.py` (tkinter fullscreen window, CPU).
-- Verified: 95 tests pass on CPU. 1000-tick CPU soaks on seeds 0 and 1 with zero invariant violations on the 5-town map. GPU soak results by batch size are in the "GPU batch" section below.
-- Not verified: the play.py visuals (launches, draws in 20 ms per frame headlessly, never seen on screen by a lead). Balance on the new map is not tuned (see "Balance").
+- Modules: `game/` (config, state, spatial, world_layout, map_gen, movement, monsters, combat, loot, survival, step), `bots/` (policies, runner), `game/persistence.py`, `bench/` (soak_check with `--batch/--chunks/--ticks/--seed`, bench_step), `tests/` (108 passing), `play.py` (tkinter fullscreen window, CPU).
+- Verified: 108 tests pass on CPU. 1000-tick CPU soaks on seeds 0 and 1 with zero invariant violations on the 5-town map with hunting bots. GPU soak results by batch size are in the "GPU batch" section below. The user played the window (walked town to town, killed monsters) and called the world solid.
+- Balance on the 5-town map is tuned with hunting bots (see "Balance").
 - Direction (2026-11-02, from the user): a public Tibia-style MMO, hybrid architecture (JAX tick + Python server layer). Spec and plan for milestone 1: `docs/superpowers/specs/2026-11-02-world-survival-design.md`, `docs/superpowers/plans/2026-11-02-world-survival.md`. Milestones: (1) world + survival [done], (2) networked server + client, (3) items/equipment/spells, (4) skilling, (5) pygame-ce renderer with Kenney tiles.
 - Local git repo (no remote): history of milestone 1 is in `git log`.
 
@@ -14,7 +14,14 @@ For the next lead. Read this, then docs/brief.md (module contracts and phase ord
 - `MAP = 512`; `world["terrain"]` (ids `T_*`) and `world["pz"]` (protection zone); `walls` derived. Layout in `game/world_layout.py` (5 towns, 8 roads, 12x12 temples, in map fractions: 2048 is a one-constant change).
 - Players spawn on their home temple (slot mod 5); monsters spawn off-PZ, rats within `RAT_RING` of a town, orcs beyond (about 160 rats / 350 orcs per world, an average over an 8-world batch). Monsters cannot enter towns or hit a player standing in one.
 - `survival` phase: +1 HP every 4 ticks, meat heals 40 on `inputs["eat"]`; bots eat below half HP.
-- Open gap: bots have no "leave town" behaviour. They random-walk inside walled towns and rarely find a 3-wide gate, so a 1000-tick soak now produces ~3 kills and 0 deaths per world (was ~1000 kills, ~60 deaths). Balance numbers are meaningless until bots hunt; a hunt/leave-town policy is the next piece of bot work.
+
+## Distance fields and hunting bots (2026-11-02, later)
+The concept that keeps goal-directed behaviour in JAX: **precomputed distance fields instead of pathfinding.**
+- `map_gen.gate_aprons(terrain)` -> bool `[NT, MAP, MAP]`: walkable non-town tiles one step outside each town's gates. `map_gen.distance_fields(terrain)` -> int16 `[NT, MAP, MAP]`: walking distance from every tile to each town's aprons, by `d = min(d, 1 + min(neighbours))` relaxation in a `lax.while_loop` (unreachable = `DIST_UNREACHABLE`). Stored as `world["dist_town"]`; `make_world_batch` fills it with `lax.map` (sequential over worlds, so the loop's temporaries are never batched). About 1 s per world on CPU.
+- "Step toward X" is then: look at the four neighbours, pick the smallest value; "away" picks the largest. Constant cost, vmappable, no search. The same field gives "monsters never spawn within `GATE_APRON_TILES` of a gate" and "rats live within `RAT_RING` walking distance of a gate" for free.
+- Bot policy (`bots/policies.py`, stateless, derived from the world each tick): below `HUNT_RETREAT_HP` walk home (smallest neighbour) ignoring monsters; on pz below max HP rest (stand still, regen + eat); healthy in town walk to the gate; outside and closer than `HUNT_RADIUS // 2` to the gate walk away; beyond `2 * HUNT_RADIUS` walk back; in between keep a wander heading that is a pure function of (slot, tick // HEADING_TICKS). Chase and attack as before when a monster is within 6.
+- Two traps found on the way, both fixed and pinned by tests: (1) indexing `dist_town[home]` per player materialises `[MAX_PLAYERS, MAP, MAP]` (268 MB per world); index `field[home, x, y]` directly. (2) "away = largest neighbour" from the apron tile tied between the gate behind and the road ahead and chose the gate (first index), so the apron bot and the gate bot waited on each other forever: 40% of all bots were queued in towns. Away-steps now never enter pz. Lesson: after a policy change, print where the bots *are*, not only the kill count.
+- Soak after the change: 2.2 kills per bot per 1000 ticks with 512 monsters, 3.3-4.0 with 1024 (now the default `POP_MONSTERS`). Rats stay ~80% alive: encounter rate, not combat, bounds kills. Bot chase range 8 instead of 6 made no difference.
 
 ## Dead players are not physical (2026-11-02)
 A 512-world GPU soak found two living players on one tile (2 of 512 worlds). Cause: `combat._respawn_players` ignored dead players when checking the spawn tile while `movement` and `monsters._occupancy` treated dead bodies as solid, so a respawn could land on a dead player who was stuck waiting (its own spawn blocked). Decision: dead players never occupy a tile anywhere (Tibia: you are gone until you reappear at the temple). Making corpses solid instead would allow a permanent deadlock when two dead players stand on each other's spawn. The soak invariant is now "no two *living* players share a tile".
@@ -28,6 +35,7 @@ A 512-world GPU soak found two living players on one tile (2 of 512 worlds). Cau
 3. **Spawns must be distinct.** Sampling with replacement put monsters and players on the same tile at spawn (60 of 64 worlds). Draw all spawn tiles from one permutation.
 4. **JAX errors are asynchronous.** The failure you see may come from a different op than the one named. Test one piece at a time, under a memory cap.
 5. **Cap GPU memory on every run:** `XLA_PYTHON_CLIENT_PREALLOCATE=false` and `XLA_PYTHON_CLIENT_MEM_FRACTION=0.8` (the user raised the cap from 40% to 80%). The user's machine nearly crashed on uncapped batch runs. Never probe batch sizes above what has been verified without the cap.
+13. **Ties deadlock.** Any "pick the best neighbour" rule with first-index tie-breaks can make two entities wait on each other's tile forever (the gate jam). Exclude tiles the entity should never want, and check where entities *are* after a soak.
 12. **Scale finds rare bugs.** The dead-player overlap only showed at 512 worlds x 1000 ticks (2 hits in 512,000 world-ticks). Run the biggest soak the cap allows after any change to movement, respawn, or occupancy.
 6. **Worker briefs with file ownership worked.** Eight parallel Sonnet workers, each owning its own files and tests, integrated with no conflicts. Shared contracts (state schema, phase order, spatial API) must land first, and the lead must write them.
 7. **Tests encode numbers.** When balance changes, update the tests that hard-code old values (combat kill test, loot roll table). Prefer config constants in tests.
@@ -44,29 +52,34 @@ A 512-world GPU soak found two living players on one tile (2 of 512 worlds). Cau
 | 2048 | fails cleanly: RESOURCE_EXHAUSTED on a 4.37 GiB allocation inside jit_scan, memory freed | - | - |
 1024 was the verified ceiling under the cap on the 256x256 map.
 
-MAP = 512 (5-town map), same cap:
+MAP = 512 (5-town map), same cap, 1024 monsters per world, hunting bots, `dist_town` carried per world (2.6 MB each):
 | batch | result | time |
 |---|---|---|
-| 64 / 128 / 256 | clean | 21 s / 26 s / 36 s |
-| 512 | fails cleanly: RESOURCE_EXHAUSTED on a 4 GiB allocation in `jit_scatter` | - |
-256 is the ceiling at MAP=512. The per-world MAP*MAP scatter tables (`monsters._chase` claim table, `combat._respawn_players` occupancy) are what grow; moving them to the sort-based approach in `movement.py` would raise it. For one live world none of this matters.
+| 64 / 128 / 256 | clean | 31 s / 34 s / 50 s |
+| 512 | fails cleanly: RESOURCE_EXHAUSTED on a 1.27 GiB allocation in `reduce_min` (the `dist_town.min(axis=0)` in spawn, batched) | - |
+(Before distance fields, with 512 monsters: 21 / 26 / 36 s, and 512 failed on a 4 GiB `jit_scatter`.) 256 is the ceiling at MAP=512. The per-world MAP*MAP tables (`monsters._chase` claim table, `combat._respawn_players` occupancy, the batched spawn reduce) are what grow; moving them to the sort-based approach in `movement.py`, or spawning with `lax.map` like the fields, would raise it. For one live world none of this matters.
 
-## Balance (bot soak, 8 worlds x 1000 ticks, 1024 bots)
-Targets chosen by the lead: 0.3-0.6 deaths and 5-10 kills per bot per 1000 ticks. Full sweep (20 runs) is in the balance worker's table in the session log; summary:
-- Old (2,7) damage, cooldown 6: 7701 kills, 1582 deaths (7.5 / 1.55 per bot).
-- New (1,3) damage, cooldown 8: 8402 kills, 512 deaths on seed 0; 8064 / 502 on seed 1; 8106 / 463 on seed 2 (about 8 / 0.5 per bot). Items held stayed within 6%.
-- Damage alone only hit the target at (1,2), which makes orcs trivial; adding cooldown 8 let orcs keep 3 damage. Raising player HP also worked but was rejected as inflation.
-- Loot thresholds now live in config (LOOT_*_MAX) and the loot test reads them.
-- Caveat: no healing exists, so every bot eventually dies; deaths scale almost linearly with incoming damage. Healing (eat meat, regen) is a mechanic to add before tuning further.
+## Balance (bot soak, 8 worlds x 1000 ticks, 1024 bots, 5-town map, hunting bots)
+Targets chosen by the lead: 0.3-0.6 deaths and 5-10 kills per bot per 1000 ticks. Current: `MONSTER_DAMAGE = (3, 9)`, cooldown 8, 1024 monsters per world.
+| damage | kills / bot | deaths / bot | items / bot |
+|---|---|---|---|
+| (1,3) | 3.97 | 0.02 | 1.32 |
+| (2,6) | 3.66 | 0.23 | 1.14 |
+| (3,9) seeds 0/1/2 | 3.28 / 3.41 / 3.43 | 0.42 / 0.54 / 0.50 | ~1.0 |
+| (4,12) | 2.94 | 0.61 | 0.86 |
+- Final GPU 256-world soak on this code: 3.23 kills and 0.45 deaths per bot, invariants held. Only ~66 of the 1024 monsters per world are rats (gate-distance < `RAT_RING * MAP` covers a small band around 10 gates); the rest are orcs. Raising `RAT_RING` makes more of the hunting band rat territory.
+- Deaths are in target. Kills (3.3-3.4) are below the 5-10 target that was set on the old open map; on this map they are bounded by how often a bot meets a monster (rats stay ~80% alive), not by combat. Levers if more kills are wanted: more monsters near gates, a bot that walks toward the nearest monster it can see further away (needs a bigger grid block than 3x3 cells), or monsters that wander.
+- Deaths come from orcs (9 damage) chasing a bot that retreats at 60 HP; rats alone cannot kill a bot. That is the intended feel: rats are safe, orcs are not.
+- Old-map history: (2,7)/cooldown 6 gave 7.5 kills and 1.55 deaths per bot with no healing; (1,3)/cooldown 8 gave 8 / 0.5. With regen, eating and retreat, (1,3) gives 0.02 deaths.
+- Loot thresholds live in config (LOOT_*_MAX) and the loot test reads them.
 
 ## Open work, in priority order
-1. Bot hunt / leave-town behaviour (see the open gap above), then re-measure balance on the new map.
-   - Fix before the next balance measurement: two active monsters can share a tile when one revives on a tile another steps onto in the same tick (`_chase` uses pre-revive occupancy); add a 'no two active monsters share a tile' soak invariant. Monsters may also spawn on the road apron just outside gates and narrow them.
-2. Visual check of play.py by the user (towns, roads, water, SAFE in the HUD), then adjust graphics.
-3. Milestone 2: networked server + client (spec first).
+1. Milestone 2: networked server + client (spec first). Design notes agreed with the user: JAX tick is authoritative; a human's click-to-walk is an A* on the Python server that emits one move per tick, so the engine never needs a general pathfinder.
    - Spec item: A living player idling on another player's temple spawn tile blocks that respawn indefinitely (griefing vector on a public server): consider letting living players overlap on temple tiles or respawning on the nearest free temple tile.
-4. Decide K_CELL for towns (see "Spatial grid capacity"); temples now hold up to ~26 players per 8x8 cell.
-5. Tiled import for hand-authored towns; MAP = 2048 for the first playable release.
+2. Milestones 3-5 (items/equipment/spells, skilling, pygame-ce renderer with Kenney tiles). Concepts agreed for staying in JAX: tables indexed by id for items/recipes/monster kinds; per-player xp arrays for skills; counters on entities for timers; distance fields for every "go to X".
+3. Decide K_CELL for towns (see "Spatial grid capacity"); temples now hold up to ~26 players per 8x8 cell.
+4. Tiled import for hand-authored towns; MAP = 2048 for the first playable release (distance fields: 42 MB per world, computed once).
+5. Done since the last handoff: hunting bots, monster tile-sharing on revive (fixed, soak invariant added), gate-apron spawns (excluded), balance re-tuned.
 
 ## Rules for the next lead
 - GPU memory cap is 80% (user-approved): `XLA_PYTHON_CLIENT_MEM_FRACTION=0.8` and `XLA_PYTHON_CLIENT_PREALLOCATE=false`. Never run above it.

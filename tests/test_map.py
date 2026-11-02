@@ -6,7 +6,8 @@ import numpy as np
 
 from game.config import (MAP, MAX_PLAYERS, T_FLOOR, T_GRASS, T_ROAD, T_ROCK, T_TEMPLE,
                          T_TREE, T_WALL, T_WATER)
-from game.map_gen import blocking, make_terrain, make_walls, protection_zone, walkable
+from game.map_gen import (DIST_UNREACHABLE, blocking, distance_fields, gate_aprons, make_terrain,
+                          make_walls, protection_zone, walkable)
 from game.world_layout import (ROAD_HALF_WIDTH, TEMPLE_TILES, TOWNS, dist_to_nearest_town,
                                temple_tiles, town_boxes)
 
@@ -159,3 +160,56 @@ def test_walkable_walls_and_oob():
     assert not np.asarray(walkable(w, p)).any()
     tt = temple_tiles()[0]
     assert np.asarray(walkable(w, tt)).all()
+
+
+def bfs_dist(free, seeds):
+    d = np.full(free.shape, -1, np.int64)
+    q = deque()
+    for s in seeds:
+        d[s] = 0
+        q.append(s)
+    while q:
+        x, y = q.popleft()
+        for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+            if 0 <= nx < MAP and 0 <= ny < MAP and free[nx, ny] and d[nx, ny] < 0:
+                d[nx, ny] = d[x, y] + 1
+                q.append((nx, ny))
+    return d
+
+
+def test_gate_aprons_are_road_outside_pz():
+    t = terrain_of(0)
+    pz = np.asarray(protection_zone(jnp.asarray(t)))
+    aprons = np.asarray(gate_aprons(jnp.asarray(t)))
+    assert aprons.shape == (len(TOWNS), MAP, MAP) and aprons.dtype == np.bool_
+    for k, (x0, y0, x1, y1) in enumerate(town_boxes()):
+        ax, ay = np.nonzero(aprons[k])
+        assert len(ax) >= 2 * (2 * ROAD_HALF_WIDTH + 1)
+        assert (t[ax, ay] == T_ROAD).all() and not pz[ax, ay].any()
+        # one step outside this town's box, not inside it
+        inside = (ax >= x0) & (ax <= x1) & (ay >= y0) & (ay <= y1)
+        assert not inside.any()
+        assert ((ax >= x0 - 1) & (ax <= x1 + 1) & (ay >= y0 - 1) & (ay <= y1 + 1)).all()
+
+
+def test_distance_fields_match_bfs():
+    t = jnp.asarray(terrain_of(1))
+    free = np.asarray(blocking(t)) == 0
+    aprons = np.asarray(gate_aprons(t))
+    fields = np.asarray(distance_fields(t))
+    assert fields.shape == (len(TOWNS), MAP, MAP) and fields.dtype == np.int16
+    for k in range(len(TOWNS)):
+        ref = bfs_dist(free, list(zip(*np.nonzero(aprons[k]))))
+        reach = ref >= 0
+        assert (fields[k][reach] == ref[reach]).all()
+        assert (fields[k][~reach] == DIST_UNREACHABLE).all()
+    # every temple tile of every town can reach every town's gates
+    tt = np.asarray(temple_tiles())
+    for k in range(len(TOWNS)):
+        assert (fields[k][tt[:, :, 0], tt[:, :, 1]] < DIST_UNREACHABLE).all()
+
+
+def test_distance_fields_jit():
+    t = make_terrain(jax.random.PRNGKey(0))
+    a = np.asarray(jax.jit(distance_fields)(t))
+    assert np.array_equal(a, np.asarray(distance_fields(t)))

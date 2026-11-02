@@ -65,6 +65,53 @@ def protection_zone(terrain):
     return (terrain == T_FLOOR) | (terrain == T_TEMPLE) | ((terrain == T_ROAD) & in_town)
 
 
+DIST_UNREACHABLE = 32767  # int16 max: tiles with no walkable path to a town's gates
+
+
+def _town_masks():
+    """Return bool [NT, MAP, MAP]: tiles inside each town's wall box."""
+    xs, ys = jnp.meshgrid(jnp.arange(MAP), jnp.arange(MAP), indexing="ij")
+    return jnp.stack([_in_rect(xs, ys, *box) for box in town_boxes().tolist()])
+
+
+def _shift_min(a):
+    """Elementwise min over the four axis neighbours of int [..., MAP, MAP], borders padded with the array max."""
+    pad = jnp.iinfo(a.dtype).max
+    p = jnp.pad(a, [(0, 0)] * (a.ndim - 2) + [(1, 1), (1, 1)], constant_values=pad)
+    return jnp.minimum(jnp.minimum(p[..., 2:, 1:-1], p[..., :-2, 1:-1]),
+                       jnp.minimum(p[..., 1:-1, 2:], p[..., 1:-1, :-2]))
+
+
+def gate_aprons(terrain):
+    """Return bool [NT, MAP, MAP]: walkable non-town tiles one step outside each town's gates."""
+    pz = protection_zone(terrain)
+    town_pz = _town_masks() & pz[None]
+    # a tile is an apron tile when a 4-neighbour is in this town's pz: min over neighbours of ~town_pz is 0
+    near = _shift_min((~town_pz).astype(jnp.int8)) == 0
+    return near & ~pz[None] & (blocking(terrain) == 0)[None]
+
+
+def distance_fields(terrain):
+    """Return int16 [NT, MAP, MAP]: walking distance from every tile to each town's gate aprons.
+
+    Relaxation `d = min(d, 1 + min(neighbours))` over walkable tiles until it stops changing;
+    unreachable tiles hold DIST_UNREACHABLE. Runs once per world at creation.
+    """
+    free = blocking(terrain) == 0
+    d0 = jnp.where(gate_aprons(terrain), 0, DIST_UNREACHABLE).astype(jnp.int32)
+
+    def relax(d):
+        return jnp.where(free[None], jnp.minimum(d, jnp.minimum(_shift_min(d) + 1, DIST_UNREACHABLE)), DIST_UNREACHABLE)
+
+    def body(carry):
+        d, _ = carry
+        nd = relax(d)
+        return nd, jnp.any(nd != d)
+
+    d, _ = jax.lax.while_loop(lambda c: c[1], body, (d0, jnp.bool_(True)))
+    return d.astype(jnp.int16)
+
+
 def make_walls(key):
     """Return int8 [MAP, MAP] blocking mask of a fresh world (kept for existing call sites)."""
     return blocking(make_terrain(key))

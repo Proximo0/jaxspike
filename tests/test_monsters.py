@@ -104,6 +104,19 @@ def test_lowest_index_wins_collision():
     assert mpos(w, 1) == (23, 22)
 
 
+def test_chase_does_not_step_onto_reviving_monster():
+    # B (index 1) revives this tick on its spawn (20,20); A's one-step chase target is exactly that tile.
+    w = build(players=[(18, 20)], monsters=[(21, 20), (20, 20)])
+    m = w["monsters"]
+    m["active"] = m["active"].at[1].set(False)
+    m["pos"] = m["pos"].at[1].set(jnp.array([40, 40], jnp.int32))
+    m["respawn_in"] = m["respawn_in"].at[1].set(1)
+    w = monster_ai(w)
+    assert bool(w["monsters"]["active"][0]) and bool(w["monsters"]["active"][1])
+    assert mpos(w, 1) == (20, 20)
+    assert mpos(w, 0) != mpos(w, 1)
+
+
 def test_jit_and_vmap_batch():
     w1 = build(players=[(20, 20)], monsters=[(24, 20)])
     w2 = build(players=[(20, 20)], monsters=[(20, 25)])

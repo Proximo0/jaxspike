@@ -75,6 +75,6 @@ def monster_ai(world):
     """Run respawn countdown, then move aggroed monsters one step toward players."""
     movers = world["monsters"]["active"]  # monsters respawning this tick do not move yet
     m = _respawn(world["monsters"], _occupancy(world))
-    new_pos = _chase(world, movers)
+    new_pos = _chase({**world, "monsters": m}, movers)  # occupancy includes monsters revived this tick
     m = {**m, "pos": jnp.where(movers[:, None], new_pos, m["pos"])}
     return {**world, "monsters": m}

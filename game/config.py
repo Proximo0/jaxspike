@@ -29,10 +29,11 @@ MONSTER_RESPAWN_TICKS = 60
 MONSTER_KIND_RAT = 0
 MONSTER_KIND_ORC = 1
 MONSTER_HP = (40, 120)
-# Tuned from bot soaks (2026-11-02): with (2, 7) and cooldown 6 a bot died 1.5 times per
-# 1000 ticks; (1, 3) with cooldown 8 gives about 0.5 deaths and 8 kills per bot per 1000 ticks
-# on seeds 0-2. No healing exists yet, so incoming damage is the only lever on deaths.
-MONSTER_DAMAGE = (1, 3)
+# Tuned from bot soaks on the 5-town map (2026-11-02) with regen, eating and bots that retreat
+# below HUNT_RETREAT_HP: (3, 9) with cooldown 8 gives 0.4-0.5 deaths and 3.3-3.4 kills per bot
+# per 1000 ticks on seeds 0-2 (1024 monsters per world). Deaths come from orcs chasing a
+# retreating bot; rats alone cannot kill. (1, 3) gave 0.02 deaths, (4, 12) gave 0.6.
+MONSTER_DAMAGE = (3, 9)
 
 DROP_TTL = 200            # ticks before a ground item disappears
 
@@ -63,3 +64,7 @@ T_ROCK = 7
 REGEN_HP = 1
 REGEN_TICKS = 4
 MEAT_HEAL = 40
+
+# Bots and spawns around town gates.
+HUNT_RETREAT_HP = 60      # a bot below this HP walks home to rest (40% of PLAYER_MAX_HP)
+GATE_APRON_TILES = 4      # monsters never spawn within this walking distance of a gate

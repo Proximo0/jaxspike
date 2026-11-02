@@ -8,6 +8,7 @@ world = {
   "walls":   int8  [MAP, MAP]                 1 = blocked
   "terrain": int8  [MAP, MAP]                 T_* ids from config
   "pz":      bool  [MAP, MAP]                 protection zone: monsters cannot hit players here
+  "dist_town": int16 [NT, MAP, MAP]           walking distance to each town's gate aprons (map_gen.distance_fields)
   "tick":    int32 []
   "rng":     uint32 [2]                       JAX PRNG key, advanced by next_key()
   "players": {
@@ -54,6 +55,7 @@ from game.config import (
     PLAYER_MAX_HP,
     T_GRASS,
 )
+from game.world_layout import TOWNS
 
 
 def next_key(world):
@@ -80,6 +82,7 @@ def make_empty_world(key):
         "walls": jnp.zeros((MAP, MAP), jnp.int8),
         "terrain": jnp.full((MAP, MAP), T_GRASS, jnp.int8),
         "pz": jnp.zeros((MAP, MAP), jnp.bool_),
+        "dist_town": jnp.zeros((len(TOWNS), MAP, MAP), jnp.int16),
         "tick": jnp.zeros((), jnp.int32),
         "rng": jax.random.key_data(jax.random.PRNGKey(0) if key is None else key),
         "players": {

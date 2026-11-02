@@ -3,6 +3,7 @@ import jax
 import jax.numpy as jnp
 
 from game.config import (
+    GATE_APRON_TILES,
     ITEM_NONE,
     MAP,
     MAX_MONSTERS,
@@ -13,10 +14,10 @@ from game.config import (
     PLAYER_MAX_HP,
 )
 from game.state import make_empty_world, next_key
-from game.world_layout import RAT_RING, TOWNS, dist_to_nearest_town, temple_tiles
+from game.world_layout import RAT_RING, TOWNS, temple_tiles
 
 POP_PLAYERS = min(128, MAX_PLAYERS)
-POP_MONSTERS = min(512, MAX_MONSTERS)
+POP_MONSTERS = min(1024, MAX_MONSTERS)
 
 
 def _distinct_tiles(allowed, key, n):
@@ -33,15 +34,17 @@ def _distinct_tiles(allowed, key, n):
 
 
 def spawn_population(world, key):
-    """Activate players on their home temples and monsters on distinct walkable non-pz tiles.
+    """Activate players on their home temples and monsters on distinct walkable non-pz tiles away from gates.
 
-    Player i gets town i % NT and temple tile i // NT. Monsters near a town are rats, the rest orcs.
+    Player i gets town i % NT and temple tile i // NT. Monsters within RAT_RING walking distance of a gate are rats, the rest orcs.
+    Needs world["dist_town"] filled (make_world_batch does this).
     """
     nt = len(TOWNS)
     i = jnp.arange(POP_PLAYERS)
     ppos = temple_tiles()[i % nt, i // nt]
-    mpos = _distinct_tiles((world["walls"] == 0) & ~world["pz"], key, POP_MONSTERS)
-    near = dist_to_nearest_town(mpos) < RAT_RING * MAP
+    gate_dist = world["dist_town"].min(axis=0)  # walking distance to the nearest gate
+    mpos = _distinct_tiles((world["walls"] == 0) & ~world["pz"] & (gate_dist > GATE_APRON_TILES), key, POP_MONSTERS)
+    near = gate_dist[mpos[:, 0], mpos[:, 1]] < RAT_RING * MAP
     kind = jnp.where(near, MONSTER_KIND_RAT, MONSTER_KIND_ORC).astype(jnp.int32)
     hp = jnp.asarray(MONSTER_HP, jnp.int32)[kind]
 
@@ -70,7 +73,7 @@ def make_world_batch(seed, batch):
 
     keys = jax.random.split(jax.random.PRNGKey(seed), batch)
 
-    def one(key):
+    def terrain_world(key):
         k_world, k_walls, k_spawn = jax.random.split(key, 3)
         world = make_empty_world(k_world)
         terrain = map_gen.make_terrain(k_walls)
@@ -80,9 +83,12 @@ def make_world_batch(seed, batch):
             "walls": map_gen.blocking(terrain),
             "pz": map_gen.protection_zone(terrain),
         }
-        return spawn_population(world, k_spawn)
+        return world, k_spawn
 
-    return jax.vmap(one)(keys)
+    worlds, k_spawn = jax.vmap(terrain_world)(keys)
+    # Sequential over worlds: the relaxation loop's temporaries would otherwise be batched too.
+    fields = jax.lax.map(map_gen.distance_fields, worlds["terrain"])
+    return jax.vmap(spawn_population)({**worlds, "dist_town": fields}, k_spawn)
 
 
 def _stats(worlds):

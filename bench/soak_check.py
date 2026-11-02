@@ -3,6 +3,7 @@
 Invariants checked after every chunk of ticks:
 - no active player or monster on a wall or out of bounds
 - no two living (active, not dead) players on one tile; dead players are not physical
+- no two active monsters on one tile
 - no active monster on a living player's tile
 - no active monster on a protection-zone tile; every player spawn is a temple tile
 - hp in [0, PLAYER_MAX_HP] for players, [0, max] for monsters
@@ -48,6 +49,8 @@ def check_invariants(worlds):
         tiles = {tuple(t) for t in ppos_live}
         if len(tiles) != len(ppos_live):
             problems.append(f"world {b}: two living players share a tile")
+        if len({tuple(t) for t in mp[ma]}) != int(ma.sum()):
+            problems.append(f"world {b}: two active monsters share a tile")
         mtiles = {tuple(t) for t in mp[ma]}
         if mtiles & tiles:
             problems.append(f"world {b}: monster on player tile")
