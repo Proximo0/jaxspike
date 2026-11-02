@@ -6,7 +6,7 @@ Invariants checked after every chunk of ticks:
 - no two active monsters on one tile
 - no active monster on a living player's tile
 - no active monster on a protection-zone tile; every player spawn is a temple tile
-- hp in [0, PLAYER_MAX_HP] for players, [0, max] for monsters
+- hp in [0, derived max_hp] for players, [0, max] for monsters
 - inventory values in [0, ITEM_ID_LIMIT)
 - active drops on in-bounds tiles, ttl in [0, DROP_TTL]
 Prints per-batch stats so the game's balance is visible.
@@ -20,13 +20,15 @@ import numpy as np
 
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[1]))
 
+from game import ro_stats  # noqa: E402
 from bots.runner import make_world_batch, run_games  # noqa: E402
-from game.config import MAP, MONSTER_HP, ITEM_ID_LIMIT, DROP_TTL, PLAYER_MAX_HP, T_TEMPLE  # noqa: E402
+from game.config import MAP, MONSTER_HP, ITEM_ID_LIMIT, DROP_TTL, T_TEMPLE  # noqa: E402
 
 
 def check_invariants(worlds):
     """Return a list of violation strings across the batch (empty means clean)."""
     w = jax.device_get(worlds)
+    dmax = np.asarray(jax.vmap(ro_stats.derived)(worlds)["max_hp"])
     problems = []
     walls = np.asarray(w["walls"])
     p, m, d = w["players"], w["monsters"], w["drops"]
@@ -62,7 +64,8 @@ def check_invariants(worlds):
         if sp.size and (terrain[sp[:, 0], sp[:, 1]] != T_TEMPLE).any():
             problems.append(f"world {b}: player spawn not on a temple tile")
         hp = np.asarray(p["hp"][b])
-        if ((hp < 0) | (hp > PLAYER_MAX_HP)).any():
+        pmax = dmax[b]
+        if ((hp < 0) | (hp > pmax)).any():
             problems.append(f"world {b}: player hp out of range")
         mhp = np.asarray(m["hp"][b])
         mmax = np.asarray(MONSTER_HP)[np.asarray(m["kind"][b])]

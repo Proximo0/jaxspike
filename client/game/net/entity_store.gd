@@ -30,7 +30,10 @@ func apply_snap(snap: Dictionary) -> void:
 		_ents.clear()
 	var you_in: Variant = snap.get("you")
 	if typeof(you_in) == TYPE_DICTIONARY:
-		you = _entity_store_norm_you(you_in)
+		# Merge over the previous `you`: the server sends change-only fields (members, storage) once.
+		var merged: Dictionary = you.duplicate(true)
+		merged.merge(_entity_store_norm_you(you_in), true)
+		you = merged
 	var n: Variant = snap.get("notice")
 	notice = String(n) if typeof(n) == TYPE_STRING else ""
 	var gone: Variant = snap.get("gone")

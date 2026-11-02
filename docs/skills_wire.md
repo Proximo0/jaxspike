@@ -67,7 +67,7 @@ the cast bar. Build the dict once at server start from the arrays (`np.asarray(.
 ## `snap.you` additions (sent every snapshot to the owner only)
 | field | type | meaning |
 |---|---|---|
-| `sp` | int | current SP (`skills.sp[slot]`) |
+| `sp` | int | current SP (`stats.sp[slot]`, the single authoritative pool; `skills.sp` only in worlds without a stats block) |
 | `max_sp` | int | `derived["max_sp"][slot]` (the stats team; `50` under the fallback) |
 | `buffs` | `[[buff_id, ticks_left, level], ...]` | only buffs with `ticks_left > 0` (`skills.buffs`, `skills.buff_level`), ascending buff id |
 | `cooldowns` | `[[skill_id, ticks_left], ...]` | only skills with `ticks_left > 0` (`skills.cooldown`), ascending skill id |

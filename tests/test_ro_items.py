@@ -4,7 +4,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from bots.ro_items_policy import item_inputs
-from game import ro_drops, ro_items, ro_refine
+from game import ro_drops, ro_items, ro_refine, ro_stats
 from game.config import (DROP_TTL, HUNT_RETREAT_HP, INV_SLOTS, ITEM_GOLD_COIN, ITEM_MEAT, ITEM_NONE, ITEM_SWORD,
                          MAX_DROPS, MAX_MONSTERS, MAX_PLAYERS, PLAYER_MAX_HP)
 from game.data import drops as D
@@ -162,7 +162,20 @@ def test_use_potion_heals_decrements_and_clears():
 
 def test_use_potion_caps_at_max_hp():
     w = put(add_player(make_world(), 0, hp=PLAYER_MAX_HP - 5), 0, 0, I.ITEM_WHITE_POTION, count=1)
-    assert int(run(w, use_item=0)["players"]["hp"][0]) == PLAYER_MAX_HP
+    cap = int(ro_stats.derived(w)["max_hp"][0])
+    assert int(run(w, use_item=0)["players"]["hp"][0]) == min(PLAYER_MAX_HP - 5 + int(I.HEAL_HP[I.ITEM_WHITE_POTION]), cap)
+
+
+def test_use_potion_caps_at_derived_max_hp_for_leveled_player():
+    w = put(add_player(make_world(), 0, hp=10), 0, 0, I.ITEM_WHITE_POTION, count=1)
+    st = dict(w["stats"])
+    st["base_level"] = st["base_level"].at[0].set(40)
+    st["vit"] = st["vit"].at[0].set(50)
+    w = {**w, "stats": st}
+    cap = int(ro_stats.derived(w)["max_hp"][0])
+    assert cap > PLAYER_MAX_HP
+    w = {**w, "players": {**w["players"], "hp": w["players"]["hp"].at[0].set(cap - 3)}}
+    assert int(run(w, use_item=0)["players"]["hp"][0]) == cap
 
 
 def test_dead_player_cannot_use_and_bad_slots_ignored():

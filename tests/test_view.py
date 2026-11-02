@@ -5,6 +5,7 @@ import numpy as np
 
 from game.config import (MAX_DROPS, MAX_MONSTERS, MAX_PLAYERS, MAX_VIEWERS, N_ENTITIES, VIEW_H, VIEW_K,
                          VIEW_W)
+from game import ro_stats
 from game.state import make_empty_world
 from game.view import changed_mask, entity_table, view_update
 
@@ -60,6 +61,17 @@ def test_entity_table_kinds_and_vis():
     assert int(t["kind"][3]) == 0 and int(t["kind"][M0 + 5]) == 2 and int(t["kind"][D0 + 7]) == 102
     assert t["pos"][M0 + 5].tolist() == [20, 21]
     assert int(t["hp"][M0 + 5]) == 40 and int(t["max_hp"][M0 + 5]) > 0
+
+
+def test_player_max_hp_is_derived():
+    w = world_with(players=[(0, 5, 5), (1, 6, 5)])
+    st = dict(w["stats"])
+    st["base_level"] = st["base_level"].at[1].set(30)
+    st["vit"] = st["vit"].at[1].set(40)
+    w = {**w, "stats": st}
+    d = np.asarray(ro_stats.derived(w)["max_hp"])
+    t = entity_table(w)
+    assert (np.asarray(t["max_hp"][:MAX_PLAYERS]) == d).all() and d[1] > d[0]
 
 
 def test_changed_mask_fields():

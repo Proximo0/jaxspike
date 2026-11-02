@@ -1,7 +1,8 @@
 """Survival phase: periodic hp regen and eating meat."""
 import jax.numpy as jnp
 
-from game.config import ITEM_MEAT, ITEM_NONE, MEAT_HEAL, PLAYER_MAX_HP, REGEN_HP, REGEN_TICKS
+from game.config import ITEM_MEAT, ITEM_NONE, MEAT_HEAL, REGEN_HP, REGEN_TICKS
+from game import ro_stats
 
 
 def survival(world, inputs):
@@ -16,5 +17,6 @@ def survival(world, inputs):
     cleared = eats[:, None] & (jnp.arange(pl["inv"].shape[1])[None, :] == slot[:, None])
     inv = jnp.where(cleared, ITEM_NONE, pl["inv"])
 
-    hp = jnp.minimum(pl["hp"] + regen * REGEN_HP + eats * MEAT_HEAL, PLAYER_MAX_HP).astype(pl["hp"].dtype)
+    hp = jnp.minimum(pl["hp"] + regen * REGEN_HP + eats * MEAT_HEAL,
+                    jnp.maximum(ro_stats.derived(world)["max_hp"], pl["hp"])).astype(pl["hp"].dtype)
     return {**world, "players": {**pl, "hp": hp, "inv": inv}}

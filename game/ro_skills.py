@@ -79,6 +79,13 @@ def _default_derived(world):
     return ro_stats.derived(world)
 
 
+def _sp_pool(world):
+    """(block_name, key) of the authoritative SP pool: stats.sp when the stats block exists, else skills.sp."""
+    if "stats" in world and "sp" in world["stats"]:
+        return "stats", "sp"
+    return "skills", "sp"
+
+
 def phase(world, inputs, derived=None):
     if derived is None:
         derived = _default_derived(world)
@@ -112,7 +119,9 @@ def phase(world, inputs, derived=None):
     buff_level = jnp.where(buffs > 0, sk["buff_level"], 0)
     casting = jnp.where(pl["dead"], 0, sk["casting"])
     cast_left = jnp.where(pl["dead"], 0, sk["cast_left"])
-    cast_target, cast_tile, sp = sk["cast_target"], sk["cast_tile"], sk["sp"]
+    cast_target, cast_tile = sk["cast_target"], sk["cast_tile"]
+    pool_blk, pool_key = _sp_pool(world)
+    sp = world[pool_blk][pool_key]
 
     # 3. start casts
     s = inputs["skill"].astype(I32)
@@ -147,8 +156,12 @@ def phase(world, inputs, derived=None):
     # 4. resolve
     sk = {
         **sk, "learned": learned, "cooldown": cooldown, "buffs": buffs, "buff_level": buff_level,
-        "casting": casting, "cast_left": cast_left, "cast_target": cast_target, "cast_tile": cast_tile, "sp": sp,
+        "casting": casting, "cast_left": cast_left, "cast_target": cast_target, "cast_tile": cast_tile,
     }
+    if pool_blk == "skills":
+        sk["sp"] = sp
+    else:
+        world = {**world, "stats": {**world["stats"], "sp": sp.astype(world["stats"]["sp"].dtype)}}
     resolve = alive & (casting != 0) & (cast_left == 0)
     world = ro_skills_effects.resolve({**world, "skills": sk}, resolve, derived)
     sk = world["skills"]
@@ -158,11 +171,16 @@ def phase(world, inputs, derived=None):
     # 5. count down unresolved casts
     cast_left = jnp.where(casting != 0, jnp.maximum(cast_left - 1, 0), 0)
 
-    # 6. SP regen
+    # 6. SP cap (+ regen only for the skills.sp fallback pool; ro_stats.phase regens stats.sp)
     max_sp = derived["max_sp"].astype(I32)
-    regen = alive & (world["tick"] % S.SP_REGEN_TICKS == 0)
-    sp = jnp.where(regen, sp + S.SP_REGEN_FLAT + max_sp // 100, sp)
+    sp = world[pool_blk][pool_key].astype(I32)
+    if pool_blk == "skills":
+        regen = alive & (world["tick"] % S.SP_REGEN_TICKS == 0)
+        sp = jnp.where(regen, sp + S.SP_REGEN_FLAT + max_sp // 100, sp)
     sp = jnp.minimum(sp, max_sp).astype(I32)
 
-    sk = {**sk, "casting": casting.astype(I32), "cast_left": cast_left.astype(I32), "casts": casts.astype(I32), "sp": sp}
-    return {**world, "skills": sk}
+    sk = {**sk, "casting": casting.astype(I32), "cast_left": cast_left.astype(I32), "casts": casts.astype(I32)}
+    if pool_blk == "skills":
+        sk["sp"] = sp
+        return {**world, "skills": sk}
+    return {**world, "skills": sk, "stats": {**world["stats"], "sp": sp.astype(world["stats"]["sp"].dtype)}}

@@ -5,7 +5,9 @@ See docs/m0_brief.md Part A.
 """
 import jax.numpy as jnp
 
-from game.config import (MAX_DROPS, MAX_PLAYERS, MONSTER_HP, N_ENTITIES, PLAYER_MAX_HP, VIEW_H, VIEW_K,
+from game import ro_stats
+
+from game.config import (MAX_DROPS, MAX_PLAYERS, MONSTER_HP, N_ENTITIES, VIEW_H, VIEW_K,
                          VIEW_W)
 
 DROP_KIND_BASE = 100
@@ -21,7 +23,7 @@ def entity_table(world):
         "pos": jnp.concatenate([p["pos"], m["pos"], d["pos"]]).astype(jnp.int32),
         "vis": jnp.concatenate([p["active"] & ~p["dead"], m["active"], d["active"]]),
         "hp": jnp.concatenate([p["hp"], m["hp"], zeros_d]).astype(jnp.int32),
-        "max_hp": jnp.concatenate([jnp.full((MAX_PLAYERS,), PLAYER_MAX_HP, jnp.int32), mhp, zeros_d]),
+        "max_hp": jnp.concatenate([ro_stats.derived(world)["max_hp"].astype(jnp.int32), mhp, zeros_d]),
         "kind": jnp.concatenate([jnp.zeros((MAX_PLAYERS,), jnp.int32), 1 + m["kind"].astype(jnp.int32),
                                  DROP_KIND_BASE + d["item"].astype(jnp.int32)]),
     }

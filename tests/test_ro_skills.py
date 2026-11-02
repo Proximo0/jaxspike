@@ -70,7 +70,13 @@ def _learn(w, skill, lvl=1, slot=0):
 
 
 def _sp(w, v=50, slot=0):
-    return _set(w, "sp", slot, v)
+    """Set the authoritative SP pool (stats.sp when the world has a stats block)."""
+    blk, key = ro_skills._sp_pool(w)
+    return {**w, blk: {**w[blk], key: w[blk][key].at[slot].set(v)}}
+
+
+def _nostats(w):
+    return {k: v for k, v in w.items() if k != "stats"}
 
 
 def _mon(i):
@@ -189,7 +195,7 @@ def test_cast_start_sets_sp_cooldown_cast_left():
     w = {**w, "tick": jnp.array(1, jnp.int32)}  # off the SP regen schedule
     w1 = _tick(w, skill=s, target=_mon(0))
     assert int(w1["skills"]["casting"][0]) == s
-    assert int(w1["skills"]["sp"][0]) == 50 - int(sk.SKILL_SP[s, lvl])
+    assert int(w1["stats"]["sp"][0]) == 50 - int(sk.SKILL_SP[s, lvl])
     assert int(w1["skills"]["cooldown"][0, s]) == int(sk.SKILL_COOLDOWN[s, lvl])
     assert int(w1["skills"]["cast_left"][0]) == cast - 1  # countdown runs in the start tick
     assert int(w1["skills"]["cast_target"][0]) == _mon(0)
@@ -225,7 +231,7 @@ def test_cast_rejections():
         assert int(out["skills"]["casting"][0]) == 0
         assert int(out["skills"]["cooldown"][0, s]) == 0
         assert _hp(out) == _hp(w)
-        assert int(out["skills"]["sp"][0]) >= int(w["skills"]["sp"][0])  # nothing deducted (regen may add)
+        assert int(out["stats"]["sp"][0]) >= int(w["stats"]["sp"][0])  # nothing deducted (regen may add)
 
     rejected(_sp(_world(kind=1), 50))  # not learned
     rejected(_sp(base, 0))  # no SP
@@ -256,7 +262,7 @@ def test_passive_cannot_be_cast():
     w = {**_sp(_learn(_world(), s, 3), 50), "tick": jnp.array(1, jnp.int32)}
     out = _tick(w, skill=s, target=_mon(0))
     assert int(out["skills"]["casting"][0]) == 0
-    assert int(out["skills"]["sp"][0]) == 50
+    assert int(out["stats"]["sp"][0]) == 50
     assert int(out["skills"]["cooldown"][0, s]) == 0
     assert _hp(out) == MONSTER_HP[0]
 
@@ -273,7 +279,7 @@ def test_instant_bash_damages_rat_same_tick():
     assert int(out["skills"]["casting"][0]) == 0
     assert int(out["skills"]["casts"][0]) == 1
     assert int(out["skills"]["skill_dmg"][0]) == expect
-    assert int(out["skills"]["sp"][0]) == 50 - int(sk.SKILL_SP[s, 1])
+    assert int(out["stats"]["sp"][0]) == 50 - int(sk.SKILL_SP[s, 1])
     assert not bool(out["monsters"]["active"][1])  # nothing else touched
 
 
@@ -435,7 +441,8 @@ def test_dead_caster_cast_cancelled_and_buffs_cleared():
 
 
 def test_sp_regen_on_schedule_and_clamp():
-    w = _sp(_world(), 10)
+    """Fallback pool (no stats block): ro_skills regens skills.sp itself; with stats, ro_stats.phase owns regen."""
+    w = _sp(_nostats(_world()), 10)
     step = 1 + 50 // 100
     start = 8 * sk.SP_REGEN_TICKS
     seen = []
@@ -444,12 +451,12 @@ def test_sp_regen_on_schedule_and_clamp():
         seen.append(int(w["skills"]["sp"][0]))
     assert seen[-1] == 10 + step  # exactly one regen per SP_REGEN_TICKS ticks
     assert sum(1 for a, b in zip([10] + seen, seen) if b > a) == 1
-    assert int(_tick(_sp(_world(), 50))["skills"]["sp"][0]) == 50
-    assert int(_tick(_sp(_world(), 400))["skills"]["sp"][0]) == 50  # above max_sp is clamped
+    assert int(_tick(_sp(_world(), 50))["stats"]["sp"][0]) == 50
+    assert int(_tick(_sp(_world(), 400))["stats"]["sp"][0]) == 50  # above max_sp is clamped
 
 
 def test_no_sp_regen_for_dead():
-    w = _sp(_world(), 10)
+    w = _sp(_nostats(_world()), 10)
     w = {**w, "players": {**w["players"], "dead": w["players"]["dead"].at[0].set(True)}}
     for t in range(sk.SP_REGEN_TICKS * 2):
         w = _tick({**w, "tick": jnp.array(t, jnp.int32)})
@@ -491,3 +498,20 @@ def test_fallback_derived_has_contract_keys():
     for k in ("atk", "matk", "hit", "flee", "def", "mdef", "aspd_ticks", "cast_mult", "max_hp", "max_sp", "crit"):
         assert d[k].shape == (MP,), k
     assert int(d["max_hp"][0]) == PLAYER_MAX_HP and int(d["cast_mult"][0]) == 1000
+
+
+def test_sp_spent_from_stats_pool_when_stats_block_exists():
+    s, lvl = sk.SK_FIRE_BOLT, 1
+    w = _learn(_world(monster_pos=(21, 20), kind=1), s, lvl)
+    assert ro_skills._sp_pool(w) == ("stats", "sp")
+    w = {**w, "stats": {**w["stats"], "sp": w["stats"]["sp"].at[0].set(40)}, "tick": jnp.array(1, jnp.int32)}
+    w = _set(w, "sp", 0, 999)  # the fallback pool is ignored
+    w1 = _tick(w, skill=s, target=_mon(0))
+    assert int(w1["stats"]["sp"][0]) == 40 - int(sk.SKILL_SP[s, lvl])
+    assert int(w1["skills"]["sp"][0]) == 999
+
+
+def test_sp_pool_falls_back_to_skills_without_stats():
+    w = _world()
+    w = {k: v for k, v in w.items() if k != "stats"}
+    assert ro_skills._sp_pool(w) == ("skills", "sp")

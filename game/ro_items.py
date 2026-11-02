@@ -14,7 +14,7 @@ Item ids stay in `world["players"]["inv"]` (loot.py writes pickups there, surviv
 """
 import jax.numpy as jnp
 
-from game import ro_refine
+from game import ro_refine, ro_stats
 from game.config import (
     DROP_TTL,
     INV_SLOTS,
@@ -22,7 +22,6 @@ from game.config import (
     ITEM_NONE,
     MAX_DROPS,
     MAX_PLAYERS,
-    PLAYER_MAX_HP,
 )
 from game.data import items as item_data
 from game.state import next_key
@@ -141,7 +140,7 @@ def _normalize(world):
 def _use_item(world, inputs):
     """Use the slot named by inputs["use_item"] (alive players only).
 
-    Consumable: hp += HEAL_HP capped at PLAYER_MAX_HP (max_hp will come from ro_stats.derived later; HEAL_SP is
+    Consumable: hp += HEAL_HP capped at ro_stats.derived max_hp (HEAL_SP is
     ignored until an sp array exists), one unit consumed. Card: ro_refine.compound_card, one unit consumed only
     where it reports success. Other kinds: no-op. A slot reaching count 0 is cleared.
     """
@@ -154,7 +153,7 @@ def _use_item(world, inputs):
 
     eat = ok & (kind == item_data.KIND_CONSUMABLE)
     heal = jnp.where(eat, item_data.HEAL_HP[item], 0)
-    hp = jnp.maximum(players["hp"], jnp.minimum(players["hp"] + heal, PLAYER_MAX_HP))
+    hp = jnp.maximum(players["hp"], jnp.minimum(players["hp"] + heal, ro_stats.derived(world)["max_hp"]))
     world = {**world, "players": {**players, "hp": hp}}
 
     world, done = ro_refine.compound_card(world, sl, ok & (kind == item_data.KIND_CARD))

@@ -16,7 +16,7 @@ INV_SLOTS = 16
 # Directions indexed by the move input: 0 stay, 1 north, 2 south, 3 west, 4 east.
 DIR_DELTAS = ((0, 0), (0, -1), (0, 1), (-1, 0), (1, 0))
 
-PLAYER_MAX_HP = 150
+PLAYER_MAX_HP = 150  # level-1 baseline only; living players cap at ro_stats.derived(world)["max_hp"]
 PLAYER_ATTACK = 10        # damage a player deals per hit
 PLAYER_ATTACK_COOLDOWN = 5  # ticks between player attacks
 PLAYER_RESPAWN_TICKS = 0  # respawn happens the tick after death (0 = immediate on next tick)

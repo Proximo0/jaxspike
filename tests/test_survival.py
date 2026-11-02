@@ -4,6 +4,7 @@ import jax.numpy as jnp
 from game.config import (
     INV_SLOTS, ITEM_MEAT, ITEM_NONE, MAX_PLAYERS, MEAT_HEAL, PLAYER_MAX_HP, REGEN_HP, REGEN_TICKS,
 )
+from game import ro_stats
 from game.state import empty_inputs, make_empty_world
 from game.survival import survival
 
@@ -37,8 +38,10 @@ def test_no_regen_off_schedule():
 
 
 def test_regen_capped_at_max():
-    out = survival(_world(hp=PLAYER_MAX_HP, tick=REGEN_TICKS), empty_inputs())
-    assert int(out["players"]["hp"][0]) == PLAYER_MAX_HP
+    w = _world(tick=REGEN_TICKS)
+    cap = _cap(w)
+    w = _set_hp(w, cap)
+    assert int(survival(w, empty_inputs())["players"]["hp"][0]) == cap
 
 
 def test_dead_and_inactive_do_not_regen():
@@ -58,14 +61,43 @@ def test_eat_removes_one_meat_and_heals():
     assert int((inv == ITEM_MEAT).sum()) == 1
 
 
+def _cap(w):
+    return int(ro_stats.derived(w)["max_hp"][0])
+
+
+def _set_hp(w, hp):
+    return {**w, "players": {**w["players"], "hp": w["players"]["hp"].at[0].set(hp)}}
+
+
+def _leveled(w, level=10, vit=20):
+    st = dict(w["stats"])
+    st["base_level"] = st["base_level"].at[0].set(level)
+    st["vit"] = st["vit"].at[0].set(vit)
+    return {**w, "stats": st}
+
+
+def test_regen_caps_at_derived_max_hp_for_leveled_player():
+    w = _leveled(_world(hp=1, tick=REGEN_TICKS))
+    cap = int(ro_stats.derived(w)["max_hp"][0])
+    assert cap > PLAYER_MAX_HP
+    w = {**w, "players": {**w["players"], "hp": w["players"]["hp"].at[0].set(cap - 1)}}
+    assert int(survival(w, empty_inputs())["players"]["hp"][0]) == cap
+    w2 = {**w, "players": {**w["players"], "hp": w["players"]["hp"].at[0].set(cap)}}
+    assert int(survival(w2, empty_inputs())["players"]["hp"][0]) == cap
+
+
 def test_eat_heals_capped():
-    out = survival(_world(hp=PLAYER_MAX_HP - 10, inv=_inv(ITEM_MEAT), tick=1), _eat())
-    assert int(out["players"]["hp"][0]) == PLAYER_MAX_HP
+    w = _world(inv=_inv(ITEM_MEAT), tick=1)
+    cap = _cap(w)
+    out = survival(_set_hp(w, cap - 10), _eat())
+    assert int(out["players"]["hp"][0]) == cap
 
 
 def test_eat_at_full_hp_consumes_meat():
-    out = survival(_world(hp=PLAYER_MAX_HP, inv=_inv(ITEM_MEAT), tick=1), _eat())
-    assert int(out["players"]["hp"][0]) == PLAYER_MAX_HP
+    w = _world(inv=_inv(ITEM_MEAT), tick=1)
+    cap = _cap(w)
+    out = survival(_set_hp(w, cap), _eat())
+    assert int(out["players"]["hp"][0]) == cap
     assert not bool((out["players"]["inv"][0] == ITEM_MEAT).any())
 
 
