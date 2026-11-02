@@ -19,7 +19,11 @@ import numpy as np  # noqa: E402
 
 from bots.policies import bot_inputs  # noqa: E402
 from bots.runner import make_world_batch  # noqa: E402
-from game.config import ITEM_GOLD_COIN, ITEM_MEAT, ITEM_SWORD, MAP, MONSTER_HP, PLAYER_MAX_HP  # noqa: E402
+from game.config import (  # noqa: E402
+    ITEM_GOLD_COIN, ITEM_MEAT, ITEM_SWORD, MAP, MONSTER_HP, PLAYER_MAX_HP,
+    T_FLOOR, T_GRASS, T_ROAD, T_ROCK, T_TEMPLE, T_TREE, T_WALL, T_WATER,
+)
+from game.world_layout import TOWNS  # noqa: E402
 from game.step import step  # noqa: E402
 
 TILE = 32            # pixels per tile (Tibia uses 32)
@@ -39,6 +43,19 @@ bot_inputs_jit = jax.jit(bot_inputs)
 step_jit = jax.jit(step)
 
 
+# Flat fill colour per terrain id. None means a drawn tile (grass, tree, wall) handled in draw().
+TERRAIN_FILL = {
+    T_GRASS: None,
+    T_ROAD: "#b89b6a",
+    T_FLOOR: "#8a7a66",
+    T_TEMPLE: "#e6d28a",
+    T_WATER: "#2f6fb3",
+    T_TREE: None,
+    T_WALL: None,
+    T_ROCK: "#3a3a3a",
+}
+
+
 def unbatch(worlds):
     return jax.tree_util.tree_map(lambda x: x[0], worlds)
 
@@ -47,6 +64,11 @@ def draw_grass(c, sx, sy, shade):
     c.create_rectangle(sx, sy, sx + TILE, sy + TILE, fill=("#2d4a24", "#31502a", "#294520")[shade], outline="")
     c.create_line(sx + 4, sy + TILE - 3, sx + 5, sy + TILE - 7, fill="#3f6b33")
     c.create_line(sx + 10, sy + TILE - 4, sx + 11, sy + TILE - 8, fill="#3f6b33")
+
+
+def draw_tree(c, sx, sy, shade):
+    draw_grass(c, sx, sy, shade)
+    c.create_oval(sx + 3, sy + 3, sx + TILE - 3, sy + TILE - 3, fill="#1f4d1a", outline="")
 
 
 def draw_wall(c, sx, sy):
@@ -102,6 +124,7 @@ class Game:
         self.seed = 0
         self.held = []           # held movement keys, most recent last
         self.attacking = False
+        self.eating = False
         self.paused = False
         # Fullscreen: as many whole tiles as fit, odd counts so the human sits on the centre tile.
         sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
@@ -114,6 +137,8 @@ class Game:
         root.bind("<KeyRelease>", self.on_release)
         root.bind("<space>", lambda e: self.set_attack(True))
         root.bind("<KeyRelease-space>", lambda e: self.set_attack(False))
+        root.bind("<e>", lambda e: self.set_eat(True))
+        root.bind("<KeyRelease-e>", lambda e: self.set_eat(False))
         root.bind("<r>", lambda e: self.reset())
         root.bind("<p>", lambda e: self.toggle_pause())
         root.bind("<Escape>", lambda e: root.destroy())
@@ -131,6 +156,9 @@ class Game:
 
     def set_attack(self, on):
         self.attacking = on
+
+    def set_eat(self, on):
+        self.eating = on
 
     def on_press(self, event):
         k = event.keysym
@@ -152,9 +180,11 @@ class Game:
             inputs = bot_inputs_jit(self.world, key)
             move = np.array(inputs["move"])
             attack = np.array(inputs["attack"])
+            eat = np.array(inputs["eat"])
             move[HUMAN] = self.human_move()
             attack[HUMAN] = self.attacking
-            inputs = {"move": jnp.asarray(move, jnp.int32), "attack": jnp.asarray(attack)}
+            eat[HUMAN] = self.eating
+            inputs = {"move": jnp.asarray(move, jnp.int32), "attack": jnp.asarray(attack), "eat": jnp.asarray(eat)}
             self.world = step_jit(self.world, inputs)
             self.tick_no += 1
             self.draw()
@@ -171,17 +201,25 @@ class Game:
         def to_screen(x, y):
             return self.off_x + (x - x0) * TILE, (y - y0) * TILE
 
-        walls = w["walls"]
+        terrain = w["terrain"]
+        pz = w["pz"]
         for ty in range(self.view_h):
             for tx in range(self.view_w):
                 x, y = x0 + tx, y0 + ty
                 sx, sy = to_screen(x, y)
                 if not (0 <= x < MAP and 0 <= y < MAP):
                     c.create_rectangle(sx, sy, sx + TILE, sy + TILE, fill="#000000", outline="")
-                elif walls[x, y]:
-                    draw_wall(c, sx, sy)
                 else:
-                    draw_grass(c, sx, sy, (x * 7 + y * 13) % 3)
+                    t = int(terrain[x, y])
+                    fill = TERRAIN_FILL[t]
+                    if fill is not None:
+                        c.create_rectangle(sx, sy, sx + TILE, sy + TILE, fill=fill, outline="")
+                    elif t == T_WALL:
+                        draw_wall(c, sx, sy)
+                    elif t == T_TREE:
+                        draw_tree(c, sx, sy, (x * 7 + y * 13) % 3)
+                    else:
+                        draw_grass(c, sx, sy, (x * 7 + y * 13) % 3)
 
         d = w["drops"]
         def on_screen(x, y):
@@ -226,11 +264,12 @@ class Game:
         hud_y = self.view_h * TILE
         c.create_text(
             8, hud_y + 12, anchor="w", fill="#dddddd", font=("Consolas", 11),
-            text=f"HP {hp}/{PLAYER_MAX_HP}   kills {kills}   deaths {deaths}   items {items}   tick {self.tick_no}",
+            text=f"HP {hp}/{PLAYER_MAX_HP}   kills {kills}   deaths {deaths}   items {items}   tick {self.tick_no}   town {HUMAN % len(TOWNS)}"
+            + ("   SAFE" if pz[int(hx), int(hy)] else ""),
         )
         c.create_text(
             8, hud_y + 30, anchor="w", fill="#aaaaaa", font=("Consolas", 10),
-            text=status + "WASD/arrows move  Space attack  P pause  R new world  Esc quit",
+            text=status + "WASD/arrows move  Space attack  E eat  P pause  R new world  Esc quit",
         )
 
 
