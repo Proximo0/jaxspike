@@ -232,7 +232,7 @@ def ro_you(pull: dict, slot: int) -> dict:
         "level": lvl, "job_level": jlv, "job": job,
         "stats": [int(st[k][slot]) for k in _STAT6],
         "stat_points": int(st["stat_points"][slot]), "skill_points": int(st["skill_points"][slot]),
-        "sp": int(sk["sp"][slot]), "max_sp": int(dv["max_sp"][slot]),
+        "sp": int(st["sp"][slot]), "max_sp": int(dv["max_sp"][slot]),  # stats.sp is the one SP pool
         "base_exp": int(st["base_exp"][slot]), "base_exp_next": base_next,
         "job_exp": int(st["job_exp"][slot]), "job_exp_next": job_next,
         "max_hp": int(dv["max_hp"][slot]),

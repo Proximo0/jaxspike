@@ -20,6 +20,11 @@ var ui_layer: CanvasLayer = null
 var panels: Array[Node] = []  ## every RO panel: bind(session) / set_welcome(msg) / on_message(msg) where defined
 var skill_bar: SkillBar = null
 
+## Placeholder layout on the 1920x1080 canvas: status left under the HUD, inventory right, others centre.
+const PANEL_POS: Dictionary = {
+	"StatusPanel": Vector2(8, 140), "InventoryPanel": Vector2(1660, 100), "SkillPanel": Vector2(420, 140),
+	"CraftPanel": Vector2(700, 140), "PartyPanel": Vector2(1000, 140), "ChatBox": Vector2(8, 820),
+}
 const PANEL_SCENES: Array[String] = [
 	"res://game/ui/status_panel.tscn", "res://game/ui/skill_bar.tscn", "res://game/ui/skill_panel.tscn",
 	"res://game/ui/inventory_panel.tscn", "res://game/ui/craft_panel.tscn", "res://game/ui/party_panel.tscn",
@@ -137,6 +142,9 @@ func _ensure_panels() -> void:
 		panels.append(node)
 		if node is SkillBar:
 			skill_bar = node as SkillBar
+		var c: Control = node as Control
+		if c != null and PANEL_POS.has(c.name):
+			c.position = PANEL_POS[c.name]
 	var cast_bar: Control = Control.new()
 	cast_bar.set_script(load("res://game/ui/cast_bar.gd"))
 	cast_bar.name = "CastBar"

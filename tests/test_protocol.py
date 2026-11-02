@@ -195,8 +195,8 @@ def test_snapshot_ro_you_block():
     st, sk, it, cr, pa = w["stats"], w["skills"], w["items"], w["craft"], w["party"]
     st = {**st, "base_level": st["base_level"].at[0].set(5), "job": st["job"].at[0].set(2), "job_level": st["job_level"].at[0].set(3),
           "str": st["str"].at[0].set(9), "stat_points": st["stat_points"].at[0].set(4), "skill_points": st["skill_points"].at[0].set(2),
-          "base_exp": st["base_exp"].at[0].set(7)}
-    sk = {**sk, "sp": sk["sp"].at[0].set(11), "casting": sk["casting"].at[0].set(4), "cast_left": sk["cast_left"].at[0].set(3),
+          "base_exp": st["base_exp"].at[0].set(7), "sp": st["sp"].at[0].set(11)}  # stats.sp is the SP pool
+    sk = {**sk, "casting": sk["casting"].at[0].set(4), "cast_left": sk["cast_left"].at[0].set(3),
           "buffs": sk["buffs"].at[0, 2].set(40).at[0, 5].set(9), "buff_level": sk["buff_level"].at[0, 2].set(3).at[0, 5].set(1),
           "cooldown": sk["cooldown"].at[0, 4].set(6), "learned": sk["learned"].at[0, 2].set(1).at[0, 9].set(5)}
     p = w["players"]
