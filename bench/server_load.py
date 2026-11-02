@@ -57,7 +57,6 @@ class EmbeddedServer:
         self._thread.join(timeout=10)
 
 
-
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--clients", type=int, default=100)
@@ -86,8 +85,10 @@ def main():
 
     live = [c for c in clients if c.welcome and c.connected]
     refused = [c for c in clients if c.error]
+    timed_out = [c for c in clients if not c.welcome and not c.error]
     # Per-client tally: poll latest() fast and count distinct ticks and snapshot size.
     seen_tick = {id(c): None for c in live}
+    seen_terrain = {id(c): None for c in live}
     snaps = {id(c): 0 for c in live}
     nbytes = {id(c): 0 for c in live}
     rng = random.Random(0)
@@ -104,14 +105,20 @@ def main():
             if s is not None and s.get("tick") != seen_tick[id(c)]:
                 seen_tick[id(c)] = s.get("tick")
                 snaps[id(c)] += 1
-                nbytes[id(c)] += len(json.dumps(s, separators=(",", ":")))
+                # NetClient carries the cached terrain into every snap; count it only when the
+                # window object changed (a fresh terrain frame on the wire), else encode with None.
+                t = s.get("terrain")
+                fresh = t is not None and t is not seen_terrain[id(c)]
+                seen_terrain[id(c)] = t
+                body = s if fresh else {**s, "terrain": None}
+                nbytes[id(c)] += len(json.dumps(body, separators=(",", ":")))
         time.sleep(0.01)
     elapsed = time.monotonic() - start
     still = [c for c in live if c.connected]
 
     rates = [snaps[id(c)] / elapsed for c in live] or [0.0]
     bps = [nbytes[id(c)] / elapsed for c in live] or [0.0]
-    print(f"clients requested: {args.clients}, connected: {len(still)}, refused: {len(refused)}")
+    print(f"clients requested: {args.clients}, connected: {len(still)}, refused: {len(refused)}, timed out: {len(timed_out)}")
     print(f"snapshots/client/s: mean {sum(rates)/len(rates):.2f}, min {min(rates):.2f}")
     print(f"bytes/client/s: mean {sum(bps)/len(bps):.0f}, max {max(bps):.0f}")
     if emb:

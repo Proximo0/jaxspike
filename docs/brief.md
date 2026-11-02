@@ -120,12 +120,12 @@ Milestone 2. Plain Python/numpy around the JAX tick; `game/` is untouched except
 |---|---|---|---|
 | `login` | C->S | `name` | first message, once; reply `welcome` or `error` + close |
 | `input` | C->S | `move` 0..4, `attack`, `eat` | sent on change; server keeps the latest per slot; cancels a `walk_to` path |
-| `walk_to` | C->S | `x`, `y` | click-to-walk (server A*); replaces any path; unreachable or too far -> `notice` |
+| `walk_to` | C->S | `x`, `y` | click-to-walk (server A*); replaces any path; out of map, beyond `PATH_RADIUS` or unreachable -> `notice` "too far", connection kept |
 | `welcome` | S->C | `slot`, `map`, `tick_ms`, `view_w`, `view_h` | view size fixed per connection |
 | `snap` | S->C | `tick`, `you`, `ents`, `terrain`, `notice` | every tick; `ents` limited to the view window; `terrain` only when the window moved, else null; players appear by name, never slot |
 | `error` | S->C | `msg` | then the socket closes |
 
-Unknown `t` is ignored; malformed JSON, wrong version, or any message before `login` gets `error` and a close. `you` = `{pos, hp, max_hp, kills, deaths, inv, town, safe}`. Entities: `{kind:"p", name, pos, hp, max_hp}`, `{kind:"m", mkind, pos, hp, max_hp}`, `{kind:"d", item, pos}`.
+Unknown `t` is ignored. A message with wrong types gets `error` "malformed message" and a close; a first message that is not a valid `login` gets `error` "expected login" and a close. `you` = `{pos, hp, max_hp, kills, deaths, inv, town, safe}`. Entities: `{kind:"p", name, pos, hp, max_hp}`, `{kind:"m", mkind, pos, hp, max_hp}`, `{kind:"d", item, pos}`.
 
 ### Rules
 - The tick never awaits a client: at most one in-flight snapshot send per client; a slow client skips ticks.
