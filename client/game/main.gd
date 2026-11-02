@@ -44,6 +44,7 @@ func _on_connect_requested(player_name: String, url: String) -> void:
 func _process(_delta: float) -> void:
 	if session == null or _pending_name == "":
 		return
+	session.poll()  # the peer only progresses when polled; nothing arrives before login
 	var state: int = session.link.state()
 	if state == NetLink.STATE_OPEN:
 		session.login(_pending_name)
