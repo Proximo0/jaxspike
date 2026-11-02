@@ -177,3 +177,16 @@ def test_jit_and_shapes():
     assert g.shape == (MAX_VIEWERS, VIEW_K) and g.dtype == jnp.int32
     assert k.shape == (MAX_VIEWERS, N_ENTITIES) and k.dtype == jnp.bool_
     assert ids(np.asarray(s)[0]) == [0, M0]
+
+
+def test_dead_player_gone_for_others_but_self_still_sees_self():
+    w = world_with(players=[(0, 100, 100), (1, 102, 100)])
+    _, _, k, now = run(w, [0, 1])
+    assert k[0, 1] and k[1, 0]
+    w2 = world_with(players=[(0, 100, 100), (1, 102, 100)])
+    w2["players"]["dead"] = w2["players"]["dead"].at[1].set(True)
+    s, g, k2, _ = run(w2, [0, 1], known=jnp.asarray(k), prev=now)
+    assert ids(g[0]) == [1] and not k2[0, 1]          # other viewer: dead player is gone
+    assert 1 not in ids(s[0])
+    assert ids(g[1]) == [0] or ids(g[1]) == []        # the dead viewer keeps itself
+    assert k2[1, 1] and 1 not in ids(g[1])
