@@ -1,11 +1,12 @@
 """Full tick. Owned by the lead. Phase order is fixed here and documented in docs/brief.md.
 
+Phases: movement, monsters, combat, loot, survival (regen + eating), then the tick increment.
 Each phase is a pure function world -> world (or world, inputs -> world).
 """
 import jax
 import jax.numpy as jnp
 
-from game import combat, loot, monsters, movement
+from game import combat, loot, monsters, movement, survival
 
 
 def step(world, inputs):
@@ -15,6 +16,7 @@ def step(world, inputs):
     world = monsters.monster_ai(world)
     world = combat.combat(world, inputs)
     world = loot.loot(world)
+    world = survival.survival(world, inputs)
     return {**world, "tick": world["tick"] + 1}
 
 

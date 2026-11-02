@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 
 from bots.policies import bot_inputs
-from game.config import MAX_PLAYERS
+from game.config import ITEM_MEAT, MAX_PLAYERS, PLAYER_MAX_HP
 from game.state import make_empty_world
 
 
@@ -85,3 +85,22 @@ def test_jit_and_vmap():
     assert int(out["move"][1, 0]) == 4 and bool(out["attack"][1, 0])
     single = jax.jit(bot_inputs)(worlds[0], keys[0])
     assert int(single["move"][0]) == 2
+
+
+def _meat_world(hp, meat=True, dead=False):
+    w = _world((50, 50))
+    p = w["players"]
+    p = {**p, "hp": p["hp"].at[0].set(hp), "dead": p["dead"].at[0].set(dead)}
+    if meat:
+        p["inv"] = p["inv"].at[0, 3].set(ITEM_MEAT)
+    return {**w, "players": p}
+
+
+def test_bot_eats_below_half_hp():
+    assert bool(bot_inputs(_meat_world(PLAYER_MAX_HP // 2 - 1), KEY)["eat"][0])
+    assert not bool(bot_inputs(_meat_world(PLAYER_MAX_HP // 2), KEY)["eat"][0])
+
+
+def test_bot_eat_needs_meat_and_life():
+    assert not bool(bot_inputs(_meat_world(10, meat=False), KEY)["eat"][0])
+    assert not bool(bot_inputs(_meat_world(10, dead=True), KEY)["eat"][0])

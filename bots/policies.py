@@ -2,14 +2,14 @@
 import jax
 import jax.numpy as jnp
 
-from game.config import MAX_PLAYERS
+from game.config import ITEM_MEAT, MAX_PLAYERS, PLAYER_MAX_HP
 from game.spatial import build_grid, nearest_in_block
 
 BOT_CHASE_RANGE = 6  # manhattan; must stay <= CELL since the search is 3x3 cells only
 
 
 def bot_inputs(world, key):
-    """Return {"move": int32 [MAX_PLAYERS], "attack": bool [MAX_PLAYERS]} for every player slot."""
+    """Return {"move": int32, "attack": bool, "eat": bool}, each [MAX_PLAYERS], for every player slot."""
     pl, mon = world["players"], world["monsters"]
     live = pl["active"] & ~pl["dead"]
 
@@ -34,4 +34,6 @@ def bot_inputs(world, key):
     move = jnp.where(chase, toward, wander)
     move = jnp.where(live, move, 0).astype(jnp.int32)
     attack = chase & (dist == 1)
-    return {"move": move, "attack": attack}
+    has_meat = jnp.any(pl["inv"] == ITEM_MEAT, axis=1)
+    eat = live & (pl["hp"] < PLAYER_MAX_HP // 2) & has_meat
+    return {"move": move, "attack": attack, "eat": eat}
