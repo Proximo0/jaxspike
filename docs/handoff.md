@@ -86,6 +86,10 @@ Targets chosen by the lead: 0.3-0.6 deaths and 5-10 kills per bot per 1000 ticks
 - Loot thresholds live in config (LOOT_*_MAX) and the loot test reads them.
 
 ## Open work, in priority order
+0. Known defects from the milestone 2 final re-review (not yet fixed, small):
+   - An `E` tap shorter than one tick (120 ms) does not eat: `play.py` sends `eat=True` on press and `eat=False` on release, and the server stores a pending tap only for `move`/`attack` (`net/server.py` `_on_message` / the sampler in `tick_once`). Fix: add `eat` to the tap and OR it in; test press-then-release with no tick between.
+   - A periodic save batch collected at tick T is written in a thread file by file; a logout save for the same name during that write can be overwritten by the stale batch (item duplication window, sub-second, once per 2400 ticks; `stop()` has the same ordering). Fix: per-name generation counter checked in `_write_batch` before each file.
+   - Protocol v2 (parked design finding): terrain is a 61x33 JSON list resent on every step (~4-10 KB/step; the bench's 38-49 KB/client/s is almost all terrain). For hundreds of moving players send the map once at login (zlib) or only the newly exposed edge strip, and drop `terrain` from `snap`. The bench shows 0 overruns at 200 clients, so this is not urgent.
 1. Milestone 3: items/equipment/spells (spec first). Builds on the network layer: new item ids and equipment slots extend `you.inv` and the character files.
    - Spec item: A living player idling on another player's temple spawn tile blocks that respawn indefinitely (griefing vector on a public server): consider letting living players overlap on temple tiles or respawning on the nearest free temple tile.
    - Milestone 2 leftovers: passwords, chat, world persistence, binary protocol / packed terrain if the tick overruns at scale.
