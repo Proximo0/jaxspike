@@ -1,7 +1,11 @@
-"""Monster AI phase: respawn countdown and one-step chase toward the nearest player."""
+"""Monster AI phase: respawn countdown and one-step chase toward the nearest player.
+
+Only kinds with data.monsters.AGGRO chase. Non-aggro kinds never chase in v1 (they fight back only when hit, see
+combat.py). A monster moves only on ticks where tick % MOVE_TICKS[kind] == 0 (fixed shape, a mask)."""
 import jax.numpy as jnp
 
 from game.config import MAP, MAX_MONSTERS, MONSTER_AGGRO_RANGE, MONSTER_HP
+from game.data.monsters import AGGRO, MOVE_TICKS
 from game.spatial import build_grid, nearest_in_block
 
 _HP_TABLE = jnp.array(MONSTER_HP, dtype=jnp.int32)
@@ -42,7 +46,8 @@ def _chase(world, movers):
     targetable = p["active"] & ~p["dead"] & ~world["pz"][p["pos"][:, 0], p["pos"][:, 1]]
     table, _ = build_grid(p["pos"], targetable)
     tidx, dist = nearest_in_block(table, pos, p["pos"])
-    chase = movers & (dist <= MONSTER_AGGRO_RANGE)
+    due = world["tick"] % MOVE_TICKS[m["kind"]] == 0
+    chase = movers & AGGRO[m["kind"]] & due & (dist <= MONSTER_AGGRO_RANGE)
 
     delta = p["pos"][tidx] - pos
     sign = jnp.sign(delta)

@@ -2,11 +2,12 @@ import jax
 import jax.numpy as jnp
 
 from game.config import MONSTER_AGGRO_RANGE, MONSTER_HP
+from game.data.monsters import AGGRO, KIND_BY_NAME, MOVE_TICKS
 from game.monsters import monster_ai
 from game.state import make_empty_world
 
 
-def build(players=(), monsters=(), walls=(), pz=()):
+def build(players=(), monsters=(), walls=(), pz=(), kind=1, tick=0):
     w = make_empty_world(jax.random.PRNGKey(0))
     p, m = w["players"], w["monsters"]
     for i, pos in enumerate(players):
@@ -17,6 +18,8 @@ def build(players=(), monsters=(), walls=(), pz=()):
         m["spawn"] = m["spawn"].at[i].set(jnp.array(pos, jnp.int32))
         m["active"] = m["active"].at[i].set(True)
         m["hp"] = m["hp"].at[i].set(20)
+        m["kind"] = m["kind"].at[i].set(kind)  # default 1 = Orc Warrior: aggro, moves every tick
+    w["tick"] = jnp.int32(tick)
     for x, y in walls:
         w["walls"] = w["walls"].at[x, y].set(1)
     for x, y in pz:
@@ -130,3 +133,30 @@ def test_monster_chases_reachable_player_not_pz_player():
     # Player 0 is nearer (2 tiles, west) but on pz; player 1 is 3 tiles north.
     w = build(players=[(18, 20), (20, 23)], monsters=[(20, 20)], pz=[(18, 20)])
     assert mpos(monster_ai(w), 0) == (20, 21)
+
+
+def test_non_aggro_kind_never_chases():
+    for name in ("Poring", "Fabre", "Lunatic", "Drops"):
+        k = KIND_BY_NAME[name]
+        assert not bool(AGGRO[k])
+        for tick in range(4):
+            w = monster_ai(build(players=[(20, 20)], monsters=[(24, 21)], kind=k, tick=tick))
+            assert mpos(w, 0) == (24, 21)
+
+
+def test_aggro_kind_chases():
+    k = KIND_BY_NAME["Thief Bug"]
+    assert bool(AGGRO[k]) and int(MOVE_TICKS[k]) == 1
+    assert mpos(monster_ai(build(players=[(20, 20)], monsters=[(24, 21)], kind=k)), 0) == (23, 21)
+
+
+def test_move_ticks_gate_the_step():
+    for name in ("Zombie", "Skeleton", "Orc Warrior"):
+        k = KIND_BY_NAME[name]
+        mt = int(MOVE_TICKS[k])
+        assert bool(AGGRO[k])
+        for tick in range(2 * mt + 1):
+            w = monster_ai(build(players=[(20, 20)], monsters=[(24, 21)], kind=k, tick=tick))
+            expect = (23, 21) if tick % mt == 0 else (24, 21)
+            assert mpos(w, 0) == expect, (name, tick)
+    assert max(int(v) for v in MOVE_TICKS) > 1
