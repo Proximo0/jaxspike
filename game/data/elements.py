@@ -41,8 +41,9 @@ _TABLE = (
 )
 ELEM_MULT = jnp.asarray(_TABLE, dtype=jnp.int32)
 
-# rat Neutral, orc Earth (indexed by monster kind, length matches MONSTER_HP).
-_MONSTER_ELEMENT = (ELEM_NEUTRAL, ELEM_EARTH)
+# Defending element per monster kind, from the RO monster table (same ids as config.MONSTER_HP).
+from game.data.monsters import MONSTERS as _MONSTERS  # noqa: E402
+_MONSTER_ELEMENT = tuple(m.element for m in _MONSTERS)
 assert len(_MONSTER_ELEMENT) == len(config.MONSTER_HP)
 MONSTER_ELEMENT = jnp.asarray(_MONSTER_ELEMENT, dtype=jnp.int32)
 

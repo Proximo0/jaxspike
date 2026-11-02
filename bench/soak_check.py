@@ -7,7 +7,7 @@ Invariants checked after every chunk of ticks:
 - no active monster on a living player's tile
 - no active monster on a protection-zone tile; every player spawn is a temple tile
 - hp in [0, PLAYER_MAX_HP] for players, [0, max] for monsters
-- inventory values in [0, NUM_ITEMS)
+- inventory values in [0, ITEM_ID_LIMIT)
 - active drops on in-bounds tiles, ttl in [0, DROP_TTL]
 Prints per-batch stats so the game's balance is visible.
 """
@@ -21,7 +21,7 @@ import numpy as np
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[1]))
 
 from bots.runner import make_world_batch, run_games  # noqa: E402
-from game.config import MAP, MONSTER_HP, NUM_ITEMS, DROP_TTL, PLAYER_MAX_HP, T_TEMPLE  # noqa: E402
+from game.config import MAP, MONSTER_HP, ITEM_ID_LIMIT, DROP_TTL, PLAYER_MAX_HP, T_TEMPLE  # noqa: E402
 
 
 def check_invariants(worlds):
@@ -69,7 +69,7 @@ def check_invariants(worlds):
         if ((mhp[ma] <= 0) | (mhp[ma] > mmax[ma])).any():
             problems.append(f"world {b}: active monster hp out of range")
         inv = np.asarray(p["inv"][b])
-        if ((inv < 0) | (inv >= NUM_ITEMS)).any():
+        if ((inv < 0) | (inv >= ITEM_ID_LIMIT)).any():
             problems.append(f"world {b}: inventory value out of range")
         ttl = np.asarray(d["ttl"][b])
         if ((ttl[da] < 0) | (ttl[da] > DROP_TTL)).any():

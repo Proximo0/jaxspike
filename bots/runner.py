@@ -9,12 +9,10 @@ from game.config import (
     MAX_MONSTERS,
     MAX_PLAYERS,
     MONSTER_HP,
-    MONSTER_KIND_ORC,
-    MONSTER_KIND_RAT,
     PLAYER_MAX_HP,
 )
 from game.state import make_empty_world, next_key
-from game.world_layout import RAT_RING, TOWNS, temple_tiles
+from game.world_layout import TOWNS, temple_tiles
 
 POP_PLAYERS = min(128, MAX_PLAYERS)
 POP_MONSTERS = min(1024, MAX_MONSTERS)
@@ -36,16 +34,18 @@ def _distinct_tiles(allowed, key, n):
 def spawn_population(world, key):
     """Activate players on their home temples and monsters on distinct walkable non-pz tiles away from gates.
 
-    Player i gets town i % NT and temple tile i // NT. Monsters within RAT_RING walking distance of a gate are rats, the rest orcs.
-    Needs world["dist_town"] filled (make_world_batch does this).
+    Player i gets town i % NT and temple tile i // NT. Monster kinds come from game/ro_spawns.py: by field band
+    (walking distance to the nearest gate) and by dungeon. Needs world["dist_town"] filled (make_world_batch does this).
     """
+    from game import ro_spawns
+
     nt = len(TOWNS)
+    key, k_kind = jax.random.split(key)
     i = jnp.arange(POP_PLAYERS)
     ppos = temple_tiles()[i % nt, i // nt]
     gate_dist = world["dist_town"].min(axis=0)  # walking distance to the nearest gate
     mpos = _distinct_tiles((world["walls"] == 0) & ~world["pz"] & (gate_dist > GATE_APRON_TILES), key, POP_MONSTERS)
-    near = gate_dist[mpos[:, 0], mpos[:, 1]] < RAT_RING * MAP
-    kind = jnp.where(near, MONSTER_KIND_RAT, MONSTER_KIND_ORC).astype(jnp.int32)
+    kind = ro_spawns.kinds_for(world, mpos, k_kind).astype(jnp.int32)
     hp = jnp.asarray(MONSTER_HP, jnp.int32)[kind]
 
     p, m = world["players"], world["monsters"]
@@ -68,27 +68,33 @@ def spawn_population(world, key):
 
 
 def make_world_batch(seed, batch):
-    """Build `batch` populated worlds, every field batched on axis 0."""
-    from game import map_gen
+    """Build `batch` populated RO worlds, every field batched on axis 0.
+
+    RO terrain (towns, roads, dungeons, warps, kafra and station tiles), warp-aware distance fields, resource
+    nodes with their distance fields, monsters by band, players on their temples.
+    """
+    from game import map_gen, ro_craft
 
     keys = jax.random.split(jax.random.PRNGKey(seed), batch)
 
     def terrain_world(key):
-        k_world, k_walls, k_spawn = jax.random.split(key, 3)
+        k_world, k_walls, k_spawn, k_nodes = jax.random.split(key, 4)
         world = make_empty_world(k_world)
-        terrain = map_gen.make_terrain(k_walls)
+        terrain = map_gen.make_terrain_ro(k_walls)
         world = {
             **world,
             "terrain": terrain,
             "walls": map_gen.blocking(terrain),
             "pz": map_gen.protection_zone(terrain),
         }
-        return world, k_spawn
+        return world, k_spawn, k_nodes
 
-    worlds, k_spawn = jax.vmap(terrain_world)(keys)
-    # Sequential over worlds: the relaxation loop's temporaries would otherwise be batched too.
-    fields = jax.lax.map(map_gen.distance_fields, worlds["terrain"])
-    return jax.vmap(spawn_population)({**worlds, "dist_town": fields}, k_spawn)
+    worlds, k_spawn, k_nodes = jax.vmap(terrain_world)(keys)
+    # Sequential over worlds: the relaxation loops' temporaries would otherwise be batched too.
+    fields = jax.lax.map(map_gen.distance_fields_ro, worlds["terrain"])
+    worlds = {**worlds, "dist_town": fields}
+    worlds = jax.lax.map(lambda wk: ro_craft.with_craft(wk[0], wk[1]), (worlds, k_nodes))
+    return jax.vmap(spawn_population)(worlds, k_spawn)
 
 
 def _stats(worlds):
@@ -103,7 +109,7 @@ def _stats(worlds):
 
 def run_games(worlds, ticks):
     """Play `ticks` ticks of every world with bots; return (worlds, stats)."""
-    from bots.policies import bot_inputs
+    from bots.ro_policies import ro_bot_inputs as bot_inputs
     from game.step import step
 
     def tick(ws, _):

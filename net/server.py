@@ -20,11 +20,11 @@ import jax.numpy as jnp  # noqa: E402
 import numpy as np  # noqa: E402
 import websockets  # noqa: E402
 
-from bots.policies import bot_inputs  # noqa: E402
+from bots.ro_policies import ro_bot_inputs as bot_inputs  # noqa: E402
 from bots.runner import make_world_batch  # noqa: E402
 from game.config import (DIR_DELTAS, INV_SLOTS, MAX_PLAYERS, MAX_VIEWERS, PATH_STUCK_TICKS,  # noqa: E402
                          PLAYER_MAX_HP, SAVE_EVERY_TICKS, TICK_MS)
-from game.state import next_key  # noqa: E402
+from game.state import empty_inputs, next_key  # noqa: E402
 from game.step import step  # noqa: E402
 from game.view import changed_mask, entity_table, view_update  # noqa: E402
 from game.world_layout import TOWNS, temple_tiles  # noqa: E402
@@ -44,8 +44,12 @@ def _tick_fn(world, hmask, hmove, hattack, heat, prev_tab, known, viewer_slot):
     Returns (world, tab, known_next, pull); `pull` is the only thing the host reads back."""
     key, world = next_key(world)
     bots = bot_inputs(world, key)
-    inputs = {"move": jnp.where(hmask, hmove, bots["move"]), "attack": jnp.where(hmask, hattack, bots["attack"]),
-              "eat": jnp.where(hmask, heat, bots["eat"])}
+    # Humans get their own move/attack/eat; the RO inputs (allot, skill, items, craft, party, ...) are "none" for
+    # human slots until the net layer carries them (docs/*_wire.md); bot slots keep the bot policy's values.
+    none = empty_inputs()
+    inputs = {k: jnp.where(hmask, none[k], bots[k]) for k in bots}
+    inputs.update({"move": jnp.where(hmask, hmove, bots["move"]), "attack": jnp.where(hmask, hattack, bots["attack"]),
+                   "eat": jnp.where(hmask, heat, bots["eat"])})
     world = step(world, inputs)
     tab = entity_table(world)
     send, gone, known_next = view_update(tab, changed_mask(prev_tab, tab), viewer_slot, known)

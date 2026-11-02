@@ -60,7 +60,7 @@ def test_spawn_population_counts():
     assert (np.asarray(terrain)[ppos[:, 0], ppos[:, 1]] == T_TEMPLE).all()
     m = w["monsters"]
     kind = np.asarray(m["kind"])[np.asarray(m["active"])]
-    assert set(kind.tolist()) <= {0, 1}
+    assert set(kind.tolist()) <= set(range(len(MONSTER_HP)))  # RO kinds by band (game/ro_spawns.py)
     np.testing.assert_array_equal(np.asarray(m["hp"])[np.asarray(m["active"])], np.asarray(MONSTER_HP)[kind])
 
 
@@ -89,14 +89,29 @@ def test_monsters_spawn_off_pz_on_walkable():
 
 
 def test_monster_kind_follows_zone():
+    """Kinds follow the RO field bands: monsters in band 0 (nearest the gates) are band-0 kinds, and every
+    monster outside a dungeon carries a kind from its band's list (game/ro_spawns.py)."""
+    from game import ro_spawns
+    from game.world_layout import FIELD_BANDS, dungeon_index
+
     w = _one_world()
     m = w["monsters"]
     act = np.asarray(m["active"])
     pos = np.asarray(m["pos"])[act]
-    near = np.asarray(w["dist_town"]).min(axis=0)[pos[:, 0], pos[:, 1]] < RAT_RING * MAP
     kind = np.asarray(m["kind"])[act]
-    np.testing.assert_array_equal(kind, np.where(near, MONSTER_KIND_RAT, MONSTER_KIND_ORC))
-    assert set(kind.tolist()) == {MONSTER_KIND_RAT, MONSTER_KIND_ORC}
+    dist = np.asarray(w["dist_town"]).min(axis=0)[pos[:, 0], pos[:, 1]]
+    in_dungeon = np.asarray(dungeon_index(jnp.asarray(pos))) >= 0
+    band_kinds = np.asarray(ro_spawns.BAND_KINDS)
+    band_count = np.asarray(ro_spawns.BAND_COUNT)
+    edges = [float(b[1]) * MAP for b in FIELD_BANDS[:-1]]
+    band = np.zeros(len(dist), np.int32)
+    for e in edges:
+        band += dist >= e
+    for b in range(len(FIELD_BANDS)):
+        sel = (band == b) & ~in_dungeon
+        allowed = set(band_kinds[b, : band_count[b]].tolist())
+        assert set(kind[sel].tolist()) <= allowed, (b, set(kind[sel].tolist()) - allowed)
+    assert (band == 0).sum() > 0 and len(set(kind.tolist())) >= 3
 
 
 def test_world_batch_has_terrain_walls_pz():

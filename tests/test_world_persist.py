@@ -117,12 +117,12 @@ def test_garbage_file_refused(tmp_path):
 
 def test_extra_key_survives(tmp_path):
     w = _world()
-    w["stats"] = {"str": jnp.arange(MAX_PLAYERS, dtype=jnp.int16)}
+    w["extra"] = {"str": jnp.arange(MAX_PLAYERS, dtype=jnp.int16)}
     path = tmp_path / "w.npz"
     wp.save_world(w, path)
     r = wp.load_world(path)
-    assert r["stats"]["str"].dtype == jnp.int16
-    np.testing.assert_array_equal(np.asarray(r["stats"]["str"]), np.arange(MAX_PLAYERS))
+    assert r["extra"]["str"].dtype == jnp.int16
+    np.testing.assert_array_equal(np.asarray(r["extra"]["str"]), np.arange(MAX_PLAYERS))
 
 
 def test_world_matches_messages():

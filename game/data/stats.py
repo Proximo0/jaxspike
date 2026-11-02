@@ -89,10 +89,11 @@ JOB_HP_FACTOR_J = jnp.asarray(JOB_HP_FACTOR, jnp.int32)
 JOB_SP_FACTOR_J = jnp.asarray(JOB_SP_FACTOR, jnp.int32)
 JOB_ASPD_BASE_J = jnp.asarray(JOB_ASPD_BASE, jnp.int32)
 
-# MONSTER_BASE_EXP: indexed by monster kind, base exp paid per kill (plain exp). rat, orc.
-MONSTER_BASE_EXP = (10, 40)
-# MONSTER_JOB_EXP: indexed by monster kind, job exp paid per kill (plain exp). rat, orc.
-MONSTER_JOB_EXP = (5, 25)
+# MONSTER_BASE_EXP / MONSTER_JOB_EXP: indexed by monster kind, exp paid per kill, from the RO monster table
+# (game/data/monsters.py; Poring 2/1 ... Eddga 3000/1800).
+from game.data.monsters import MONSTERS as _MONSTERS  # noqa: E402
+MONSTER_BASE_EXP = tuple(m.base_exp for m in _MONSTERS)
+MONSTER_JOB_EXP = tuple(m.job_exp for m in _MONSTERS)
 MONSTER_BASE_EXP_J = jnp.asarray(MONSTER_BASE_EXP, jnp.int32)
 MONSTER_JOB_EXP_J = jnp.asarray(MONSTER_JOB_EXP, jnp.int32)
 

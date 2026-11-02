@@ -73,11 +73,26 @@ def empty_inputs():
         "move": jnp.zeros((MAX_PLAYERS,), jnp.int32),
         "attack": jnp.zeros((MAX_PLAYERS,), jnp.bool_),
         "eat": jnp.zeros((MAX_PLAYERS,), jnp.bool_),
+        # RO systems (docs/ro_contract.md; one-shot per tick, -1 / 0 / False = none)
+        "allot": jnp.full((MAX_PLAYERS,), -1, jnp.int32),   # stats: stat index 0..5
+        "job": jnp.full((MAX_PLAYERS,), -1, jnp.int32),     # stats: first job 1..6
+        "skill": jnp.zeros((MAX_PLAYERS,), jnp.int32),      # skills: skill id
+        "learn": jnp.zeros((MAX_PLAYERS,), jnp.int32),      # skills: skill id
+        "target": jnp.full((MAX_PLAYERS,), -1, jnp.int32),  # skills: entity id; party invite: player slot
+        "use_item": jnp.full((MAX_PLAYERS,), -1, jnp.int32),
+        "equip": jnp.full((MAX_PLAYERS,), -1, jnp.int32),
+        "refine": jnp.full((MAX_PLAYERS,), -1, jnp.int32),
+        "drop": jnp.full((MAX_PLAYERS,), -1, jnp.int32),
+        "gather": jnp.zeros((MAX_PLAYERS,), jnp.bool_),
+        "craft": jnp.zeros((MAX_PLAYERS,), jnp.int32),      # recipe id
+        "party": jnp.zeros((MAX_PLAYERS,), jnp.int32),      # 1 create, 2 leave, 3 invite, 4 accept
+        "save": jnp.zeros((MAX_PLAYERS,), jnp.bool_),       # kafra save point
     }
 
 
 def make_empty_world(key):
     """Blank world with no walls, no players, no monsters. Used by tests and as a base."""
+    from game import ro_craft, ro_items, ro_mvp, ro_party, ro_skills, ro_stats  # lazy: they import next_key
     return {
         "walls": jnp.zeros((MAP, MAP), jnp.int8),
         "terrain": jnp.full((MAP, MAP), T_GRASS, jnp.int8),
@@ -112,4 +127,11 @@ def make_empty_world(key):
             "active": jnp.zeros((MAX_DROPS,), jnp.bool_),
             "ttl": jnp.zeros((MAX_DROPS,), jnp.int32),
         },
+        # RO system blocks (docs/ro_contract.md). Nodes and MVPs are placed by bots.runner.make_world_batch.
+        "stats": ro_stats.make_state(),
+        "skills": ro_skills.make_state(),
+        "items": ro_items.make_state(),
+        "craft": ro_craft.make_state(),
+        "party": ro_party.make_state(),
+        "mvp": ro_mvp.make_state(),
     }
