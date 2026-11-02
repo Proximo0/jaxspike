@@ -43,7 +43,7 @@ def _initial_world(seed: int) -> dict:
     if seed not in _world_cache:
         batched = make_world_batch(seed, 1)
         _world_cache[seed] = jax.tree_util.tree_map(lambda x: x[0], batched)
-    return _world_cache[seed]
+    return jax.tree_util.tree_map(lambda x: x, _world_cache[seed])  # fresh containers per server
 
 
 class Client:
@@ -75,6 +75,9 @@ class GameServer:
         self.last_window: dict[int, tuple] = {}
         self.notice: dict[int, str] = {}
         self.prev_dead: dict[int, bool] = {}
+        self.town: dict[int, int] = {}  # each human's own home town (may differ from slot % NT)
+        self._closing: set = set()
+        self._sending: set = set()
         self._server = None
         self._tick_task: asyncio.Task | None = None
         self._prepared = False
@@ -116,6 +119,9 @@ class GameServer:
             self._server.close()
             await self._server.wait_closed()
             self._server = None
+        for t in list(self._sending):
+            t.cancel()
+        await asyncio.gather(*self._closing, *self._sending, return_exceptions=True)
 
     # ----- slots and characters -----
 
@@ -179,6 +185,7 @@ class GameServer:
         self.last_window.pop(slot, None)
         self.notice.pop(slot, None)
         self.prev_dead[slot] = False
+        self.town[slot] = town
         log.info("login %s slot %d town %d", key, slot, town)
         return slot, None
 
@@ -186,7 +193,7 @@ class GameServer:
         p = self.world["players"]
         dead = bool(p["dead"][slot])
         spawn = np.asarray(p["spawn"][slot], np.int32)
-        return {"town": slot % NT, "pos": spawn.copy() if dead else np.asarray(p["pos"][slot], np.int32),
+        return {"town": self.town[slot], "pos": spawn.copy() if dead else np.asarray(p["pos"][slot], np.int32),
                 "spawn": spawn, "hp": PLAYER_MAX_HP if dead else int(p["hp"][slot]),
                 "inv": np.asarray(p["inv"][slot], np.int32)[:INV_SLOTS],
                 "kills": int(p["kills"][slot]), "deaths": int(p["deaths"][slot])}
@@ -209,11 +216,16 @@ class GameServer:
         self._write_slot(slot, tile, tile, PLAYER_MAX_HP, np.zeros(INV_SLOTS, np.int32), 0, 0)
         self.owner[slot] = "bot"
         for d in (self.latest_input, self.path, self.pending, self.stuck, self.last_window, self.notice,
-                  self.prev_dead):
+                  self.prev_dead, self.town):
             d.pop(slot, None)
         c = self.conn.pop(slot, None)
         if c is not None:
-            asyncio.ensure_future(self._close(c.ws))
+            t = asyncio.ensure_future(self._close(c.ws))
+            self._closing.add(t)
+            t.add_done_callback(self._closing.discard)
+            if c.send_task is not None and not c.send_task.done():
+                self._sending.add(c.send_task)
+                c.send_task.add_done_callback(self._sending.discard)
         log.info("logout %s slot %d", name, slot)
 
     @staticmethod

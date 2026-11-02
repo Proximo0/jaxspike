@@ -1,6 +1,8 @@
 import asyncio, json, numpy as np, pytest
 import websockets
 from game.config import PLAYER_MAX_HP, PROTOCOL_VERSION
+from game.world_layout import TOWNS, temple_tiles
+from net.characters import load, load_roster, new_character, save
 from net.server import GameServer
 
 def run(coro):
@@ -82,11 +84,16 @@ def test_logout_saves_and_slot_returns_to_bot(tmp_path):
         await s.start("127.0.0.1", 0)
         try:
             ws, w = await connect(s, "carol"); slot = w["slot"]
-            await next_snap(ws); await ws.close()
+            last = await next_snap(ws)
+            await ws.close()
             for _ in range(20):
                 if s.owner[slot] == "bot": break
                 await asyncio.sleep(0.02)
             assert s.owner[slot] == "bot" and (tmp_path / "carol.npz").exists()
+            saved = load(tmp_path, "carol")
+            assert saved["pos"].tolist() == last["you"]["pos"] and saved["hp"] == last["you"]["hp"]
+            bot_pos = tuple(int(v) for v in np.asarray(s.world["players"]["pos"][slot]))
+            assert bot_pos in {tuple(int(v) for v in t) for t in np.asarray(temple_tiles())[slot % len(TOWNS)]}
             ws2, w2 = await connect(s, "carol")
             assert w2["t"] == "welcome"
             await ws2.close()
@@ -100,13 +107,13 @@ def test_refusals(tmp_path):
         await s.start("127.0.0.1", 0)
         try:
             a, wa = await connect(s, "dave"); assert wa["t"] == "welcome"
-            b, wb = await connect(s, "dave"); assert wb["t"] == "error" and "online" in wb["msg"]
-            c, wc = await connect(s, "erin"); assert wc["t"] == "error" and "full" in wc["msg"]
-            d, wd = await connect(s, "x"); assert wd["t"] == "error" and "name" in wd["msg"]
+            b, wb = await connect(s, "dave"); assert wb["t"] == "error" and wb["msg"] == "already online"
+            c, wc = await connect(s, "erin"); assert wc["t"] == "error" and wc["msg"] == "server full"
+            d, wd = await connect(s, "x"); assert wd["t"] == "error" and wd["msg"] == "bad name"
             (tmp_path / "frank.npz").write_bytes(b"junk")
             await a.close()
             await asyncio.sleep(0.1)
-            e, we = await connect(s, "frank"); assert we["t"] == "error" and "corrupt" in we["msg"]
+            e, we = await connect(s, "frank"); assert we["t"] == "error" and we["msg"] == "corrupt character"
             ws = await websockets.connect(f"ws://127.0.0.1:{s.port}")
             await ws.send("garbage")
             assert json.loads(await ws.recv())["t"] == "error"
@@ -138,3 +145,23 @@ def test_disconnect_during_play_frees_slot(tmp_path):
         finally:
             await s.stop()
     run(body())
+
+def test_slot_pick_prefers_own_stripe(tmp_path):
+    s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=20)
+    s.prepare()
+    save(tmp_path, "zed", new_character(0, (1, 1)))
+    slot, err = s.login("zed")
+    assert err is None and slot % len(TOWNS) == 0
+
+def test_fallback_slot_keeps_home_town(tmp_path):
+    s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=20)
+    s.prepare()
+    nt = len(TOWNS)
+    save(tmp_path, "yan", new_character(0, tuple(int(v) for v in np.asarray(temple_tiles())[0][0])))
+    for i in range(0, len(s.owner), nt):  # fill town 0's whole stripe with humans
+        if s.owner[i] in (None, "bot"):
+            s.owner[i] = f"filler{i}"
+    slot, err = s.login("yan")
+    assert err is None and slot % nt != 0
+    s.logout(slot)
+    assert load(tmp_path, "yan")["town"] == 0
