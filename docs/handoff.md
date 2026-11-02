@@ -4,9 +4,17 @@ For the next lead. Read this, then docs/brief.md (module contracts and phase ord
 
 ## State
 - Project: `C:\Users\crp27\jaxspike`. Python venv `venv` (CPU jax 0.12.0.1, pytest, pygame not available). GPU runs use WSL Ubuntu with `~/jaxgpu` (JAX CUDA).
-- Modules: `game/` (config, state, spatial, map_gen, movement, monsters, combat, loot, step), `bots/` (policies, runner), `game/persistence.py`, `bench/` (soak_check with `--batch/--chunks/--ticks/--seed`, bench_step), `tests/` (62 passing incl. test_spatial.py), `play.py` (tkinter playable window, CPU).
-- Verified: 62 tests pass on CPU. A 1000-tick soak on CPU with zero invariant violations. GPU soak results by batch size are in the "GPU batch" section below.
-- Not verified: the play.py visuals (launched for 20 s without a traceback, but never seen on screen by a lead). Balance is tuned from bot soaks, not from human playtesting.
+- Modules: `game/` (config, state, spatial, world_layout, map_gen, movement, monsters, combat, loot, survival, step), `bots/` (policies, runner), `game/persistence.py`, `bench/` (soak_check with `--batch/--chunks/--ticks/--seed`, bench_step), `tests/` (92 passing), `play.py` (tkinter fullscreen window, CPU).
+- Verified: 92 tests pass on CPU. 1000-tick CPU soaks on seeds 0 and 1 with zero invariant violations on the 5-town map. GPU soak results by batch size are in the "GPU batch" section below.
+- Not verified: the play.py visuals (launches, draws in 20 ms per frame headlessly, never seen on screen by a lead). Balance on the new map is not tuned (see "Balance").
+- Direction (2026-11-02, from the user): a public Tibia-style MMO, hybrid architecture (JAX tick + Python server layer). Spec and plan for milestone 1: `docs/superpowers/specs/2026-11-02-world-survival-design.md`, `docs/superpowers/plans/2026-11-02-world-survival.md`. Milestones: (1) world + survival [done], (2) networked server + client, (3) items/equipment/spells, (4) skilling, (5) pygame-ce renderer with Kenney tiles.
+- Local git repo (no remote): history of milestone 1 is in `git log`.
+
+## World + survival (milestone 1, 2026-11-02)
+- `MAP = 512`; `world["terrain"]` (ids `T_*`) and `world["pz"]` (protection zone); `walls` derived. Layout in `game/world_layout.py` (5 towns, 8 roads, 12x12 temples, in map fractions: 2048 is a one-constant change).
+- Players spawn on their home temple (slot mod 5); monsters spawn off-PZ, rats within `RAT_RING` of a town, orcs beyond (about 160 rats / 350 orcs per world). Monsters cannot enter towns or hit a player standing in one.
+- `survival` phase: +1 HP every 4 ticks, meat heals 40 on `inputs["eat"]`; bots eat below half HP.
+- Open gap: bots have no "leave town" behaviour. They random-walk inside walled towns and rarely find a 3-wide gate, so a 1000-tick soak now produces ~3 kills and 0 deaths per world (was ~1000 kills, ~60 deaths). Balance numbers are meaningless until bots hunt; a hunt/leave-town policy is the next piece of bot work.
 
 ## Dead players are not physical (2026-11-02)
 A 512-world GPU soak found two living players on one tile (2 of 512 worlds). Cause: `combat._respawn_players` ignored dead players when checking the spawn tile while `movement` and `monsters._occupancy` treated dead bodies as solid, so a respawn could land on a dead player who was stuck waiting (its own spawn blocked). Decision: dead players never occupy a tile anywhere (Tibia: you are gone until you reappear at the temple). Making corpses solid instead would allow a permanent deadlock when two dead players stand on each other's spawn. The soak invariant is now "no two *living* players share a tile".
@@ -34,7 +42,14 @@ A 512-world GPU soak found two living players on one tile (2 of 512 worlds). Cau
 | 512 | clean (after the dead-player fix; before it, 2 worlds overlapped) | 61 s | not sampled |
 | 1024 | clean | 111 s | 5470 MiB of 8151 (67%) |
 | 2048 | fails cleanly: RESOURCE_EXHAUSTED on a 4.37 GiB allocation inside jit_scan, memory freed | - | - |
-1024 is the verified ceiling under the cap. Going higher means shrinking per-world memory (the scan carry is the whole batched world), not raising the cap.
+1024 was the verified ceiling under the cap on the 256x256 map.
+
+MAP = 512 (5-town map), same cap:
+| batch | result | time |
+|---|---|---|
+| 64 / 128 / 256 | clean | 21 s / 26 s / 36 s |
+| 512 | fails cleanly: RESOURCE_EXHAUSTED on a 4 GiB allocation in `jit_scatter` | - |
+256 is the ceiling at MAP=512. The per-world MAP*MAP scatter tables (`monsters._chase` claim table, `combat._respawn_players` occupancy) are what grow; moving them to the sort-based approach in `movement.py` would raise it. For one live world none of this matters.
 
 ## Balance (bot soak, 8 worlds x 1000 ticks, 1024 bots)
 Targets chosen by the lead: 0.3-0.6 deaths and 5-10 kills per bot per 1000 ticks. Full sweep (20 runs) is in the balance worker's table in the session log; summary:
@@ -45,10 +60,11 @@ Targets chosen by the lead: 0.3-0.6 deaths and 5-10 kills per bot per 1000 ticks
 - Caveat: no healing exists, so every bot eventually dies; deaths scale almost linearly with incoming damage. Healing (eat meat, regen) is a mechanic to add before tuning further.
 
 ## Open work, in priority order
-1. Visual check of play.py by the user, then adjust graphics.
-2. Playtest balance with a human player and tune; add a healing mechanic first.
-3. Decide K_CELL for towns (see "Spatial grid capacity").
-4. To batch beyond 1024 on this GPU, reduce per-world state (e.g. MAX_MONSTERS/MAX_DROPS closer to population) rather than raise the cap.
+1. Bot hunt / leave-town behaviour (see the open gap above), then re-measure balance on the new map.
+2. Visual check of play.py by the user (towns, roads, water, SAFE in the HUD), then adjust graphics.
+3. Milestone 2: networked server + client (spec first).
+4. Decide K_CELL for towns (see "Spatial grid capacity"); temples now hold up to ~26 players per 8x8 cell.
+5. Tiled import for hand-authored towns; MAP = 2048 for the first playable release.
 
 ## Rules for the next lead
 - GPU memory cap is 80% (user-approved): `XLA_PYTHON_CLIENT_MEM_FRACTION=0.8` and `XLA_PYTHON_CLIENT_PREALLOCATE=false`. Never run above it.
