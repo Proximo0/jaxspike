@@ -144,3 +144,15 @@ def test_jit_and_vmap():
     assert out["monsters"]["hp"][:, 0].tolist() == [MONSTER_HP[0] - PLAYER_ATTACK] * 2
     single = jax.jit(combat)(w, _attack())
     assert int(single["monsters"]["hp"][0]) == MONSTER_HP[0] - PLAYER_ATTACK
+
+
+def test_monster_hits_reachable_player_not_pz_neighbour():
+    w = _world(kind=1)
+    p = w["players"]
+    p = {**p, "pos": p["pos"].at[1].set(jnp.array([21, 21])),
+         "spawn": p["spawn"].at[1].set(jnp.array([40, 40])),
+         "active": p["active"].at[1].set(True)}
+    w = {**w, "players": p, "pz": w["pz"].at[20, 20].set(True)}
+    w = combat(w, empty_inputs())
+    assert int(w["players"]["hp"][0]) == PLAYER_MAX_HP
+    assert int(w["players"]["hp"][1]) == PLAYER_MAX_HP - MONSTER_DAMAGE[1]

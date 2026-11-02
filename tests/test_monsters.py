@@ -111,3 +111,9 @@ def test_jit_and_vmap_batch():
     out = jax.jit(jax.vmap(monster_ai))(batch)
     assert tuple(int(v) for v in out["monsters"]["pos"][0, 0]) == (23, 20)
     assert tuple(int(v) for v in out["monsters"]["pos"][1, 0]) == (20, 24)
+
+
+def test_monster_chases_reachable_player_not_pz_player():
+    # Player 0 is nearer (2 tiles, west) but on pz; player 1 is 3 tiles north.
+    w = build(players=[(18, 20), (20, 23)], monsters=[(20, 20)], pz=[(18, 20)])
+    assert mpos(monster_ai(w), 0) == (20, 21)

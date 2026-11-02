@@ -92,3 +92,9 @@ def test_jit_and_vmap():
     inputs = jax.tree_util.tree_map(lambda *a: jnp.stack(a), _eat(), _eat())
     out = jax.vmap(survival)(batch, inputs)
     assert out["players"]["hp"].shape == (2, MAX_PLAYERS)
+
+
+def test_regen_and_eat_sum_before_cap():
+    out = survival(_world(hp=50, inv=_inv(ITEM_MEAT), tick=REGEN_TICKS), _eat())
+    assert int(out["players"]["hp"][0]) == 50 + REGEN_HP + MEAT_HEAL
+    assert not bool((out["players"]["inv"][0] == ITEM_MEAT).any())

@@ -26,7 +26,7 @@ A Tibia-style single-floor tile world in JAX. Players move, attack monsters, die
 - Every phase must be `jax.jit`-compatible and `jax.vmap`-compatible. Test with `jax.jit` at least once.
 - Randomness only through `next_key(world)`. Never use `np.random` or Python `random`.
 - Positions are int32 tile coordinates in `[0, MAP)`. Clip with `jnp.clip`.
-- No coordinate literal outside `game/world_layout.py`; derive positions from `MAP` and the layout spec.
+- In `game/` and `bots/`, no coordinate literal outside `game/world_layout.py` (tests may use literal tile positions); derive positions from `MAP` and the layout spec.
 - Walls: `walls[x, y] == 1` is blocked. Index as `walls[pos[:,0], pos[:,1]]`.
 - Deterministic tie-breaks: when two entities want the same tile, the lowest slot index wins. Use scatter-min or argmin, not race-prone writes.
 - Only update the fields your phase owns (listed per module below). Return a world with the same keys and shapes.
@@ -49,17 +49,19 @@ A Tibia-style single-floor tile world in JAX. Players move, attack monsters, die
   1. Respawn: dead monsters (`active == False`, `respawn_in > 0`) count down. At 0 they reset to `active=True`, `hp=MONSTER_HP[kind]`, `pos=spawn`, `attack_cd=0`.
   2. Chase: each active monster finds the nearest living active player with `nearest_in_block` (player grid built with `build_grid(players.pos, players.active & ~players.dead)`). If that player is within `MONSTER_AGGRO_RANGE` (manhattan), step one tile toward them (prefer the longer axis, fallback to the other axis if blocked). Otherwise wander: stay put (no random walk in v1).
   3. A monster does not step onto a walkable-blocked tile, an active player tile, or an active monster tile. Lowest monster index wins collisions.
+  4. Monsters never step onto a `pz` tile (towns are safe) and only target living players who are not on `pz`.
 - Owns: `monsters.pos`, `monsters.respawn_in`, `monsters.active`, `monsters.hp`, `monsters.attack_cd` (respawn resets only).
 - Tests: `tests/test_monsters.py`.
 
 ### `game/combat.py` (worker: combat)
 - `combat(world, inputs)`:
-  1. Respawn players: `dead` players reset to `pos=spawn`, `hp=PLAYER_MAX_HP`, `dead=False`, `attack_cd=0`. This runs first.
+  1. Respawn players: `dead` players reset to `pos=spawn`, `hp=PLAYER_MAX_HP`, `dead=False`, `attack_cd=0`, once the spawn tile holds no monster or living player (otherwise they wait). This runs first.
   2. Player attacks: an active, living player with `inputs["attack"]` and `attack_cd == 0` hits the nearest active monster at manhattan distance exactly 1 (use a monster grid). Damage `PLAYER_ATTACK`. Sets `attack_cd = PLAYER_ATTACK_COOLDOWN`, otherwise `attack_cd` decrements toward 0. Credit `kills` to the player whose hit reduces a monster to 0 HP (lowest player index wins if several).
   3. Monster attacks: an active monster with `attack_cd == 0` adjacent (manhattan 1) to a living player hits the nearest such player for `MONSTER_DAMAGE[kind]`. Sets `attack_cd = MONSTER_ATTACK_COOLDOWN`, otherwise decrement.
   4. Monster deaths: monsters with `hp <= 0` and active become `active=False`, `respawn_in = MONSTER_RESPAWN_TICKS`, `died=True`.
   5. Player deaths: players with `hp <= 0` and not yet dead become `dead=True`, `deaths += 1`, `active` stays True (dead players still count as logged in, but do not move, attack, or get targeted).
 - Owns: `players.hp`, `players.dead`, `players.attack_cd`, `players.kills`, `players.deaths`, `players.pos` (respawn only), `monsters.hp`, `monsters.active`, `monsters.respawn_in`, `monsters.died`, `monsters.attack_cd`.
+- A monster never hits a player standing on a `pz` tile; monster targeting ignores players on `pz`.
 - Note: step 2 and 3 use hp values from the start of the phase. Monster deaths from player damage are applied in step 4.
 - Tests: `tests/test_combat.py`.
 

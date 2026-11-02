@@ -57,8 +57,9 @@ def combat(world, inputs):
     kills = p["kills"].at[credit].add(1, mode="drop")
     p_cd = jnp.where(hit, PLAYER_ATTACK_COOLDOWN, jnp.maximum(p["attack_cd"] - 1, 0))
 
-    # Monster attacks on the nearest adjacent living player (start-of-phase hp).
-    ptable, _ = build_grid(p["pos"], alive)
+    # Monster attacks on the nearest adjacent living player outside the protection zone (start-of-phase hp).
+    targetable = alive & ~world["pz"][p["pos"][:, 0], p["pos"][:, 1]]
+    ptable, _ = build_grid(p["pos"], targetable)
     ptgt, pdist = nearest_in_block(ptable, m["pos"], p["pos"])
     mhit = m["active"] & (m["hp"] > 0) & (m["attack_cd"] == 0) & (pdist <= 1) & alive[ptgt]
     mhit = mhit & ~world["pz"][p["pos"][ptgt, 0], p["pos"][ptgt, 1]]  # protection zone

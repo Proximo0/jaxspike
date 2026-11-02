@@ -4,15 +4,15 @@ For the next lead. Read this, then docs/brief.md (module contracts and phase ord
 
 ## State
 - Project: `C:\Users\crp27\jaxspike`. Python venv `venv` (CPU jax 0.12.0.1, pytest, pygame not available). GPU runs use WSL Ubuntu with `~/jaxgpu` (JAX CUDA).
-- Modules: `game/` (config, state, spatial, world_layout, map_gen, movement, monsters, combat, loot, survival, step), `bots/` (policies, runner), `game/persistence.py`, `bench/` (soak_check with `--batch/--chunks/--ticks/--seed`, bench_step), `tests/` (92 passing), `play.py` (tkinter fullscreen window, CPU).
-- Verified: 92 tests pass on CPU. 1000-tick CPU soaks on seeds 0 and 1 with zero invariant violations on the 5-town map. GPU soak results by batch size are in the "GPU batch" section below.
+- Modules: `game/` (config, state, spatial, world_layout, map_gen, movement, monsters, combat, loot, survival, step), `bots/` (policies, runner), `game/persistence.py`, `bench/` (soak_check with `--batch/--chunks/--ticks/--seed`, bench_step), `tests/` (95 passing), `play.py` (tkinter fullscreen window, CPU).
+- Verified: 95 tests pass on CPU. 1000-tick CPU soaks on seeds 0 and 1 with zero invariant violations on the 5-town map. GPU soak results by batch size are in the "GPU batch" section below.
 - Not verified: the play.py visuals (launches, draws in 20 ms per frame headlessly, never seen on screen by a lead). Balance on the new map is not tuned (see "Balance").
 - Direction (2026-11-02, from the user): a public Tibia-style MMO, hybrid architecture (JAX tick + Python server layer). Spec and plan for milestone 1: `docs/superpowers/specs/2026-11-02-world-survival-design.md`, `docs/superpowers/plans/2026-11-02-world-survival.md`. Milestones: (1) world + survival [done], (2) networked server + client, (3) items/equipment/spells, (4) skilling, (5) pygame-ce renderer with Kenney tiles.
 - Local git repo (no remote): history of milestone 1 is in `git log`.
 
 ## World + survival (milestone 1, 2026-11-02)
 - `MAP = 512`; `world["terrain"]` (ids `T_*`) and `world["pz"]` (protection zone); `walls` derived. Layout in `game/world_layout.py` (5 towns, 8 roads, 12x12 temples, in map fractions: 2048 is a one-constant change).
-- Players spawn on their home temple (slot mod 5); monsters spawn off-PZ, rats within `RAT_RING` of a town, orcs beyond (about 160 rats / 350 orcs per world). Monsters cannot enter towns or hit a player standing in one.
+- Players spawn on their home temple (slot mod 5); monsters spawn off-PZ, rats within `RAT_RING` of a town, orcs beyond (about 160 rats / 350 orcs per world, an average over an 8-world batch). Monsters cannot enter towns or hit a player standing in one.
 - `survival` phase: +1 HP every 4 ticks, meat heals 40 on `inputs["eat"]`; bots eat below half HP.
 - Open gap: bots have no "leave town" behaviour. They random-walk inside walled towns and rarely find a 3-wide gate, so a 1000-tick soak now produces ~3 kills and 0 deaths per world (was ~1000 kills, ~60 deaths). Balance numbers are meaningless until bots hunt; a hunt/leave-town policy is the next piece of bot work.
 
@@ -61,8 +61,10 @@ Targets chosen by the lead: 0.3-0.6 deaths and 5-10 kills per bot per 1000 ticks
 
 ## Open work, in priority order
 1. Bot hunt / leave-town behaviour (see the open gap above), then re-measure balance on the new map.
+   - Fix before the next balance measurement: two active monsters can share a tile when one revives on a tile another steps onto in the same tick (`_chase` uses pre-revive occupancy); add a 'no two active monsters share a tile' soak invariant. Monsters may also spawn on the road apron just outside gates and narrow them.
 2. Visual check of play.py by the user (towns, roads, water, SAFE in the HUD), then adjust graphics.
 3. Milestone 2: networked server + client (spec first).
+   - Spec item: A living player idling on another player's temple spawn tile blocks that respawn indefinitely (griefing vector on a public server): consider letting living players overlap on temple tiles or respawning on the nearest free temple tile.
 4. Decide K_CELL for towns (see "Spatial grid capacity"); temples now hold up to ~26 players per 8x8 cell.
 5. Tiled import for hand-authored towns; MAP = 2048 for the first playable release.
 

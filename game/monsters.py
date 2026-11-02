@@ -36,10 +36,11 @@ def _occupancy(world):
 
 
 def _chase(world, movers):
-    """Move each mover one tile toward its nearest living player; lowest index wins ties."""
+    """Move each mover one tile toward its nearest living player outside the protection zone; lowest index wins ties."""
     p, m = world["players"], world["monsters"]
     pos = m["pos"]
-    table, _ = build_grid(p["pos"], p["active"] & ~p["dead"])
+    targetable = p["active"] & ~p["dead"] & ~world["pz"][p["pos"][:, 0], p["pos"][:, 1]]
+    table, _ = build_grid(p["pos"], targetable)
     tidx, dist = nearest_in_block(table, pos, p["pos"])
     chase = movers & (dist <= MONSTER_AGGRO_RANGE)
 
