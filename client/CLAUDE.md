@@ -14,7 +14,8 @@ On the user's Windows PC run the tools from Git Bash with
 - `tools/lint.sh`: parse and static checks for every script. Ends with `LINT problems=<n>`.
 - `tools/run_sims.sh`: regression sims (`tests/sim/sim_*.gd`, listed in `tests/sim/sim_suite.gd`).
 - `tools/check_all.sh`: everything at once (unit, sims, lint, plus the bot and lab if their scenes exist).
-- `tools/export_windows.sh`: Windows build zip in `build/`. `tools/export_android.sh`: debug APK in `build/`.
+- `tools/export_windows.sh`: Windows build zip in `build/` (Linux/CI). On the user's PC use `tools/export_windows_pc.sh`:
+  templates on `D:/godot/templates`, exe and dated zip in `D:/jaxspike-builds`. `tools/export_android.sh`: debug APK in `build/`.
 - Run the game: `godot --path .` (add `-- --dev` for dev entries, `-- --stamp` to show the frame stamp).
 
 ## Layout
