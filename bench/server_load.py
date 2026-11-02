@@ -84,6 +84,8 @@ def main():
 
     live = [c for c in clients if c.welcome and c.connected]
     refused = [c for c in clients if c.error]
+    if refused:
+        print("refusal reasons:", sorted({c.error for c in refused}))
     timed_out = [c for c in clients if not c.welcome and not c.error]
     # Per-client tally from NetClient's own counters (snap messages and snap text length; terrain is in
     # welcome only, so it is not in these bytes).

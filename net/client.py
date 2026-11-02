@@ -19,9 +19,10 @@ def apply_snap(ents: dict, snap: dict) -> None:
 
 
 class NetClient(threading.Thread):
-    def __init__(self, host: str, port: int, name: str):
+    def __init__(self, host: str, port: int, name: str, password: str | None = None, create: bool = False):
         super().__init__(daemon=True)
         self.host, self.port, self.name_ = host, port, name
+        self.password, self.create = password, create  # None: name-only login (server compat path)
         self.welcome = None
         self.error = None
         self.connected = False
@@ -84,7 +85,10 @@ class NetClient(threading.Thread):
                 q.put_nowait(m)
             self._pending.clear()
         async with websockets.connect(f"ws://{self.host}:{self.port}", max_size=None) as ws:
-            await ws.send(encode({"t": "login", "name": self.name_}))
+            login = {"t": "login", "name": self.name_}
+            if self.password is not None:
+                login["password"], login["create"] = self.password, self.create
+            await ws.send(encode(login))
             msg = decode(await ws.recv())
             if msg is None or msg["t"] == "error":
                 self.error = (msg or {}).get("msg", "bad reply")

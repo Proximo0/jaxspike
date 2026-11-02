@@ -35,7 +35,7 @@ def test_login_welcome_and_snapshots(tmp_path):
             snap = msgs[0]
             assert "terrain" not in snap and "terrain" not in msgs[1]  # v1 key is gone
             assert snap["full"] is True and msgs[1]["full"] is False and msgs[2]["full"] is False
-            assert snap["you"]["hp"] == PLAYER_MAX_HP and snap["gone"] == [] and snap["v"] == 2
+            assert snap["you"]["hp"] == snap["you"]["max_hp"] and snap["gone"] == [] and snap["v"] == 2
             ids = {e["id"] for e in snap["ents"]}
             assert w["slot"] in ids  # a viewer always sees itself
             me = next(e for e in snap["ents"] if e["id"] == w["slot"])
@@ -99,7 +99,11 @@ def test_walk_to_reaches_tile(tmp_path):
                     break
             assert pos == goal
             await ws.send(json.dumps({"v": PROTOCOL_VERSION, "t": "walk_to", "x": -1, "y": 5}))
-            notices = [(await next_snap(ws))["notice"] for _ in range(5)]
+            notices = []
+            for _ in range(40):
+                notices.append((await next_snap(ws))["notice"])
+                if "too far" in notices:
+                    break
             assert "too far" in notices
             await ws.close()
         finally:
@@ -120,7 +124,7 @@ def test_logout_saves_and_slot_returns_to_bot(tmp_path):
             assert s.owner[slot] == "bot" and (tmp_path / "carol.npz").exists()
             saved = load(tmp_path, "carol")
             assert saved["pos"].tolist() == last["you"]["pos"] and saved["hp"] == last["you"]["hp"]
-            bot_pos = tuple(int(v) for v in np.asarray(s.world["players"]["pos"][slot]))
+            bot_pos = tuple(int(v) for v in np.asarray(s.world["players"]["spawn"][slot]))  # pos may have moved on
             assert bot_pos in {tuple(int(v) for v in t) for t in np.asarray(temple_tiles())[slot % len(TOWNS)]}
             ws2, w2 = await connect(s, "carol")
             assert w2["t"] == "welcome"
@@ -373,3 +377,459 @@ def test_skipped_slow_client_gets_a_full_resync(tmp_path):
         assert last["full"] is True and any(e["id"] == slot for e in last["ents"])
     run(body())
 
+
+
+# ----- RO systems over the wire (docs/*_wire.md) -----
+
+def _ro_server(tmp_path, **kw):
+    s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=50, **kw)
+    s.prepare()
+    return s
+
+def _human(s, name):
+    slot, err = s.login(name)
+    assert err is None
+    return slot, _attach(s, slot)
+
+async def tk(s):
+    s.tick_once()
+    await asyncio.sleep(0.005)  # let the send tasks of this tick run before the next one
+
+def _flush():
+    return asyncio.sleep(0.02)
+
+NONE_KEYS = ("allot", "job", "skill", "learn", "target", "use_item", "equip", "refine", "drop", "gather", "craft",
+             "party", "save")
+
+def _pend_is_none(s, slot=None):
+    from net.server import _NONE_INPUTS
+    return all((s.pend[k] == _NONE_INPUTS[k]).all() if slot is None else s.pend[k][slot] == _NONE_INPUTS[k][slot]
+               for k in NONE_KEYS)
+
+def test_ro_messages_fill_pending_and_clear_after_one_tick(tmp_path):
+    async def body():
+        s = _ro_server(tmp_path)
+        a, _ = _human(s, "pendera")
+        b, _ = _human(s, "penderb")
+        assert _pend_is_none(s)
+        send = lambda t, **kw: s._on_ro_message(a, {"t": t, **kw})
+        send("allot", stat=3); send("job", job=2); send("skill", id=4, target=515); send("learn", id=7)
+        send("use_item", slot=1); send("equip", slot=2); send("refine", slot=3); send("drop", slot=4)
+        send("gather"); send("craft", recipe=5); send("save")
+        p = s.pend
+        assert (p["allot"][a], p["job"][a], p["skill"][a], p["target"][a], p["learn"][a]) == (3, 2, 4, 515, 7)
+        assert (p["use_item"][a], p["equip"][a], p["refine"][a], p["drop"][a]) == (1, 2, 3, 4)
+        assert bool(p["gather"][a]) and p["craft"][a] == 5 and bool(p["save"][a])
+        assert _pend_is_none(s, b)  # only the sender's slot
+        send("skill", id=9, target=-1)  # a later message of the same kind overwrites (last wins)
+        assert (p["skill"][a], p["target"][a]) == (9, -1)
+        await tk(s)
+        assert _pend_is_none(s)  # consumed by exactly one tick
+        await tk(s)
+        assert _pend_is_none(s)
+    run(body())
+
+def test_party_message_maps_target_slot_and_notice(tmp_path):
+    async def body():
+        s = _ro_server(tmp_path)
+        a, _ = _human(s, "partya")
+        b, _ = _human(s, "partyb")
+        s._on_ro_message(a, {"t": "party", "op": "invite", "target": "PartyB"})  # names are case-insensitive
+        assert s.pend["party"][a] == 3 and s.pend["target"][a] == b and a not in s.notice
+        s._on_ro_message(a, {"t": "party", "op": "invite", "target": "nobodyhere"})
+        assert s.pend["party"][a] == 3 and s.pend["target"][a] == -1 and s.notice[a] == "no such player"
+        s._on_ro_message(a, {"t": "party", "op": "create", "target": None})
+        assert s.pend["party"][a] == 1 and s.pend["target"][a] == -1
+    run(body())
+
+def test_allot_applies_once_and_only_to_the_sender(tmp_path):
+    async def body():
+        s = _ro_server(tmp_path)
+        a, _ = _human(s, "allota")
+        b, _ = _human(s, "allotb")
+        st = lambda k, i: int(s.world["stats"][k][i])
+        pts = st("stat_points", a)
+        s._on_ro_message(a, {"t": "allot", "stat": 0})
+        await tk(s); await tk(s); await tk(s)
+        assert st("str", a) == 2 and st("stat_points", a) == pts - 2  # one message = one point, STAT_COST[1] == 2
+        assert st("str", b) == 1 and st("stat_points", b) == pts
+    run(body())
+
+def test_tick_overrides_only_human_slots(tmp_path):
+    """Bots keep their policy values: the human override arrays only replace the masked slots."""
+    import jax
+    from net.server import _tick_jit, _NONE_INPUTS
+    s = _ro_server(tmp_path)
+    z = np.zeros(512)
+    viewer = np.full(512, -1, np.int32)
+    hmask = z.astype(bool); hmask[3] = True
+    base = {k: v.copy() for k, v in _NONE_INPUTS.items() if k in NONE_KEYS}
+    junk = {k: v.copy() for k, v in base.items()}
+    for k in ("allot", "job", "skill", "learn", "use_item", "equip", "refine", "drop", "craft"):
+        junk[k][:] = 1                      # every slot wants something; only slot 3 is a human
+    junk["gather"][:] = True; junk["party"][:] = 1; junk["save"][:] = True
+    def run_tick(h):
+        w, *_ = _tick_jit(s.world, hmask, z.astype(np.int32), z.astype(bool), z.astype(bool), h, s.prev_tab, s.known, viewer)
+        return jax.device_get(w["stats"])
+    a, b = run_tick(base), run_tick(junk)
+    others = np.arange(512) != 3
+    for k in ("str", "agi", "stat_points", "skill_points", "job", "base_level"):
+        assert (a[k][others] == b[k][others]).all(), k   # bot slots are identical whatever the human arrays hold
+    assert not all((a[k] == b[k]).all() for k in ("str", "agi", "vit", "int", "dex", "luk", "stat_points"))  # slot 3 changed
+
+def test_snap_you_has_the_ro_fields(tmp_path):
+    async def body():
+        s = _ro_server(tmp_path)
+        a, ws = _human(s, "youfields")
+        await tk(s); await tk(s); await _flush()
+        first, second = _snaps(ws)[:2]
+        you = first["you"]
+        assert you["level"] == 1 and you["job"] == 0 and you["job_level"] == 1 and len(you["stats"]) == 6
+        assert you["stat_points"] > 0 and you["skill_points"] == 0 and you["max_sp"] > 0 and you["sp"] > 0
+        assert you["max_hp"] > 0 and you["base_exp_next"] > 0 and you["job_exp_next"] > 0
+        assert you["buffs"] == [] and you["cooldowns"] == [] and you["learned"] == []
+        assert you["casting"] == 0 and you["zeny"] == 0 and len(you["equip"]) == 8
+        assert len(you["inv"]) == 16 and set(you["inv"][0]) == {"item", "count", "refine", "cards"} and len(you["inv"][0]["cards"]) == 4
+        assert len(you["craft"]["level"]) == 6 and len(you["craft"]["exp"]) == 6
+        assert you["party"] == -1 and you["leader"] is False
+        assert you["members"] == [] and len(you["storage"]) == 100  # full snap carries the change-detected fields
+        assert "members" not in second["you"] and "storage" not in second["you"]  # unchanged: omitted
+        assert second["you"]["max_hp"] == you["max_hp"]
+    run(body())
+
+def test_learn_then_skill_in_one_tick(tmp_path):
+    async def body():
+        s = _ro_server(tmp_path)
+        a, ws = _human(s, "caster")
+        st = s.world["stats"]
+        s.world["stats"] = {**st, "skill_points": st["skill_points"].at[a].set(2)}
+        s._on_ro_message(a, {"t": "learn", "id": 2})                       # First Aid (novice, self target)
+        s._on_ro_message(a, {"t": "skill", "id": 2, "target": -1})
+        await tk(s); await tk(s); await _flush()
+        you = _snaps(ws)[0]["you"]
+        assert you["learned"] == [[2, 1]] and you["skill_points"] == 1
+        assert [c[0] for c in you["cooldowns"]] == [2] and you["cooldowns"][0][1] > 0
+        assert _pend_is_none(s)
+    run(body())
+
+def test_chat_say_party_whisper_delivery(tmp_path):
+    async def body():
+        s = _ro_server(tmp_path)
+        a, wa = _human(s, "chata")
+        b, wb = _human(s, "chatb")
+        c, wc = _human(s, "chatc")
+        pos = s.world["players"]["pos"]
+        near = np.asarray(pos[a]) + np.array([2, 1])
+        far = np.asarray(pos[a]) + np.array([60, 0])
+        s.world["players"] = {**s.world["players"], "pos": pos.at[b].set(jnp_arr(near)).at[c].set(jnp_arr(far))}
+        chats = lambda ws: [m for m in ws.sent if m["t"] == "chat"]
+        await tk(s)
+        s._on_ro_message(a, {"t": "chat", "kind": "say", "text": "  hello world  ", "to": None})
+        await tk(s); await _flush()
+        assert [m["text"] for m in chats(wa)] == ["hello world"] and [m["text"] for m in chats(wb)] == ["hello world"]
+        assert chats(wc) == []  # out of view range
+        m = chats(wb)[0]
+        assert m["kind"] == "say" and m["from"] == "chata" and m["v"] == 2
+        i = wb.sent.index(m)
+        assert wb.sent[i + 1]["t"] == "snap" and wb.sent[i + 1]["tick"] == m["tick"]  # chat goes out ahead of its tick's snap
+        # whisper reaches the named player only, wherever they are; unknown names answer the sender
+        s._on_ro_message(a, {"t": "chat", "kind": "whisper", "text": "psst", "to": "ChatC"})
+        s._on_ro_message(a, {"t": "chat", "kind": "whisper", "text": "who?", "to": "ghost"})
+        await tk(s); await _flush()
+        assert [m["text"] for m in chats(wc)] == ["psst"] and chats(wc)[0]["kind"] == "whisper"
+        assert [m["text"] for m in chats(wb)] == ["hello world"]
+        assert chats(wa)[-1] == {"t": "chat", "kind": "system", "text": "no such player", "v": 2}
+        # party chat needs a party
+        s._on_ro_message(a, {"t": "chat", "kind": "party", "text": "team?", "to": None})
+        await tk(s); await _flush()
+        assert all(m["text"] != "team?" for ws in (wa, wb, wc) for m in chats(ws))
+        s._on_ro_message(a, {"t": "party", "op": "create", "target": None}); await tk(s)
+        s._on_ro_message(a, {"t": "party", "op": "invite", "target": "chatc"}); await tk(s)
+        s._on_ro_message(c, {"t": "party", "op": "accept", "target": None}); await tk(s)
+        s._on_ro_message(c, {"t": "chat", "kind": "party", "text": "team!", "to": None})
+        await tk(s); await _flush()
+        assert [m["text"] for m in chats(wa) if m["kind"] == "party"] == ["team!"]
+        assert [m["text"] for m in chats(wc) if m["kind"] == "party"] == ["team!"]
+        assert not [m for m in chats(wb) if m["kind"] == "party"]  # b is not in the party
+    run(body())
+
+def test_party_fields_and_members_change_detection(tmp_path):
+    async def body():
+        s = _ro_server(tmp_path)
+        a, wa = _human(s, "leadera")
+        b, wb = _human(s, "joinerb")
+        await tk(s)
+        s._on_ro_message(a, {"t": "party", "op": "create", "target": None}); await tk(s)
+        s._on_ro_message(a, {"t": "party", "op": "invite", "target": "joinerb"}); await tk(s)
+        s._on_ro_message(b, {"t": "party", "op": "accept", "target": None}); await tk(s)
+        await tk(s); await _flush()
+        sa, sb = _snaps(wa), _snaps(wb)
+        assert sa[0]["you"]["party"] == -1 and sa[0]["you"]["members"] == []
+        created = next(x for x in sa if x["you"]["party"] >= 0)
+        assert created["you"]["leader"] is True and created["you"]["members"] == ["leadera"]
+        last_a, last_b = sa[-1]["you"], sb[-1]["you"]
+        assert last_a["party"] == last_b["party"] >= 0 and last_a["leader"] is True and last_b["leader"] is False
+        joined_b = next(x for x in sb if x["you"]["party"] >= 0)
+        assert joined_b["you"]["members"] == ["leadera", "joinerb"]
+        assert "members" not in last_b  # only on change
+        assert sum("members" in x["you"] for x in sa) == 3  # full snap, party created, b joined
+        # leaving empties the list on the next snap
+        s._on_ro_message(b, {"t": "party", "op": "leave", "target": None}); await tk(s); await tk(s); await _flush()
+        gone = next(x for x in _snaps(wb)[::-1] if "members" in x["you"])
+        assert gone["you"]["members"] == [] and gone["you"]["party"] == -1
+    run(body())
+
+def test_mvp_broadcast_when_event_head_advances(tmp_path):
+    async def body():
+        s = _ro_server(tmp_path)
+        a, wa = _human(s, "mvpa")
+        b, wb = _human(s, "mvpb")
+        await tk(s)
+        mvps = lambda ws: [m for m in ws.sent if m["t"] == "mvp"]
+        await tk(s); await _flush()
+        assert mvps(wa) == []  # nothing before the ring advances
+        mv = s.world["mvp"]
+        row = jnp_arr([18, a, 7])
+        s.world["mvp"] = {**mv, "event": mv["event"].at[0].set(row), "event_head": mv["event_head"] + 1}
+        await tk(s); await tk(s); await _flush()
+        want = {"t": "mvp", "kind": 18, "killer": "mvpa", "tick": 7, "v": 2}
+        assert mvps(wa) == [want] and mvps(wb) == [want]  # every client, once
+        mv = s.world["mvp"]
+        s.world["mvp"] = {**mv, "event": mv["event"].at[1].set(jnp_arr([19, -1, 9])), "event_head": mv["event_head"] + 1}
+        await tk(s); await _flush()
+        assert mvps(wb)[-1]["killer"] is None and mvps(wb)[-1]["kind"] == 19 and len(mvps(wb)) == 2
+        mv = s.world["mvp"]
+        s.world["mvp"] = {**mv, "event_head": mv["event_head"] + 20}  # more than the ring holds: only the last 8
+        await tk(s); await _flush()
+        assert len(mvps(wb)) == 2 + 8
+    run(body())
+
+def test_slow_client_keeps_chat_in_its_outbox(tmp_path):
+    async def body():
+        s = _ro_server(tmp_path)
+        a, wa = _human(s, "slowchat")
+        await tk(s); await _flush()
+        gate = asyncio.get_running_loop().create_future()
+        s.conn[a].send_task = asyncio.ensure_future(gate)
+        s._on_ro_message(a, {"t": "chat", "kind": "say", "text": "queued", "to": None})
+        await tk(s); await tk(s)
+        assert len(s.conn[a].outbox) == 1  # the tick never waited; the line stays queued
+        gate.set_result(None); await _flush()
+        await tk(s); await _flush()
+        texts = [m["t"] for m in wa.sent]
+        assert s.conn[a].outbox == [] and texts.index("chat") < len(texts) - 1 and texts[-1] == "snap"
+    run(body())
+
+def test_storage_in_out_and_no_kafra_outside_town(tmp_path):
+    async def body():
+        s = _ro_server(tmp_path)
+        a, ws = _human(s, "boxer")
+        stack_id = 4  # red potion: stackable (id 1 is the gold coin, which the items phase turns into zeny)
+        p, it = s.world["players"], s.world["items"]
+        s.world["players"] = {**p, "inv": p["inv"].at[a, 0].set(stack_id).at[a, 1].set(2)}
+        s.world["items"] = {**it, "inv_count": it["inv_count"].at[a, 0].set(5).at[a, 1].set(1)}
+        await tk(s); await tk(s); await _flush()
+        assert len(_snaps(ws)[0]["you"]["storage"]) == 100
+        s._on_ro_message(a, {"t": "storage", "op": "in", "slot": 0})   # a stack moves one unit
+        s._on_ro_message(a, {"t": "storage", "op": "in", "slot": 1})
+        await tk(s); await tk(s); await _flush()
+        sn = _snaps(ws)
+        st = next(x["you"]["storage"] for x in sn if "storage" in x["you"] and x["you"]["storage"][0] != 0)
+        assert st[:2] == [stack_id, 2]
+        assert sn[-1]["you"]["inv"][0]["count"] == 4 and sn[-1]["you"]["inv"][1]["item"] == 0
+        assert sum("storage" in x["you"] for x in sn) == 2  # the full snap, then once on change
+        s._on_ro_message(a, {"t": "storage", "op": "out", "slot": 1})
+        s._on_ro_message(a, {"t": "storage", "op": "out", "slot": 50})  # empty storage slot: refused, changes nothing
+        await tk(s); await tk(s); await _flush()
+        last = _snaps(ws)[-1]["you"]
+        assert last["inv"][1]["item"] == 2 and last["inv"][1]["count"] == 1
+        # a refined item is refused (the box keeps ids only)
+        it = s.world["items"]
+        s.world["items"] = {**it, "inv_refine": it["inv_refine"].at[a, 1].set(3)}
+        s._on_ro_message(a, {"t": "storage", "op": "in", "slot": 1})
+        await tk(s); await tk(s); await _flush()
+        assert _snaps(ws)[-1]["you"]["inv"][1]["item"] == 2
+        # outside a town: notice, nothing moves
+        far = jnp_arr([5, 5])
+        p = s.world["players"]
+        s.world["players"] = {**p, "pos": p["pos"].at[a].set(far)}
+        s.pos_host[a] = [5, 5]
+        s._on_ro_message(a, {"t": "storage", "op": "in", "slot": 0})
+        await tk(s); await _flush()
+        assert _snaps(ws)[-1]["notice"] == "no kafra here" and _snaps(ws)[-1]["you"]["inv"][0]["count"] == 4
+    run(body())
+
+def test_save_message_sets_the_respawn_point(tmp_path):
+    from game.world_layout import town_centers
+    async def body():
+        s = _ro_server(tmp_path)
+        a, _ = _human(s, "saver")
+        before = np.asarray(s.world["players"]["spawn"][a]).tolist()
+        centre = town_centers()[s.town[a]].tolist()
+        assert before != centre
+        s._on_ro_message(a, {"t": "save"})
+        await tk(s)
+        assert np.asarray(s.world["players"]["spawn"][a]).tolist() == centre
+    run(body())
+
+def test_logout_gives_the_slot_back_as_a_fresh_bot_row(tmp_path):
+    async def body():
+        s = _ro_server(tmp_path)
+        a, _ = _human(s, "leaver")
+        st, it = s.world["stats"], s.world["items"]
+        s.world["stats"] = {**st, "base_level": st["base_level"].at[a].set(9), "str": st["str"].at[a].set(30)}
+        s.world["items"] = {**it, "zeny": it["zeny"].at[a].set(777)}
+        s.logout(a)
+        assert int(s.world["stats"]["base_level"][a]) == 1 and int(s.world["stats"]["str"][a]) == 1
+        assert int(s.world["items"]["zeny"][a]) == 0 and int(s.world["party"]["party_id"][a]) == -1
+        assert a not in s.storage and _pend_is_none(s)
+    run(body())
+
+def test_ro_state_round_trips_through_the_character_file(tmp_path):
+    async def body():
+        s = _ro_server(tmp_path)
+        a, _ = _human(s, "persistx")
+        st, it = s.world["stats"], s.world["items"]
+        s.world["stats"] = {**st, "str": st["str"].at[a].set(12), "stat_points": st["stat_points"].at[a].set(5)}
+        s.world["items"] = {**it, "zeny": it["zeny"].at[a].set(4321)}
+        s.storage[a][3] = 2
+        s.logout(a)
+        b, err = s.login("persistx")
+        assert err is None
+        assert int(s.world["stats"]["str"][b]) == 12 and int(s.world["stats"]["stat_points"][b]) == 5
+        assert int(s.world["items"]["zeny"][b]) == 4321
+        assert int(s.world["stats"]["kills_seen"][b]) == int(s.world["players"]["kills"][b])
+    run(body())
+
+
+# ----- over real sockets: auth, malformed RO messages, welcome tables, chat -----
+
+async def login_pw(server, name, password=None, create=None):
+    ws = await websockets.connect(f"ws://127.0.0.1:{server.port}")
+    msg = {"v": PROTOCOL_VERSION, "t": "login", "name": name}
+    if password is not None:
+        msg["password"] = password
+    if create is not None:
+        msg["create"] = create
+    await ws.send(json.dumps(msg))
+    return ws, json.loads(await ws.recv())
+
+async def wait_ticks(s, n):
+    t0 = s.tick
+    for _ in range(400):
+        if s.tick >= t0 + n:
+            return
+        await asyncio.sleep(0.01)
+    raise AssertionError("ticks stopped")
+
+async def wait_until(pred, ticks=200):
+    for _ in range(ticks):
+        if pred():
+            return
+        await asyncio.sleep(0.02)
+    raise AssertionError("condition not met")
+
+def test_password_create_login_and_refusals(tmp_path):
+    async def body():
+        s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=50)
+        await s.start("127.0.0.1", 0)
+        try:
+            ws, w = await login_pw(s, "Pwuser", "hunter2", True)
+            assert w["t"] == "welcome" and s.owner[w["slot"]] == "pwuser"
+            slot = w["slot"]
+            assert s.accounts.exists("pwuser") and s.accounts.verify("pwuser", "hunter2")
+            await ws.close(); await wait_until(lambda: s.owner[slot] == "bot")
+            bad, m = await login_pw(s, "pwuser", "wrong"); assert m == {**m, "t": "error", "msg": "bad password"}
+            none, m = await login_pw(s, "pwuser"); assert m["t"] == "error" and m["msg"] == "bad password"  # account: password required
+            ghost, m = await login_pw(s, "nosuchacct", "pw"); assert m["t"] == "error" and m["msg"] == "bad password"
+            taken, m = await login_pw(s, "pwuser", "other", True); assert m["t"] == "error" and m["msg"] == "name taken"
+            empty, m = await login_pw(s, "newbie1", "", True); assert m["t"] == "error" and m["msg"] == "bad password"
+            badname, m = await login_pw(s, "x", "pw", True); assert m["t"] == "error" and m["msg"] == "bad name"
+            ok, m = await login_pw(s, "pwuser", "hunter2"); assert m["t"] == "welcome"
+            await ok.close(); await wait_until(lambda: "pwuser" not in s.owner)
+            assert s.accounts.characters("pwuser") == ["pwuser"]
+            # compat: a name with no account still logs in without a password
+            legacy, m = await login_pw(s, "legacyguy"); assert m["t"] == "welcome"
+            await legacy.close()
+        finally:
+            await s.stop()
+    run(body())
+
+def test_password_lockout_and_require_password(tmp_path):
+    async def body():
+        s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=50, require_password=True)
+        await s.start("127.0.0.1", 0)
+        try:
+            ws, m = await login_pw(s, "strict"); assert m["t"] == "error" and m["msg"] == "bad password"  # compat off
+            ws, m = await login_pw(s, "strict", "pw1", True); assert m["t"] == "welcome"
+            await ws.close(); await wait_until(lambda: "strict" not in s.owner)
+            for _ in range(5):
+                ws, m = await login_pw(s, "strict", "nope")
+                assert m["t"] == "error" and m["msg"] in ("bad password", "locked out")
+            ws, m = await login_pw(s, "strict", "pw1"); assert m["t"] == "error" and m["msg"] == "locked out"
+        finally:
+            await s.stop()
+    run(body())
+
+def test_malformed_ro_messages_close_the_connection(tmp_path):
+    async def body():
+        s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=50)
+        await s.start("127.0.0.1", 0)
+        try:
+            for i, bad in enumerate(({"t": "allot", "stat": 9}, {"t": "skill", "id": 99, "target": -1},
+                                     {"t": "chat", "kind": "shout", "text": "x"}, {"t": "party", "op": "boom", "target": None},
+                                     {"t": "storage", "op": "in", "slot": "1"}, {"t": "craft", "recipe": 0})):
+                ws, w = await connect(s, f"malf{i}")
+                assert w["t"] == "welcome"
+                await ws.send(json.dumps({"v": PROTOCOL_VERSION, **bad}))
+                got = None
+                for _ in range(40):
+                    m = json.loads(await ws.recv())
+                    if m["t"] == "error":
+                        got = m
+                        break
+                assert got is not None and got["msg"] == "malformed message", bad
+            ws, w = await connect(s, "fine1")
+            await ws.send(json.dumps({"v": PROTOCOL_VERSION, "t": "somethingnew"}))   # unknown t is ignored
+            await next_snap(ws); await next_snap(ws)
+            await ws.close()
+        finally:
+            await s.stop()
+    run(body())
+
+def test_socket_flow_welcome_tables_allot_and_chat(tmp_path):
+    async def body():
+        s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=50)
+        await s.start("127.0.0.1", 0)
+        try:
+            a, wa = await connect(s, "sockera")
+            b, wb = await connect(s, "sockerb")
+            for k in ("world", "items", "drops", "skills", "elements", "buffs", "stat_names", "job_names", "stat_cost",
+                      "mvp_kinds", "recipes", "nodes", "craft_skills", "max_job_level"):
+                assert k in wa, k
+            sa, sb = wa["slot"], wb["slot"]
+            pb = np.asarray(s.world["players"]["pos"][sb])
+            s.world["players"]["pos"] = s.world["players"]["pos"].at[sa].set(jnp_arr(pb + np.array([2, 0])))
+            await a.send(json.dumps({"v": PROTOCOL_VERSION, "t": "allot", "stat": 1}))
+            await a.send(json.dumps({"v": PROTOCOL_VERSION, "t": "chat", "kind": "say", "text": "over the wire"}))
+            got_chat = got_stat = False
+            for _ in range(80):
+                m = json.loads(await b.recv())
+                if m["t"] == "chat" and m["text"] == "over the wire":
+                    got_chat = True
+                    assert m["from"] == "sockera" and m["kind"] == "say"
+                if got_chat:
+                    break
+            assert got_chat
+            for _ in range(80):
+                m = await next_snap(a)
+                if m["you"]["stats"][1] == 2:
+                    got_stat = True
+                    break
+            assert got_stat
+            await wait_ticks(s, 5)
+            assert int(s.world["stats"]["agi"][sa]) == 2  # still 2 after more ticks: the allot was one-shot
+            await a.close(); await b.close()
+        finally:
+            await s.stop()
+    run(body())

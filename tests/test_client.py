@@ -73,3 +73,15 @@ def test_apply_snap_upserts_deletes_and_full_resets():
     assert ents == {1: {"id": 1, "hp": 4}, 3: {"id": 3, "hp": 9}}
     apply_snap(ents, {"full": True, "gone": [], "ents": [{"id": 7, "hp": 1}]})
     assert list(ents) == [7]
+
+def test_client_password_create_then_login_and_bad_password(tmp_path):
+    h, t = _serve(tmp_path)
+    try:
+        c = NetClient("127.0.0.1", h["s"].port, "pwkim", password="secret1", create=True); c.start()
+        assert _wait(lambda: c.welcome is not None) and "skills" in c.welcome and "world" in c.welcome
+        c.close(); assert _wait(lambda: not c.connected); c.join(5)
+        assert _wait(lambda: "pwkim" not in h["s"].owner)
+        bad = NetClient("127.0.0.1", h["s"].port, "pwkim", password="nope"); bad.start()
+        assert _wait(lambda: bad.error is not None) and bad.error == "bad password"
+    finally:
+        h["loop"].call_soon_threadsafe(h["stop"].set_result, None); t.join(10)
