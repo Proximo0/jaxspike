@@ -35,7 +35,7 @@ A Tibia-style single-floor tile world in JAX. Players move, attack monsters, die
 ## Module ownership (one worker per module)
 
 ### `game/map_gen.py` (worker: map)
-- `make_walls(key) -> int8 [MAP, MAP]`: random walls, border ring of walls, about 15% interior density, with a clear 8x8 square at tiles 16..23 on both axes (inclusive) so spawns are always walkable. Keep it simple.
+- `make_terrain(key) -> int8 [MAP, MAP]`: grass base, rock border, noise lakes and forests, the towns and roads from `game/world_layout.py` (towns overwrite water and trees; roads bridge water, cut trees and open gates in town walls). `blocking(terrain) -> int8 walls`, `protection_zone(terrain) -> bool pz` (town interiors incl. gates), `make_walls(key) = blocking(make_terrain(key))`. No coordinate literals here; everything scales from `MAP`.
 - `walkable(walls, pos) -> bool [N]`: in bounds and not a wall.
 - Tests: `tests/test_map.py`.
 
@@ -78,11 +78,11 @@ A Tibia-style single-floor tile world in JAX. Players move, attack monsters, die
 
 ### `bots/policies.py` (worker: bots)
 - `bot_inputs(world, key) -> inputs`: vectorized over players. A living active player with a monster within manhattan 6 (use a monster grid when it needs nearest) moves toward it one step per tick, and attacks when adjacent. Without one, it moves in a random direction (uniform over the 5 options, so stay is included), 50% of ticks.
-- Only reads world, returns `{"move": int32 [MAX_PLAYERS], "attack": bool [MAX_PLAYERS]}`.
+- Only reads world, returns `{"move": int32 [MAX_PLAYERS], "attack": bool [MAX_PLAYERS], "eat": bool [MAX_PLAYERS]}`; `eat` is set for living players below half HP holding meat.
 - Tests: `tests/test_bots.py`.
 
 ### `bots/runner.py` and `game/persistence.py` (worker: runner)
-- `make_world_batch(seed, batch) -> world` with every field batched: `vmap(make_empty_world)`, then `map.make_walls` and spawn players and monsters at random walkable positions. Spawns are done by `runner.spawn_population(world, key)` (writes the schema fields; uses walkable tiles).
+- `make_world_batch(seed, batch) -> world` with every field batched: `vmap(make_empty_world)`, then `map_gen.make_terrain` (plus `blocking` and `protection_zone`) and `runner.spawn_population(world, key)`: player `i` spawns on tile `i // len(TOWNS)` of the temple of town `i % len(TOWNS)`; monsters spawn on distinct walkable non-PZ tiles, rats within `RAT_RING` of a town and orcs beyond.
 - `run_games(worlds, ticks) -> (worlds, stats)` using `jax.lax.scan` over ticks and `vmap` over worlds. stats: per-world totals for kills, deaths, items picked up, and a final alive-player count.
 - `persistence.save(world, path)` / `persistence.load(path)` using `numpy.savez` with flattened keys. Round-trip must be exact.
 - Tests: `tests/test_runner.py`.

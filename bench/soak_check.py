@@ -4,6 +4,7 @@ Invariants checked after every chunk of ticks:
 - no active player or monster on a wall or out of bounds
 - no two living (active, not dead) players on one tile; dead players are not physical
 - no active monster on a living player's tile
+- no active monster on a protection-zone tile; every player spawn is a temple tile
 - hp in [0, PLAYER_MAX_HP] for players, [0, max] for monsters
 - inventory values in [0, NUM_ITEMS)
 - active drops on in-bounds tiles, ttl in [0, DROP_TTL]
@@ -19,7 +20,7 @@ import numpy as np
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[1]))
 
 from bots.runner import make_world_batch, run_games  # noqa: E402
-from game.config import MAP, MONSTER_HP, NUM_ITEMS, DROP_TTL, PLAYER_MAX_HP  # noqa: E402
+from game.config import MAP, MONSTER_HP, NUM_ITEMS, DROP_TTL, PLAYER_MAX_HP, T_TEMPLE  # noqa: E402
 
 
 def check_invariants(worlds):
@@ -50,6 +51,13 @@ def check_invariants(worlds):
         mtiles = {tuple(t) for t in mp[ma]}
         if mtiles & tiles:
             problems.append(f"world {b}: monster on player tile")
+        pz = np.asarray(w["pz"][b])
+        if ma.any() and pz[mp[ma][:, 0], mp[ma][:, 1]].any():
+            problems.append(f"world {b}: monster on protection-zone tile")
+        terrain = np.asarray(w["terrain"][b])
+        sp = np.asarray(p["spawn"][b])[np.asarray(p["active"][b])]
+        if sp.size and (terrain[sp[:, 0], sp[:, 1]] != T_TEMPLE).any():
+            problems.append(f"world {b}: player spawn not on a temple tile")
         hp = np.asarray(p["hp"][b])
         if ((hp < 0) | (hp > PLAYER_MAX_HP)).any():
             problems.append(f"world {b}: player hp out of range")
@@ -69,6 +77,8 @@ def check_invariants(worlds):
 def main(batch=8, chunks=10, ticks_per_chunk=100, seed=0):
     print("platform:", jax.devices()[0].platform, flush=True)
     worlds = make_world_batch(seed, batch)
+    kinds = np.asarray(worlds["monsters"]["kind"])[np.asarray(worlds["monsters"]["active"])]
+    print(f"monsters per world by kind: {np.bincount(kinds, minlength=len(MONSTER_HP)) / batch}", flush=True)
     total_problems = []
     t0 = time.perf_counter()
     for c in range(chunks):
