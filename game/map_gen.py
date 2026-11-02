@@ -1,12 +1,15 @@
 """Terrain generation: wilderness noise, walled towns with temples, and connecting roads."""
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 from game.config import (MAP, T_FLOOR, T_GRASS, T_ROAD, T_ROCK, T_TEMPLE, T_TREE, T_WALL,
                          T_WATER)
+from game.data.terrain import T_CAVE, T_KAFRA, T_STATION, T_WARP
 from game.world_layout import (FOREST_THRESHOLD, NOISE_CELLS, ROAD_HALF_WIDTH, ROADS,
                                TEMPLE_TILES, TREE_DENSITY, WATER_THRESHOLD, town_boxes,
                                town_centers)
+from game import world_layout as wl
 
 
 def _noise(key):
@@ -62,7 +65,8 @@ def protection_zone(terrain):
     in_town = jnp.zeros((MAP, MAP), bool)
     for x0, y0, x1, y1 in town_boxes().tolist():
         in_town |= _in_rect(xs, ys, x0, y0, x1, y1)
-    return (terrain == T_FLOOR) | (terrain == T_TEMPLE) | ((terrain == T_ROAD) & in_town)
+    special = (terrain == T_KAFRA) | (terrain == T_STATION)
+    return (terrain == T_FLOOR) | (terrain == T_TEMPLE) | (((terrain == T_ROAD) | special) & in_town)
 
 
 DIST_UNREACHABLE = 32767  # int16 max: tiles with no walkable path to a town's gates
@@ -124,3 +128,89 @@ def walkable(walls, pos):
     cx = jnp.clip(x, 0, MAP - 1)
     cy = jnp.clip(y, 0, MAP - 1)
     return inb & (walls[cx, cy] == 0)
+
+
+def warp_table(terrain=None):
+    """Return (src int32 [N_WARPS, 2], dst int32 [N_WARPS, 2]) fixed warp arrays, padded with -1 rows.
+
+    Warps are part of the layout (world_layout.WARPS), not read from the terrain; the argument is
+    accepted so callers can pass world["terrain"] uniformly. ro_warps.apply_warps looks a player's
+    tile up in src (jnp.where over N_WARPS) and moves it to the matching dst.
+    """
+    from game.world_layout import N_WARPS, warp_tiles
+    s, d = warp_tiles()
+    pad = N_WARPS - s.shape[0]
+    src = jnp.asarray(np.concatenate([s, np.full((pad, 2), -1, np.int32)]), jnp.int32)
+    dst = jnp.asarray(np.concatenate([d, np.full((pad, 2), -1, np.int32)]), jnp.int32)
+    return src, dst
+
+
+def make_terrain_ro(key):
+    """Return int8 [MAP, MAP] terrain of the RO world: make_terrain plus dungeons, warps, kafras, stations."""
+    t = make_terrain(key)
+    xs, ys = jnp.meshgrid(jnp.arange(MAP), jnp.arange(MAP), indexing="ij")
+    hw = ROAD_HALF_WIDTH
+    centers = town_centers().tolist()
+    pads = wl.dungeon_pads().tolist()
+    boxes = wl.dungeon_boxes().tolist()
+    dcent = wl.dungeon_centers().tolist()
+
+    # a. dungeon roads: entrance warp tile -> town centre, same L-shape and rule as the town roads
+    replaceable = (t == T_GRASS) | (t == T_WATER) | (t == T_TREE) | (t == T_WALL)
+    road = jnp.zeros((MAP, MAP), bool)
+    for k, town in wl.DUNGEON_ROADS:
+        (ax, ay), (bx, by) = pads[k][0], centers[town]
+        road |= _in_rect(xs, ys, min(ax, bx) - hw, ay - hw, max(ax, bx) + hw, ay + hw)
+        road |= _in_rect(xs, ys, bx - hw, min(ay, by) - hw, bx + hw, max(ay, by) + hw)
+    t = jnp.where(road & replaceable, T_ROAD, t)
+
+    # b. entrance plaza over the outside pad tiles plus one tile of margin
+    for ent, _, ext, out in pads:
+        px0, px1 = min(ent[0], out[0], ext[0]) - 1, max(ent[0], out[0], ext[0]) + 1
+        py0, py1 = min(ent[1], out[1]) - 1, max(ent[1], out[1]) + 1
+        t = jnp.where(_in_rect(xs, ys, px0, py0, px1, py1), T_ROAD, t)
+
+    # c. dungeon boxes: cave floor, rock ring, rock pillars clear of the inside pad tiles
+    w = wl.DUNGEON_WALL_TILES
+    for (x0, y0, x1, y1), (cx, cy), (_, ins, ext, _) in zip(boxes, dcent, pads):
+        inner = _in_rect(xs, ys, x0 + w, y0 + w, x1 - w, y1 - w)
+        box = _in_rect(xs, ys, x0, y0, x1, y1)
+        px = (xs - cx - wl.DUNGEON_PILLAR_PHASE) % wl.DUNGEON_PILLAR_PERIOD < wl.DUNGEON_PILLAR_SIZE
+        py = (ys - cy - wl.DUNGEON_PILLAR_PHASE) % wl.DUNGEON_PILLAR_PERIOD < wl.DUNGEON_PILLAR_SIZE
+        pillar = px & py & inner
+        for (qx, qy) in (ins, ext):
+            for ox, oy in ((0, 0), (1, 0), (-1, 0), (0, 1), (0, -1)):
+                pillar &= ~((xs == qx + ox) & (ys == qy + oy))
+        t = jnp.where(box, T_ROCK, t)
+        t = jnp.where(inner, T_CAVE, t)
+        t = jnp.where(pillar, T_ROCK, t)
+
+    # d. special tiles last
+    src, dst = wl.warp_tiles()
+    for arr, tid in ((src, T_WARP), (dst, T_STATION),
+                     (wl.kafra_tiles(), T_KAFRA), (wl.town_station_tiles(), T_STATION)):
+        t = t.at[arr[:, 0], arr[:, 1]].set(tid)
+    return t.astype(jnp.int8)
+
+
+def distance_fields_ro(terrain):
+    """Return int16 [NT, MAP, MAP] like distance_fields, but relaxing across warps: d[src] <= d[dst] + 1."""
+    free = blocking(terrain) == 0
+    d0 = jnp.where(gate_aprons(terrain), 0, DIST_UNREACHABLE).astype(jnp.int32)
+    src, dst = warp_table(terrain)
+    real = src[:, 0] >= 0
+    sx, sy = jnp.clip(src[:, 0], 0, MAP - 1), jnp.clip(src[:, 1], 0, MAP - 1)
+    dx, dy = jnp.clip(dst[:, 0], 0, MAP - 1), jnp.clip(dst[:, 1], 0, MAP - 1)
+
+    def relax(d):
+        d = jnp.where(free[None], jnp.minimum(d, jnp.minimum(_shift_min(d) + 1, DIST_UNREACHABLE)), DIST_UNREACHABLE)
+        via = jnp.where(real[None], jnp.minimum(d[:, dx, dy] + 1, DIST_UNREACHABLE), DIST_UNREACHABLE)
+        return d.at[:, sx, sy].min(via)
+
+    def body(carry):
+        d, _ = carry
+        nd = relax(d)
+        return nd, jnp.any(nd != d)
+
+    d, _ = jax.lax.while_loop(lambda c: c[1], body, (d0, jnp.bool_(True)))
+    return d.astype(jnp.int16)
