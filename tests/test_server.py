@@ -8,7 +8,7 @@ from net.protocol import decode_map
 from net.server import Client, GameServer
 
 def run(coro):
-    return asyncio.run(asyncio.wait_for(coro, 25))
+    return asyncio.run(asyncio.wait_for(coro, 120))  # the first test pays the jit compile; slow on a loaded box
 
 async def connect(server, name):
     ws = await websockets.connect(f"ws://127.0.0.1:{server.port}")
