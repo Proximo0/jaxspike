@@ -4,6 +4,7 @@ extends Node
 ## Reads physical keys directly so it needs no InputMap actions; the camera gives the click -> tile conversion.
 
 signal quit_requested
+signal walk_sent
 
 var session: NetSession = null
 var enabled: bool = true
@@ -37,6 +38,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			var tile: Vector2i = click_tile(m.position)
 			if ViewMath.in_map(tile, session.map.size):
 				session.walk_to(tile.x, tile.y)
+				walk_sent.emit()
 
 
 ## Tile under a viewport pixel, from the camera centre and zoom.
