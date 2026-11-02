@@ -1,0 +1,8 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://game/ui/status_panel.gd" id="1"]
+
+[node name="StatusPanel" type="PanelContainer"]
+offset_left = 8.0
+offset_top = 130.0
+script = ExtResource("1")

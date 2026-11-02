@@ -76,6 +76,11 @@ func _apply(msg: Dictionary) -> void:
 			last_error = String(msg.get("msg", "error"))
 
 
+## Sends any client message; `v` and `t` are the caller's responsibility for `t` (Codec stamps `v`).
+func send(msg: Dictionary) -> void:
+	_send(msg)
+
+
 func _send(msg: Dictionary) -> void:
 	var text: String = Codec.encode(msg)
 	if recorder != null:
