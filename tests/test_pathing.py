@@ -24,12 +24,33 @@ def test_unreachable_and_invalid_goal():
     walls = np.zeros((MAP, MAP), np.int8); walls[8:13, 8:13] = 1; walls[10, 10] = 0
     assert find_path(walls, (10, 10), (20, 10)) is None      # boxed in
     assert find_path(walls, (20, 10), (9, 9)) is None        # goal is a wall
-    assert find_path(walls, (20, 10), (MAP, 10)) is None     # out of map
+
+def test_out_of_map_goal():
+    walls = np.zeros((MAP, MAP), np.int8)
+    assert find_path(walls, (MAP - 1, 10), (MAP, 10)) is None
+    assert find_path(walls, (0, 10), (-1, 10)) is None       # no negative-index wrap
+
+def test_search_nodes_stay_in_box():
+    walls = np.zeros((MAP, MAP), np.int8)
+    r = PATH_RADIUS
+    walls[100 - r:100 + r + 1, 110] = 1                      # spans the full box width
+    assert find_path(walls, (100, 100), (100, 120)) is None  # only gap is outside the box
+    assert find_path(walls, (100, 100), (100, 120), max_radius=r + 10) is not None
+
+def test_deterministic():
+    walls = np.zeros((MAP, MAP), np.int8); walls[12, 5:16] = 1
+    assert find_path(walls, (10, 10), (14, 10)) == find_path(walls, (10, 10), (14, 10))
 
 def test_radius_cutoff():
     walls = np.zeros((MAP, MAP), np.int8)
     assert find_path(walls, (100, 100), (100, 100 + PATH_RADIUS)) is not None
     assert find_path(walls, (100, 100), (100, 101 + PATH_RADIUS)) is None
+
+def test_radius_x_axis_and_diagonal():
+    walls = np.zeros((MAP, MAP), np.int8)
+    r = PATH_RADIUS
+    assert find_path(walls, (100, 100), (100 + r, 100 + r)) is not None
+    assert find_path(walls, (100, 100), (101 + r, 100)) is None
 
 def test_path_to_self_and_adjacent():
     walls = np.zeros((MAP, MAP), np.int8)
