@@ -41,7 +41,9 @@ world = {
 }
 
 inputs (per tick, built by bots or the network layer):
-  {"move": int32 [MAX_PLAYERS] in 0..4, "attack": bool [MAX_PLAYERS], "eat": bool [MAX_PLAYERS]}
+  {"move": int32 [MAX_PLAYERS] in 0..8 (config.DIR_DELTAS), "attack": bool [MAX_PLAYERS], "eat": bool [MAX_PLAYERS]}
+  plus the RO one-shot keys of empty_inputs(). Round-2 blocks: "move" (game/ro_move.py), "anim" (game/ro_anim.py),
+  "monai" (game/ro_monster_modes.py).
 """
 import jax
 import jax.numpy as jnp
@@ -87,12 +89,15 @@ def empty_inputs():
         "craft": jnp.zeros((MAX_PLAYERS,), jnp.int32),      # recipe id
         "party": jnp.zeros((MAX_PLAYERS,), jnp.int32),      # 1 create, 2 leave, 3 invite, 4 accept
         "save": jnp.zeros((MAX_PLAYERS,), jnp.bool_),       # kafra save point
+        "buy": jnp.zeros((MAX_PLAYERS,), jnp.int32),        # shop: item id (0 = none)
+        "sell": jnp.full((MAX_PLAYERS,), -1, jnp.int32),    # shop: inventory slot
     }
 
 
 def make_empty_world(key):
     """Blank world with no walls, no players, no monsters. Used by tests and as a base."""
-    from game import ro_craft, ro_items, ro_mvp, ro_party, ro_skills, ro_stats  # lazy: they import next_key
+    from game import (ro_anim, ro_craft, ro_items, ro_monster_modes, ro_move, ro_mvp, ro_party,  # lazy: next_key
+                      ro_skills, ro_stats)
     return {
         "walls": jnp.zeros((MAP, MAP), jnp.int8),
         "terrain": jnp.full((MAP, MAP), T_GRASS, jnp.int8),
@@ -134,4 +139,8 @@ def make_empty_world(key):
         "craft": ro_craft.make_state(),
         "party": ro_party.make_state(),
         "mvp": ro_mvp.make_state(),
+        # Round 2: 8-direction movement with speed accumulators, animation state, monster AI modes.
+        "move": ro_move.make_state(),
+        "anim": ro_anim.make_state(),
+        "monai": ro_monster_modes.make_state(),
     }

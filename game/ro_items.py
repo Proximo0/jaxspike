@@ -165,12 +165,33 @@ def _use_item(world, inputs):
     return clear_slots(world, mask & (new_cnt <= 0))
 
 
+def job_of(world):
+    """int32 [MAX_PLAYERS]: each player's job id (game/data/stats.py), Novice (0) for worlds without stats."""
+    if "stats" not in world:
+        return jnp.zeros((MAX_PLAYERS,), jnp.int32)
+    return jnp.clip(world["stats"]["job"], 0, item_data.N_JOBS - 1).astype(jnp.int32)
+
+
+def can_wear(world, item):
+    """bool, item's shape: the player's job may wear item id `item` [MAX_PLAYERS, ...] (EQUIP_JOBS)."""
+    job = job_of(world).reshape((MAX_PLAYERS,) + (1,) * (item.ndim - 1))
+    return item_data.EQUIP_JOBS[jnp.clip(item, 0, item_data.N_ITEMS - 1), job]
+
+
+def weapon_range(world):
+    """int32 [MAX_PLAYERS]: attack range in cells of the worn weapon (1 melee and bare hands, 9 bows)."""
+    equip = world["items"]["equip"][:, item_data.EQ_WEAPON]
+    item = jnp.take_along_axis(world["players"]["inv"], jnp.clip(equip, 0, INV_SLOTS - 1)[:, None], axis=1)[:, 0]
+    return jnp.where(equip >= 0, item_data.WEAPON_RANGE[item], 1).astype(jnp.int32)
+
+
 def _equip(world, inputs):
     """Toggle-equip the weapon/armor in the slot named by inputs["equip"] (alive players only).
 
     A slot already worn anywhere is unequipped. Otherwise it goes to EQ_WEAPON (weapons), the equip slot equal to
     its armor slot type 1..5, or EQ_ACC1 (EQ_ACC2 when ACC1 is taken, replacing ACC2) for accessories, replacing
-    the previous occupant. Items of any other kind or class are ignored.
+    the previous occupant. Items of any other kind or class are ignored, and so is wearing an item the player's job
+    may not use (EQUIP_JOBS); taking one off is always allowed.
     """
     players, it = world["players"], world["items"]
     equip = it["equip"]
@@ -190,7 +211,7 @@ def _equip(world, inputs):
     gear = is_weapon | (is_armor & (cls >= item_data.SLOT_HEAD) & (cls <= item_data.SLOT_ACCESSORY))
 
     unequip = ok & gear & worn
-    do = ok & gear & ~worn
+    do = ok & gear & ~worn & can_wear(world, item)
     equip = jnp.where(unequip[:, None] & (equip == sl[:, None]), -1, equip)
     equip = equip.at[jnp.where(do, _PIDX, MAX_PLAYERS), jnp.clip(target, 0, N_EQ - 1)].set(
         sl, mode="drop"

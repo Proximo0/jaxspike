@@ -13,8 +13,8 @@ const CAT_MONSTER: int = 1
 const CAT_DROP: int = 2
 const CAT_NODE: int = 3
 const DROP_KIND_BASE: int = 100
-## Gather/station nodes are entity kinds 200..207 (copper, iron, coal, fishing spot, herb, tree, furnace, fire).
-const NODE_KIND_BASE: int = 200
+## Gather/station nodes are entity kinds 400..407 (game/view.py NODE_KIND_BASE) (copper, iron, coal, fishing spot, herb, tree, furnace, fire).
+const NODE_KIND_BASE: int = 400
 const NODE_KIND_COUNT: int = 8
 ## Node kinds 0..5 can be gathered; 6 (furnace) and 7 (cooking fire) are crafting stations.
 const NODE_GATHER_COUNT: int = 6
@@ -33,6 +33,7 @@ const TERRAIN_COLORS: Array[Color] = [
 	Color(0.95, 0.80, 0.30),
 	Color(0.40, 0.70, 0.95),
 	Color(0.33, 0.28, 0.26),
+	Color(0.85, 0.65, 0.35),  # 12 shop tile
 ]
 ## Node colours by node kind 0..7, and the shape drawn for them (0 diamond, 1 circle, 2 triangle, 3 square).
 const NODE_COLORS: Array[Color] = [
@@ -96,12 +97,12 @@ static func has_hp_bar(kind: int) -> bool:
 	return cat_has_hp_bar(category(kind))
 
 
-## True for a node entity kind (200..207). A drop of a crafted item can share the number: use entity_category.
+## True for a node entity kind (400..407). A drop of a crafted item can share the number: use entity_category.
 static func is_node_kind(kind: int) -> bool:
 	return kind >= NODE_KIND_BASE and kind < NODE_KIND_BASE + NODE_KIND_COUNT
 
 
-## Category of a store entity: an `item` key marks a drop, otherwise kinds 200..207 are nodes.
+## Category of a store entity: an `item` key marks a drop, otherwise kinds 400..407 are nodes.
 static func entity_category(kind: int, has_item: bool) -> int:
 	if has_item:
 		return CAT_DROP

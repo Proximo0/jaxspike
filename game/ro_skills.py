@@ -5,8 +5,9 @@ game/ro_skills_effects.py (resolve). Every output dtype and shape equals the inp
 """
 import jax.numpy as jnp
 
-from game import ro_skills_effects
-from game.config import MAX_MONSTERS, MAX_PLAYERS, PLAYER_ATTACK, PLAYER_ATTACK_COOLDOWN, PLAYER_MAX_HP
+from game import ro_anim, ro_skills_effects
+from game.config import (MAX_MONSTERS, MAX_PLAYERS, PLAYER_ATTACK, PLAYER_ATTACK_COOLDOWN, PLAYER_MAX_HP,
+                         TICK_MS)
 from game.data import skills as S
 
 I32 = jnp.int32
@@ -32,6 +33,7 @@ def make_state():
         "sp": jnp.full((mp,), S.SP_START, I32),
         "casts": z(mp),
         "skill_dmg": z(mp),
+        "after_delay": z(mp),  # ro-anim: ticks of after-cast delay left; no cast starts while > 0
     }
 
 
@@ -120,6 +122,7 @@ def phase(world, inputs, derived=None):
     casting = jnp.where(pl["dead"], 0, sk["casting"])
     cast_left = jnp.where(pl["dead"], 0, sk["cast_left"])
     cast_target, cast_tile = sk["cast_target"], sk["cast_tile"]
+    after_delay = jnp.maximum(sk["after_delay"] - 1, 0)  # ro-anim
     pool_blk, pool_key = _sp_pool(world)
     sp = world[pool_blk][pool_key]
 
@@ -143,7 +146,7 @@ def phase(world, inputs, derived=None):
     start = (
         alive & (casting == 0) & (s > 0) & (s < S.N_SKILLS) & (lvl > 0)
         & (S.SKILL_EFFECT[sc] != S.EFFECT_PASSIVE) & (cooldown[pidx, sc] == 0) & (sp >= cost)
-        & tgt_ok & (dist <= S.SKILL_RANGE[sc, lvl])
+        & tgt_ok & (dist <= S.SKILL_RANGE[sc, lvl]) & (after_delay == 0)
     )
     sp = jnp.where(start, sp - cost, sp)
     cooldown = cooldown.at[pidx, sc].set(jnp.where(start, S.SKILL_COOLDOWN[sc, lvl], cooldown[pidx, sc]))
@@ -163,7 +166,23 @@ def phase(world, inputs, derived=None):
     else:
         world = {**world, "stats": {**world["stats"], "sp": sp.astype(world["stats"]["sp"].dtype)}}
     resolve = alive & (casting != 0) & (cast_left == 0)
+    mon_hp_before = world["monsters"]["hp"]  # ro-anim: skill damage numbers
     world = ro_skills_effects.resolve({**world, "skills": sk}, resolve, derived)
+    sk = world["skills"]
+    amo = ro_anim.amotion_ms(world, derived)  # ro-anim: after-cast delay (SKILL_AFTER_DELAY_MS, else amotion)
+    rid = jnp.clip(casting, 0, S.N_SKILLS - 1)
+    delay_ms = (jnp.asarray(S.SKILL_AFTER_DELAY_MS)[rid, jnp.clip(learned[pidx, rid], 0, S.MAX_SKILL_LEVEL)]
+                if hasattr(S, "SKILL_AFTER_DELAY_MS") else amo[:mp])
+    sk = {**sk, "after_delay": jnp.where(resolve, (delay_ms + TICK_MS - 1) // TICK_MS, after_delay).astype(I32)}
+    world = {**world, "skills": sk}
+    pad = jnp.zeros((mm,), jnp.bool_)
+    face = jnp.concatenate([ro_anim.dir_toward(tpos - own), jnp.full((mm,), -1, I32)])
+    cast_ms = jnp.concatenate([S.SKILL_CAST[sc, lvl] * cm // 1000 * TICK_MS, jnp.zeros((mm,), I32)])
+    world = ro_anim.set_action(world, jnp.concatenate([start, pad]), jnp.where(cast_ms > 0, ro_anim.CAST,
+                               ro_anim.ATTACK), jnp.where(cast_ms > 0, cast_ms, amo), face)
+    sdmg = jnp.maximum(mon_hp_before - world["monsters"]["hp"], 0).astype(I32)
+    world = ro_anim.note_hit(world, jnp.concatenate([jnp.zeros((mp,), jnp.bool_), sdmg > 0]),
+                             jnp.concatenate([jnp.zeros((mp,), I32), sdmg]))
     sk = world["skills"]
     casting = jnp.where(resolve, 0, casting)
     casts = sk["casts"] + resolve.astype(I32)

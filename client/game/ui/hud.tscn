@@ -5,35 +5,6 @@
 [node name="Hud" type="CanvasLayer"]
 script = ExtResource("1")
 
-[node name="Panel" type="PanelContainer" parent="."]
-offset_left = 8.0
-offset_top = 8.0
-offset_right = 248.0
-offset_bottom = 120.0
-
-[node name="Box" type="VBoxContainer" parent="Panel"]
-layout_mode = 2
-
-[node name="HpBar" type="ProgressBar" parent="Panel/Box"]
-custom_minimum_size = Vector2(0, 18)
-layout_mode = 2
-show_percentage = false
-
-[node name="HpLabel" type="Label" parent="Panel/Box"]
-layout_mode = 2
-
-[node name="ScoreLabel" type="Label" parent="Panel/Box"]
-layout_mode = 2
-
-[node name="InvLabel" type="Label" parent="Panel/Box"]
-layout_mode = 2
-autowrap_mode = 3
-
-[node name="SafeBadge" type="Label" parent="Panel/Box"]
-visible = false
-layout_mode = 2
-text = "SAFE ZONE"
-
 [node name="Notice" type="Label" parent="."]
 anchors_preset = 7
 anchor_left = 0.5

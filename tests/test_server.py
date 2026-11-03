@@ -67,8 +67,10 @@ def test_input_moves_and_two_clients_see_each_other(tmp_path):
             while before != [int(pb[0]) + 2, int(pb[1])]:  # drain snaps queued before the teleport
                 before = (await next_snap(a))["you"]["pos"]
             await a.send(json.dumps({"v": PROTOCOL_VERSION, "t": "input", "move": 2, "attack": False, "eat": False}))
-            for _ in range(5):
+            for _ in range(20):  # tick-count wait: the pipelined tick loop adds one tick of input latency
                 after = (await next_snap(a))["you"]["pos"]
+                if after[1] > before[1]:
+                    break
             assert after[1] > before[1]
             await a.send(json.dumps({"v": PROTOCOL_VERSION, "t": "input", "move": 0, "attack": False, "eat": False}))
             # alice leaves the window: bob gets her id in gone
@@ -284,12 +286,15 @@ def test_sub_tick_tap_moves_exactly_one_tile(tmp_path):
     start = np.asarray(s.world["players"]["pos"][slot]).copy()
     s._on_message(slot, {"t": "input", "move": 2, "attack": False, "eat": False})
     s._on_message(slot, {"t": "input", "move": 0, "attack": False, "eat": False})
-    s.tick_once()
-    one = np.asarray(s.world["players"]["pos"][slot])
-    assert one.tolist() == [start[0], start[1] + 1]
+    one = [start[0], start[1] + 1]
+    for _ in range(6):  # the temple is crowded with bots: a lower slot can win the tile for a tick or two
+        s.tick_once()
+        if np.asarray(s.world["players"]["pos"][slot]).tolist() == one:
+            break
+    assert np.asarray(s.world["players"]["pos"][slot]).tolist() == one
     for _ in range(3):
         s.tick_once()
-    assert np.asarray(s.world["players"]["pos"][slot]).tolist() == one.tolist()
+    assert np.asarray(s.world["players"]["pos"][slot]).tolist() == one  # the tap was consumed by one step
 
 def test_path_cleared_on_death(tmp_path):
     async def body():
@@ -332,6 +337,13 @@ def jnp_arr(v):
 
 def _snaps(ws):
     return [m for m in ws.sent if m["t"] == "snap"]
+
+def _you(snaps):
+    """`you` merged over the snaps in order, as the clients do (keys come on full snaps and on change only)."""
+    out = {}
+    for x in snaps:
+        out.update(x["you"])
+    return out
 
 def test_gone_after_monster_dies_and_new_monster_appears(tmp_path):
     async def body():
@@ -494,7 +506,9 @@ def test_snap_you_has_the_ro_fields(tmp_path):
         assert you["party"] == -1 and you["leader"] is False
         assert you["members"] == [] and len(you["storage"]) == 100  # full snap carries the change-detected fields
         assert "members" not in second["you"] and "storage" not in second["you"]  # unchanged: omitted
-        assert second["you"]["max_hp"] == you["max_hp"]
+        assert "pos" in second["you"] and "hp" in second["you"]  # always sent
+        assert not {"inv", "equip", "craft", "learned", "max_sp"} & set(second["you"])  # unchanged: omitted
+        assert _you([first, second])["max_hp"] == you["max_hp"]
     run(body())
 
 def test_learn_then_skill_in_one_tick(tmp_path):
@@ -508,7 +522,7 @@ def test_learn_then_skill_in_one_tick(tmp_path):
         await tk(s); await tk(s); await _flush()
         you = _snaps(ws)[0]["you"]
         assert you["learned"] == [[2, 1]] and you["skill_points"] == 1
-        assert [c[0] for c in you["cooldowns"]] == [2] and you["cooldowns"][0][1] > 0
+        assert you["after_delay"] > 0  # Bash: after-cast delay, no cooldown (docs/ro_fidelity.md)
         assert _pend_is_none(s)
     run(body())
 
@@ -565,18 +579,18 @@ def test_party_fields_and_members_change_detection(tmp_path):
         await tk(s); await _flush()
         sa, sb = _snaps(wa), _snaps(wb)
         assert sa[0]["you"]["party"] == -1 and sa[0]["you"]["members"] == []
-        created = next(x for x in sa if x["you"]["party"] >= 0)
+        created = next(x for x in sa if x["you"].get("party", -1) >= 0)
         assert created["you"]["leader"] is True and created["you"]["members"] == ["leadera"]
-        last_a, last_b = sa[-1]["you"], sb[-1]["you"]
+        last_a, last_b = _you(sa), _you(sb)
         assert last_a["party"] == last_b["party"] >= 0 and last_a["leader"] is True and last_b["leader"] is False
-        joined_b = next(x for x in sb if x["you"]["party"] >= 0)
+        joined_b = next(x for x in sb if x["you"].get("party", -1) >= 0)
         assert joined_b["you"]["members"] == ["leadera", "joinerb"]
-        assert "members" not in last_b  # only on change
+        assert "members" not in sb[-1]["you"]  # only on change
         assert sum("members" in x["you"] for x in sa) == 3  # full snap, party created, b joined
         # leaving empties the list on the next snap
         s._on_ro_message(b, {"t": "party", "op": "leave", "target": None}); await tk(s); await tk(s); await _flush()
         gone = next(x for x in _snaps(wb)[::-1] if "members" in x["you"])
-        assert gone["you"]["members"] == [] and gone["you"]["party"] == -1
+        assert gone["you"]["members"] == [] and _you(_snaps(wb))["party"] == -1
     run(body())
 
 def test_mvp_broadcast_when_event_head_advances(tmp_path):
@@ -636,19 +650,19 @@ def test_storage_in_out_and_no_kafra_outside_town(tmp_path):
         sn = _snaps(ws)
         st = next(x["you"]["storage"] for x in sn if "storage" in x["you"] and x["you"]["storage"][0] != 0)
         assert st[:2] == [stack_id, 2]
-        assert sn[-1]["you"]["inv"][0]["count"] == 4 and sn[-1]["you"]["inv"][1]["item"] == 0
+        assert _you(sn)["inv"][0]["count"] == 4 and _you(sn)["inv"][1]["item"] == 0
         assert sum("storage" in x["you"] for x in sn) == 2  # the full snap, then once on change
         s._on_ro_message(a, {"t": "storage", "op": "out", "slot": 1})
         s._on_ro_message(a, {"t": "storage", "op": "out", "slot": 50})  # empty storage slot: refused, changes nothing
         await tk(s); await tk(s); await _flush()
-        last = _snaps(ws)[-1]["you"]
+        last = _you(_snaps(ws))
         assert last["inv"][1]["item"] == 2 and last["inv"][1]["count"] == 1
         # a refined item is refused (the box keeps ids only)
         it = s.world["items"]
         s.world["items"] = {**it, "inv_refine": it["inv_refine"].at[a, 1].set(3)}
         s._on_ro_message(a, {"t": "storage", "op": "in", "slot": 1})
         await tk(s); await tk(s); await _flush()
-        assert _snaps(ws)[-1]["you"]["inv"][1]["item"] == 2
+        assert _you(_snaps(ws))["inv"][1]["item"] == 2
         # outside a town: notice, nothing moves
         far = jnp_arr([5, 5])
         p = s.world["players"]
@@ -656,7 +670,7 @@ def test_storage_in_out_and_no_kafra_outside_town(tmp_path):
         s.pos_host[a] = [5, 5]
         s._on_ro_message(a, {"t": "storage", "op": "in", "slot": 0})
         await tk(s); await _flush()
-        assert _snaps(ws)[-1]["notice"] == "no kafra here" and _snaps(ws)[-1]["you"]["inv"][0]["count"] == 4
+        assert _snaps(ws)[-1]["notice"] == "no kafra here" and _you(_snaps(ws))["inv"][0]["count"] == 4
     run(body())
 
 def test_save_message_sets_the_respawn_point(tmp_path):
@@ -823,13 +837,36 @@ def test_socket_flow_welcome_tables_allot_and_chat(tmp_path):
             assert got_chat
             for _ in range(80):
                 m = await next_snap(a)
-                if m["you"]["stats"][1] == 2:
+                if m["you"].get("stats", [0, 0])[1] == 2:  # stats come on change only
                     got_stat = True
                     break
             assert got_stat
             await wait_ticks(s, 5)
             assert int(s.world["stats"]["agi"][sa]) == 2  # still 2 after more ticks: the allot was one-shot
             await a.close(); await b.close()
+        finally:
+            await s.stop()
+    run(body())
+
+
+def test_binary_format_login_gets_binary_snaps(tmp_path):
+    from net.protocol import decode_snap_bin
+    async def body():
+        s = GameServer(seed=0, chars_dir=tmp_path, tick_ms=50)
+        await s.start("127.0.0.1", 0)
+        try:
+            ws = await websockets.connect(f"ws://127.0.0.1:{s.port}")
+            await ws.send(json.dumps({"v": PROTOCOL_VERSION, "t": "login", "name": "binny", "format": "bin"}))
+            w = json.loads(await ws.recv())
+            assert w["t"] == "welcome"  # welcome (and chat, mvp) stay JSON text frames
+            frames = [await ws.recv() for _ in range(3)]
+            assert all(isinstance(f, bytes) for f in frames)
+            snaps = [decode_snap_bin(f) for f in frames]
+            assert [x["full"] for x in snaps] == [True, False, False]
+            me = next(e for e in snaps[0]["ents"] if e["id"] == w["slot"])
+            assert me["kind"] == 0 and me["name"] == "binny" and me["pos"] == snaps[0]["you"]["pos"]
+            assert "inv" in snaps[0]["you"] and "inv" not in snaps[2]["you"]  # you on change in binary too
+            await ws.close()
         finally:
             await s.stop()
     run(body())

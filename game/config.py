@@ -13,10 +13,11 @@ MAX_MONSTERS = 4096
 MAX_DROPS = 2048
 INV_SLOTS = 16
 
-# Directions indexed by the move input: 0 stay, 1 north, 2 south, 3 west, 4 east.
-DIR_DELTAS = ((0, 0), (0, -1), (0, 1), (-1, 0), (1, 0))
+# Directions indexed by the move input: 0 stay, 1..8 = S, SW, W, NW, N, NE, E, SE (x right, y down; RO facing = code - 1).
+# Same tuple as game/ro_move.DIR_DELTAS9; the old 4-way client codes map through ro_move.LEGACY_TO_RO.
+DIR_DELTAS = ((0, 0), (0, 1), (-1, 1), (-1, 0), (-1, -1), (0, -1), (1, -1), (1, 0), (1, 1))
 
-PLAYER_MAX_HP = 150  # level-1 baseline only; living players cap at ro_stats.derived(world)["max_hp"]
+PLAYER_MAX_HP = 40  # level-1 Novice (classic RO, docs/ro_fidelity.md E12); living players cap at ro_stats.derived(world)["max_hp"]
 PLAYER_ATTACK = 10        # damage a player deals per hit
 PLAYER_ATTACK_COOLDOWN = 5  # ticks between player attacks
 PLAYER_RESPAWN_TICKS = 0  # respawn happens the tick after death (0 = immediate on next tick)
@@ -65,6 +66,8 @@ T_WATER = 4
 T_TREE = 5
 T_WALL = 6
 T_ROCK = 7
+# 8..11 warp, kafra, station, cave live in game/data/terrain.py; T_SHOP is the NPC shop tile inside a town (ro_shop).
+T_SHOP = 12
 
 # Survival: living players regain REGEN_HP every REGEN_TICKS ticks; eating meat heals MEAT_HEAL.
 REGEN_HP = 1
@@ -72,11 +75,11 @@ REGEN_TICKS = 4
 MEAT_HEAL = 40
 
 # Bots and spawns around town gates.
-HUNT_RETREAT_HP = 60      # a bot below this HP walks home to rest (40% of PLAYER_MAX_HP)
+HUNT_RETREAT_HP = 16      # a bot below this HP walks home to rest (40% of PLAYER_MAX_HP)
 GATE_APRON_TILES = 4      # monsters never spawn within this walking distance of a gate
 
 # Networking (milestone 2)
-TICK_MS = 120
+TICK_MS = 100  # round 2: RO walks at 150 ms/cell, so a 100 ms tick keeps the speed accumulators honest
 VIEW_W = 61
 VIEW_H = 33
 PATH_RADIUS = 32

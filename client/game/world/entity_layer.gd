@@ -1,16 +1,31 @@
 class_name EntityLayer
 extends Node2D
-## Draws every entity in the EntityStore with a pooled EntitySprite per known id. Positions are interpolated from the
-## previous to the newest tick position over interp_delay_ticks * tick_ms. Only the ids the store reports as changed
-## or removed are reconfigured each frame; every visible node is still re-sampled for the interpolation.
+## Draws every entity in the EntityStore with a pooled EntitySprite per known id (round2 contract 1.3).
+## A RenderClock turns snap arrivals into a server-time clock delayed by interp_delay_ticks; each entity's
+## EntityTrack interpolates cell to cell over its speed_ms and holds its anim state (a/d/t/m/s), and every frame
+## the clip frame is picked (art-anim's ActSheet, else a baked PlaceholderClips sheet) with ClipTiming. Damage
+## numbers (`h`) float up at the attacker's atk frame when the attacker is visible, else at once.
+## Only the ids the store reports as changed or removed are re-fed each snap; every visible node is re-sampled
+## each frame. Rows without anim fields still walk (motion-driven clips) and move (speed = tick interval).
+
+const ANIM_SHEET_DIR: String = "res://assets/anim"
+## A monster removed (`gone`) with hp 0 died: the server does not send dead rows for monsters (docs/anim_wire.md),
+## so the layer plays its dead clip here and keeps the corpse this long.
+const CORPSE_MS: float = 1200.0
 
 var store: EntityStore = null
 var own_id: int = -1
 var tick_ms: float = ViewMath.DEFAULT_TICK_MS
 
 var slots: AssetSlots = null  ## Art registry; loaded on first use. Slots that do not resolve keep the coloured quads.
+var use_placeholders: bool = true  ## players and monsters animate, with PlaceholderClips sheets until art exists (else quads)
+var auto_refresh: bool = true  ## refresh from _process with the wall clock (the lab drives a virtual clock instead)
 
 var configured_count: int = 0  ## Sprites configured in the last refresh (for tests and the overlay).
+var clock: RenderClock = RenderClock.new()
+var pops: DamagePops = DamagePops.new()
+var last_render_ms: float = 0.0  ## server ms drawn by the last refresh
+var shown_pops: Array[Dictionary] = []  ## pops drawn by the last refresh ({id, dmg, seq, rise, alpha})
 
 var _pool: SlotPool = SlotPool.new()
 var _sprites: Array[EntitySprite] = []
@@ -22,6 +37,33 @@ var _synced_label_px: int = -1
 var _synced_own_id: int = -2
 var _tex_cache: Dictionary = {}  ## slot key -> Texture2D, or null when the slot has no usable art
 var _frames_cache: Dictionary = {}  ## sheet json path -> SpriteFrames or null
+var _sheet_cache: Dictionary = {}  ## job, or -1 - monster kind -> ActSheet or null
+var _cats: Dictionary = {}  ## id -> category
+var _looks: Dictionary = {}  ## id -> look (job or monster art index)
+var _hits: Array[Dictionary] = []  ## hits fed this snap, resolved once every row is in
+var _last_pos: Dictionary = {}  ## id -> last drawn px (pops of removed targets stay put)
+var _damage: DamageLayer = null
+var _recs: Dictionary = {}  ## id -> LayerEntityRec
+var _rec_list: Array[LayerEntityRec] = []  ## _recs values, rebuilt when ids come or go
+var _recs_dirty: bool = false
+
+
+## What the per-frame loop needs about one entity, without dictionary lookups.
+class LayerEntityRec:
+	var id: int = 0
+	var track: EntityTrack = null
+	var sprite: EntitySprite = null
+	var cat: int = ViewMath.CAT_DROP
+	var animated: bool = false
+	var is_player: bool = false
+	var look: int = -1
+	var sheet: ActSheet = null
+	var info_key: int = -1  ## action * 8 + face of the cached clip info
+	var info: Dictionary = {}
+	var follow_key: int = -1
+	var follow_info: Dictionary = {}
+	var hp: int = 1
+	var corpse_until: float = -1.0  ## render ms the dead clip of a removed monster ends (-1 = alive)
 
 
 func active_count() -> int:
@@ -37,6 +79,10 @@ func sprite_of(id: int) -> EntitySprite:
 	return _sprites[slot] if slot >= 0 else null
 
 
+func track_of(id: int) -> EntityTrack:
+	return _tracks.get(id) as EntityTrack
+
+
 ## Drawn world pixel position of an entity (tile centre), or Vector2.INF when unknown.
 func world_pos_of(id: int) -> Vector2:
 	var s: EntitySprite = sprite_of(id)
@@ -44,68 +90,250 @@ func world_pos_of(id: int) -> Vector2:
 
 
 func _process(_delta: float) -> void:
-	if store != null:
+	if store != null and auto_refresh:
 		refresh(Time.get_ticks_msec())
 
 
-## Syncs the sprites with the store and positions them for time `now_ms`.
+## Syncs the sprites with the store and draws them for local time `now_ms`.
 func refresh(now_ms: float) -> void:
 	var tile_px: float = ViewMath.tuned("tile_px", ViewMath.DEFAULT_TILE_PX)
-	var dur: float = ViewMath.tuned("interp_delay_ticks", ViewMath.DEFAULT_INTERP_DELAY_TICKS) * tick_ms
 	var label_px: int = roundi(ViewMath.tuned("name_label_px", ViewMath.DEFAULT_NAME_LABEL_PX))
+	clock.tick_ms = tick_ms
+	clock.delay_ticks = ViewMath.tuned("interp_delay_ticks", ViewMath.DEFAULT_INTERP_DELAY_TICKS)
 	configured_count = 0
 	# A different store, a missed snap (version jumped by more than one) or a look change needs every id again.
 	var jumped: bool = store.version != _synced_version and store.version != _synced_version + 1
 	var full: bool = (store != _synced_store or jumped
 			or tile_px != _synced_tile_px or label_px != _synced_label_px or own_id != _synced_own_id)
+	if store.version != _synced_version and store.snaps > 0:
+		clock.observe(store.tick, now_ms)
+	var render: float = clock.render_ms(now_ms)
 	if full:
-		_sync_all(now_ms, dur, tile_px, label_px)
+		_sync_all(render, tile_px, label_px)
 	elif store.version != _synced_version:
 		for id: int in store.removed_ids():
 			if not store.has_ent(id):
-				_drop(id)
+				_remove(id, render)
 		for id: int in store.changed_ids():
-			_update(id, now_ms, dur, tile_px, label_px)
+			_update(id, render, tile_px, label_px)
+	if not _hits.is_empty():
+		_resolve_hits(render)
 	_synced_store = store
 	_synced_version = store.version
 	_synced_tile_px = tile_px
 	_synced_label_px = label_px
 	_synced_own_id = own_id
-	for id: int in _tracks:
-		var track: EntityTrack = _tracks[id]
-		_sprites[_pool.slot_of(id)].position = ViewMath.tile_center(track.sample(now_ms), tile_px)
+	last_render_ms = render
+	if _recs_dirty:
+		_rec_list.clear()
+		for r: LayerEntityRec in _recs.values():
+			_rec_list.append(r)
+		_recs_dirty = false
+	for rec: LayerEntityRec in _rec_list:
+		if rec.corpse_until >= 0.0 and render >= rec.corpse_until:
+			_drop(rec.id)
+			continue
+		rec.sprite.position = ViewMath.tile_center(rec.track.pos_at(render), tile_px)
+		if rec.animated:
+			_animate(rec, render)
+	_draw_pops(render, tile_px)
 
 
-func _sync_all(now_ms: float, dur: float, tile_px: float, label_px: int) -> void:
+func _sync_all(render: float, tile_px: float, label_px: int) -> void:
 	var live: Dictionary = {}
 	for id: int in store.ids():
 		live[id] = true
-		_update(id, now_ms, dur, tile_px, label_px)
+		_update(id, render, tile_px, label_px)
 	for id: int in _pool.ids():
 		if not live.has(id):
-			_drop(id)
+			_remove(id, render)
 
 
-func _update(id: int, now_ms: float, dur: float, tile_px: float, label_px: int) -> void:
+func _update(id: int, render: float, tile_px: float, label_px: int) -> void:
 	if not store.has_ent(id):
 		return
 	var e: Dictionary = store.get_ent(id)
 	var slot: int = _pool.acquire(id)
 	var sprite: EntitySprite = _sprite_at(slot)
-	var track: EntityTrack = _tracks.get(id) as EntityTrack
-	if track == null:
-		track = EntityTrack.new()
-		_tracks[id] = track
-	track.set_target(ViewMath.to_vec(e.get("pos")), now_ms, dur)
+	var rec: LayerEntityRec = _recs.get(id) as LayerEntityRec
+	if rec == null:
+		rec = LayerEntityRec.new()
+		rec.id = id
+		rec.track = EntityTrack.new()
+		_recs[id] = rec
+		_tracks[id] = rec.track
+		_recs_dirty = true
+	rec.sprite = sprite
+	rec.corpse_until = -1.0
+	var track: EntityTrack = rec.track
+	var dmg: int = track.feed(e, store.tick, tick_ms, render, tick_ms)
 	var kind: int = int(e.get("kind", 0))
 	var cat: int = ViewMath.entity_category(kind, e.has("item"))
+	_cats[id] = cat
+	if dmg != 0:
+		_hits.append({"id": id, "dmg": dmg, "tick": store.tick})
 	var label: String = String(e.get("name", "")) if cat == ViewMath.CAT_PLAYER else ""
 	var hp: int = int(e.get("hp", 0))
+	rec.hp = hp
+	var animated: bool = (cat == ViewMath.CAT_PLAYER or cat == ViewMath.CAT_MONSTER) and use_placeholders
+	var tex: Texture2D = null if animated else entity_texture(e, cat)
+	var look: int = 0
+	if cat == ViewMath.CAT_PLAYER:
+		look = int(e.get("job", 0))
+	elif cat == ViewMath.CAT_MONSTER:
+		look = ViewMath.monster_art_index(kind, int(e.get("mkind", -1)))
+	_looks[id] = look
+	if animated and (look != rec.look or cat != rec.cat or not rec.animated):
+		rec.sheet = entity_sheet(cat == ViewMath.CAT_PLAYER, look)
+		rec.info_key = -1
+		rec.follow_key = -1
+	rec.cat = cat
+	rec.look = look
+	rec.animated = animated
+	rec.is_player = cat == ViewMath.CAT_PLAYER
+	if not animated:
+		sprite.clear_clip()
 	sprite.configure(kind, id == own_id, label, ViewMath.hp_fraction(hp, int(e.get("max_hp", 0))),
-			tile_px, label_px, entity_texture(e, cat), cat == ViewMath.CAT_NODE and ViewMath.node_depleted(hp), cat)
+			tile_px, label_px, tex, cat == ViewMath.CAT_NODE and ViewMath.node_depleted(hp), cat)
 	sprite.visible = true
 	sprite.z_index = 10 if id == own_id else 2 - mini(cat, ViewMath.CAT_DROP)
 	configured_count += 1
+
+
+## Picks and sets the clip frame of one animated entity at server time `render`.
+func _animate(rec: LayerEntityRec, render: float) -> void:
+	var c: Dictionary = rec.track.clip_at(render, tick_ms, tick_ms)
+	var action: int = int(c["action"])
+	var face: int = int(c["face"])
+	var elapsed: float = float(c["elapsed_ms"])
+	var key: int = action * 8 + face
+	if key != rec.info_key:
+		rec.info = _clip_info(rec.sheet, action, face, rec.is_player)
+		rec.info["atk"] = atk_frame_for(int(rec.info["frames"]), int(rec.info["atk_frame"]))
+		rec.info_key = key
+	var info: Dictionary = rec.info
+	var frame: int = ClipTiming.frame_at(action, elapsed, int(info["frames"]), float(info["delay_ms"]),
+			float(c["dur_ms"]), float(c["speed_ms"]), int(info["atk"]))
+	if frame < 0:  # one-shot over: standby after an attack, idle after a flinch
+		var total: float = ClipTiming.one_shot_ms(action, int(info["frames"]), float(info["delay_ms"]), float(c["dur_ms"]))
+		action = ClipTiming.follow_up(action)
+		if action * 8 + face != rec.follow_key:
+			rec.follow_info = _clip_info(rec.sheet, action, face, rec.is_player)
+			rec.follow_key = action * 8 + face
+		info = rec.follow_info
+		frame = ClipTiming.frame_at(action, elapsed - total, int(info["frames"]), float(info["delay_ms"]), 0.0,
+				float(c["speed_ms"]))
+	var flash: float = 0.0
+	if action == ClipSelect.HURT:
+		flash = 1.0 - clampf(elapsed / ClipTiming.HURT_MS, 0.0, 1.0)
+	rec.sprite.set_clip(rec.sheet, rec.look, String(info["name"]), info.get("anim", &"") as StringName, maxi(frame, 0),
+			int(info["frames"]), face, bool(info.get("flip", false)), flash)
+
+
+## {name, frames, delay_ms, atk_frame[, anim, flip]} for an action from the sheet, else the placeholder table.
+func _clip_info(sheet: ActSheet, action: int, face: int, is_player: bool) -> Dictionary:
+	if sheet != null:
+		var r: Dictionary = sheet.resolve(action, face, is_player)
+		if not r.is_empty():
+			r["atk_frame"] = sheet.atk_frame
+			return r
+	return PlaceholderClips.clip(action, is_player)
+
+
+## The attack clip's atk frame: the sheet's, else the frame at ClipTiming.ATK_FRACTION of the clip.
+static func atk_frame_for(frames: int, sheet_atk: int) -> int:
+	if frames <= 1:
+		return -1
+	if sheet_atk > 0 and sheet_atk < frames:
+		return sheet_atk
+	return clampi(roundi(float(frames) * ClipTiming.ATK_FRACTION), 1, frames - 1)
+
+
+## Server ms the damage of a hit on `target_id` at `hit_tick` should show: the visible attacker's atk frame, else
+## `render` (at once).
+func pop_time(target_id: int, hit_tick: int, render: float) -> float:
+	var target: EntityTrack = _tracks.get(target_id) as EntityTrack
+	if target == null:
+		return render
+	var cands: Array[Dictionary] = []
+	for id: int in _tracks:
+		var t: EntityTrack = _tracks[id]
+		if id == target_id or not t.has_anim or t.action != ClipSelect.ATTACK:
+			continue
+		cands.append({"id": id, "cell": t.cells.cell(), "start_ms": t.action_start_ms(tick_ms), "dur_ms": t.dur_ms})
+	var hit_ms: float = float(hit_tick) * tick_ms
+	var best: Dictionary = DamagePops.pick_attacker(target.cells.cell(), hit_ms, cands)
+	if best.is_empty():
+		return render
+	var att: EntityTrack = _tracks[int(best["id"])]
+	var is_player: bool = int(_cats.get(int(best["id"]), ViewMath.CAT_MONSTER)) == ViewMath.CAT_PLAYER
+	var sheet: ActSheet = entity_sheet(is_player, int(_looks.get(int(best["id"]), 0)))
+	var info: Dictionary = _clip_info(sheet, ClipSelect.ATTACK, att.face, is_player)
+	var total: float = ClipTiming.one_shot_ms(ClipSelect.ATTACK, int(info["frames"]), float(info["delay_ms"]), att.dur_ms)
+	var atk: int = atk_frame_for(int(info["frames"]), int(info["atk_frame"]))
+	var at: float = att.action_start_ms(tick_ms) + (total * ClipTiming.ATK_FRACTION if atk > 0 else 0.0)
+	return maxf(at, render)
+
+
+func _resolve_hits(render: float) -> void:
+	for h: Dictionary in _hits:
+		var at: float = pop_time(int(h["id"]), int(h["tick"]), render)
+		pops.add(int(h["id"]), int(h["dmg"]), at)
+		var target: EntityTrack = _tracks.get(int(h["id"])) as EntityTrack
+		if target != null and target.action == ClipSelect.HURT:
+			target.flinch_ms = at  # RO: the flinch lands with the number, at the attacker's atk frame
+	_hits.clear()
+
+
+func _draw_pops(render: float, tile_px: float) -> void:
+	shown_pops = pops.active(render)
+	if shown_pops.is_empty() and _damage == null:
+		return
+	if _damage == null:
+		_damage = DamageLayer.new()
+		_damage.z_index = 50
+		add_child(_damage)
+	var items: Array[Dictionary] = []
+	var s: float = tile_px / 32.0
+	for p: Dictionary in shown_pops:
+		var id: int = int(p["id"])
+		var base: Vector2
+		var r: LayerEntityRec = _recs.get(id) as LayerEntityRec
+		if r != null:
+			base = r.sprite.position
+		elif _last_pos.has(id):
+			base = _last_pos[id]
+		else:
+			continue
+		var head: float = tile_px * EntitySprite.FEET_Y - EntitySprite.HEAD_PX * s - tile_px * 0.3  # clear of the HP bar
+		items.append({"pos": base + Vector2(0.0, head - float(p["rise"]) * tile_px), "dmg": p["dmg"],
+				"alpha": p["alpha"], "own": id == own_id})
+	_damage.show_items(items, s)
+	if _last_pos.size() > 64 and pops.pending() == 0:  # forget removed ids once no number needs them
+		_last_pos.clear()
+
+
+## Act sheet for a job / engine monster kind: art-anim's (the act JSON of slot `anim.<kind>.idle`, else
+## res://assets/anim/<kind>/act.json, kind names from AssetSlots), else a baked PlaceholderClips sheet (null when
+## placeholders are off: the quad is drawn).
+func entity_sheet(is_player: bool, look: int) -> ActSheet:
+	var cache_key: int = look if is_player else -1 - look
+	if _sheet_cache.has(cache_key):
+		return _sheet_cache[cache_key] as ActSheet
+	if slots == null:
+		slots = AssetSlots.load_default()
+	var names: Array[String] = AssetSlots.JOB_NAMES if is_player else AssetSlots.ANIM_MONSTER_KINDS
+	var sheet: ActSheet = null
+	if look >= 0 and look < names.size():
+		var key: String = AssetSlots.anim_key(names[look], "idle")
+		var path: String = ANIM_SHEET_DIR.path_join(names[look]).path_join("act.json")
+		if slots != null and slots.has(key) and slots.is_sheet(key):
+			path = slots.path_of(key)
+		sheet = ActSheet.load_act(path)
+	if sheet == null and use_placeholders:
+		sheet = PlaceholderClips.make_sheet(is_player, look)
+	_sheet_cache[cache_key] = sheet
+	return sheet
 
 
 ## Art for an entity, or null while its slot is missing (players job.N, monsters monster.x, drops item.x, nodes node.N).
@@ -150,11 +378,32 @@ func _sheet_frame(json_path: String, anim: String) -> Texture2D:
 	return frames.get_frame_texture(anim, 0)
 
 
+## Removes an id the store no longer has; a dead animated monster first plays its dead clip as a corpse.
+func _remove(id: int, render: float) -> void:
+	var rec: LayerEntityRec = _recs.get(id) as LayerEntityRec
+	if rec == null or not rec.animated or rec.cat != ViewMath.CAT_MONSTER or rec.hp > 0:
+		_drop(id)
+		return
+	if rec.corpse_until >= 0.0:
+		return
+	rec.corpse_until = render + CORPSE_MS
+	rec.track.feed({"pos": rec.track.cells.cell(), "a": ClipSelect.DEAD, "t": floori(render / tick_ms), "m": 0},
+			floori(render / tick_ms), tick_ms, render, tick_ms)
+	rec.track.prev_action = ClipSelect.DEAD
+	rec.track.prev_start_tick = floori(render / tick_ms)
+
+
 func _drop(id: int) -> void:
 	var slot: int = _pool.release(id)
 	if slot >= 0:
+		_last_pos[id] = _sprites[slot].position
 		_sprites[slot].visible = false
+		_sprites[slot].clear_clip()
 	_tracks.erase(id)
+	if _recs.erase(id):
+		_recs_dirty = true
+	_cats.erase(id)
+	_looks.erase(id)
 
 
 func _sprite_at(slot: int) -> EntitySprite:

@@ -5,7 +5,7 @@ from game.config import MAX_PLAYERS
 from game.movement import move_players
 from game.state import make_empty_world
 
-STAY, N, S, W, E = 0, 1, 2, 3, 4
+STAY, S, SW, W, NW, N, NE, E, SE = range(9)  # RO move codes (game/ro_move.DIR_DELTAS9)
 
 
 def world_with(players):

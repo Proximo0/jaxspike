@@ -15,7 +15,7 @@ def _serve(tmp_path):
         loop = asyncio.new_event_loop(); holder["loop"] = loop
         holder["stop"] = loop.create_future()
         loop.run_until_complete(body())
-    t = threading.Thread(target=run, daemon=True); t.start(); ready.wait(10)
+    t = threading.Thread(target=run, daemon=True); t.start(); ready.wait(120)  # the first test pays the world build and jit
     return holder, t
 
 def _wait(pred, secs=5):

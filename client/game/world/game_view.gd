@@ -19,16 +19,18 @@ var _marker_tick: int = -1
 var ui_layer: CanvasLayer = null
 var panels: Array[Node] = []  ## every RO panel: bind(session) / set_welcome(msg) / on_message(msg) where defined
 var skill_bar: SkillBar = null
+var target_ring: TargetRing = null
+var audio: FeelAudio = null
 
 ## Placeholder layout on the 1920x1080 canvas: status left under the HUD, inventory right, others centre.
 const PANEL_POS: Dictionary = {
-	"StatusPanel": Vector2(8, 140), "InventoryPanel": Vector2(1660, 100), "SkillPanel": Vector2(420, 140),
-	"CraftPanel": Vector2(700, 140), "PartyPanel": Vector2(1000, 140), "ChatBox": Vector2(8, 820),
+	"StatusPanel": Vector2(8, 140), "InventoryPanel": Vector2(1660, 250), "SkillPanel": Vector2(420, 140),
+	"CraftPanel": Vector2(700, 140), "PartyPanel": Vector2(1000, 140), "ChatWindow": Vector2(8, 900),
 }
 const PANEL_SCENES: Array[String] = [
 	"res://game/ui/status_panel.tscn", "res://game/ui/skill_bar.tscn", "res://game/ui/skill_panel.tscn",
 	"res://game/ui/inventory_panel.tscn", "res://game/ui/craft_panel.tscn", "res://game/ui/party_panel.tscn",
-	"res://game/ui/chat_box.tscn",
+	"res://game/ui/chat_window.tscn",
 ]
 
 
@@ -47,6 +49,8 @@ func start(s: NetSession) -> void:
 		player_input.walk_target.connect(_on_walk_target)
 		player_input.walk_blocked.connect(_on_walk_blocked)
 	walk_marker.hide_marker()
+	walk_marker.map = s.map
+	player_input.entity_layer = entity_layer
 	hud.bind(s)
 	_ensure_panels()
 	for p: Node in panels:
@@ -54,6 +58,14 @@ func start(s: NetSession) -> void:
 			skill_bar.bind(s, entity_layer)
 		elif p.has_method("bind"):
 			p.call("bind", s)
+	if target_ring == null:
+		target_ring = TargetRing.new()
+		add_child(target_ring)
+	target_ring.bind(entity_layer, skill_bar.targeting)
+	if audio == null:
+		audio = FeelAudio.new()
+		add_child(audio)
+	audio.bind(s)
 	player_input.click_filter = Callable(self, "_click_world")
 
 
@@ -95,8 +107,6 @@ func _on_welcome() -> void:
 
 func _follow() -> void:
 	var tile_px: float = ViewMath.tuned("tile_px", ViewMath.DEFAULT_TILE_PX)
-	var z: float = ViewMath.tuned("camera_zoom", ViewMath.DEFAULT_CAMERA_ZOOM)
-	camera.zoom = Vector2(z, z)
 	var p: Vector2 = entity_layer.world_pos_of(session.slot)
 	if p == Vector2.INF and not session.store.you.is_empty():
 		p = ViewMath.tile_center(ViewMath.to_vec(session.store.you.get("pos")), tile_px)
@@ -157,9 +167,10 @@ func _ensure_panels() -> void:
 	buff_row.name = "BuffRow"
 	buff_row.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	buff_row.offset_left = -400.0
-	buff_row.offset_top = 8.0
+	buff_row.offset_top = 250.0  # under the minimap
 	ui_layer.add_child(buff_row)
 	panels.append(buff_row)
+	panels.append(hud)  # the HUD gets set_welcome / on_message like a panel (client-feel)
 
 
 ## Left click in the world: entity select wins over walk-to (the skill bar owns the selection).

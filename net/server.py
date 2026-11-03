@@ -1,9 +1,11 @@
 """Asyncio WebSocket game server: one shared JAX world, human players in bot slots.
 
 Run from the project folder:  venv\\Scripts\\python.exe -m net.server --port 8765
+GPU (WSL):  ~/jaxgpu/bin/python -m net.server --platform gpu   (sets JAX_PLATFORMS and the 80% memory cap)
 """
 import argparse
 import asyncio
+import gc
 import logging
 import os
 import signal
@@ -12,6 +14,22 @@ import time
 from collections import deque
 from pathlib import Path
 
+
+
+def _argv_platform(argv: list[str]) -> str:
+    """The --platform value (cpu or gpu) from the command line; read before jax is imported."""
+    for i, a in enumerate(argv):
+        if a == "--platform" and i + 1 < len(argv):
+            return argv[i + 1]
+        if a.startswith("--platform="):
+            return a.split("=", 1)[1]
+    return "cpu"
+
+
+if __name__ == "__main__" and _argv_platform(sys.argv) == "gpu":
+    os.environ.setdefault("JAX_PLATFORMS", "cuda")
+    os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
+    os.environ.setdefault("XLA_PYTHON_CLIENT_MEM_FRACTION", "0.8")  # the project's GPU cap: never above 80%
 os.environ.setdefault("JAX_PLATFORMS", "cpu")
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -22,10 +40,11 @@ import websockets  # noqa: E402
 
 from bots.ro_policies import ro_bot_inputs as bot_inputs  # noqa: E402
 from bots.runner import make_world_batch  # noqa: E402
-from game import ro_craft, ro_items, ro_mvp, ro_party, ro_skills, ro_stats  # noqa: E402
+from game import ro_anim, ro_craft, ro_items, ro_mvp, ro_party, ro_skills, ro_stats  # noqa: E402
 from game.config import (DIR_DELTAS, INV_SLOTS, MAX_PLAYERS, MAX_VIEWERS, PATH_STUCK_TICKS,  # noqa: E402
                          PLAYER_MAX_HP, SAVE_EVERY_TICKS, TICK_MS)
 from game.data import items as item_data  # noqa: E402
+from game.ro_move import LEGACY_TO_RO  # noqa: E402
 from game.state import empty_inputs, next_key  # noqa: E402
 from game.step import step  # noqa: E402
 from game.view import changed_mask, entity_table, view_update  # noqa: E402
@@ -35,8 +54,8 @@ from net.accounts import AccountStore  # noqa: E402
 from net.chat import ChatRouter  # noqa: E402
 from net.kafra import new_storage, transfer  # noqa: E402
 from net.pathing import find_path  # noqa: E402
-from net.protocol import (build_welcome_static, decode, encode, encode_map, snapshot,  # noqa: E402
-                          validate_client, welcome_message)
+from net.protocol import (build_snaps, build_welcome_static, decode, encode, encode_map,  # noqa: E402
+                          validate_client, welcome_message, you_delta, you_full)
 
 try:  # the persist worker's RO-block (de)serialiser; without it saves keep the legacy shape
     from net.char_fields import RO_KEYS, STAT_SCALARS, character_fields, fresh_ro_fields
@@ -51,7 +70,8 @@ _PLAYER_PULL = ("pos", "spawn", "hp", "dead", "active", "inv", "kills", "deaths"
 # reads, so the same dict feeds both the snapshots and the periodic save.
 _STATS_PULL = ("str", "agi", "vit", "int", "dex", "luk", "base_level", "job_level", "base_exp", "job_exp", "job",
                "stat_points", "skill_points", "sp", "max_sp", "was_dead")
-_SKILLS_PULL = ("learned", "sp", "cooldown", "buffs", "buff_level", "casting", "cast_left", "cast_target")
+_SKILLS_PULL = ("learned", "sp", "cooldown", "buffs", "buff_level", "casting", "cast_left", "cast_target",
+                "after_delay")
 _ITEMS_PULL = ("inv_count", "inv_refine", "inv_cards", "equip", "zeny")
 _CRAFT_PULL = ("level", "exp", "gathers", "crafts")
 _PARTY_PULL = ("party_id", "leader")
@@ -68,7 +88,7 @@ def _ro_blocks(world) -> dict:
     """The RO block rows the host reads each tick (snapshots, chat routing, periodic save): one dict, one pull."""
     return {"stats": {k: world["stats"][k] for k in _STATS_PULL},
             "skills": {k: world["skills"][k] for k in _SKILLS_PULL},
-            "items": {k: world["items"][k] for k in _ITEMS_PULL},
+            "items": {**{k: world["items"][k] for k in _ITEMS_PULL}, "range": ro_items.weapon_range(world)},
             "craft": {k: world["craft"][k] for k in _CRAFT_PULL},
             "party": {k: world["party"][k] for k in _PARTY_PULL}}
 
@@ -93,6 +113,7 @@ def _tick_fn(world, hmask, hmove, hattack, heat, hro, prev_tab, known, viewer_sl
     pull = {"send": send, "gone": gone, "tab": tab, "players": {k: p[k] for k in _PLAYER_PULL},
             "safe": world["pz"][p["pos"][:, 0], p["pos"][:, 1]],
             "ro": {**_ro_blocks(world), "derived": {"max_hp": d["max_hp"], "max_sp": d["max_sp"]}},
+            "anim": {"amotion_ms": ro_anim.amotion_ms(world, d)[:MAX_PLAYERS]},  # snap.you (docs/anim_wire.md)
             "mvp": {"event": world["mvp"]["event"], "event_head": world["mvp"]["event_head"]}}
     return world, tab, known_next, pull
 
@@ -143,7 +164,7 @@ _login_rows = jax.jit(_login_rows_fn) if RO_KEYS is not None else None
 _NONE_INPUTS = {k: np.asarray(v) for k, v in empty_inputs().items()}
 _TOWN_BOXES = np.asarray(town_boxes())
 _RO_MESSAGES = frozenset(("allot", "job", "skill", "learn", "use_item", "equip", "refine", "drop", "gather", "craft",
-                          "party", "chat", "storage", "save"))
+                          "party", "chat", "storage", "save", "buy", "sell"))
 PARTY_OP = {"create": 1, "leave": 2, "invite": 3, "accept": 4}
 
 
@@ -164,16 +185,21 @@ def _initial_world(seed: int) -> dict:
 class Client:
     """One connected human."""
 
-    def __init__(self, ws):
+    def __init__(self, ws, fmt: str = "json"):
         self.ws = ws
+        self.fmt = fmt  # snap encoding chosen at login: "json" (text frames) or "bin" (binary frames)
         self.send_task: asyncio.Task | None = None
         self.outbox: list[str] = []  # extra encoded messages (chat, mvp) sent ahead of the next snapshot
+        self.last_you: dict = {}  # `you` values last sent (net.protocol.you_delta)
 
 
 class GameServer:
     def __init__(self, seed: int, chars_dir: Path, tick_ms: int = TICK_MS, max_clients: int = MAX_PLAYERS,
-                 require_password: bool = False):
+                 require_password: bool = False, stats_every: int = 100, pipeline: bool = True):
         self.seed = seed
+        self.pipeline = pipeline  # _tick_loop overlaps the device tick with the previous tick's snapshots
+        self._inflight: tuple | None = None  # (pull on device, viewer, chat) of the dispatched, uncollected tick
+        self.stats_every = stats_every  # ticks between "max tick duration" log lines
         self.require_password = require_password  # False: a login without password still works for name-only characters
         self.chars_dir = Path(chars_dir)
         self.tick_ms = tick_ms
@@ -196,6 +222,7 @@ class GameServer:
         self._walked: set = set()
         self._max_tick_s = 0.0
         self._saving: set = set()
+        self._phase_max = [0.0, 0.0, 0.0]  # pipelined loop: max collect wait, dispatch, publish (s) per stats line
         self.save_gen: dict[str, int] = {}  # name -> generation of the newest initiated save (event loop writes only)
         self.path: dict[int, deque] = {}
         self.pending: dict[int, tuple | None] = {}
@@ -220,6 +247,7 @@ class GameServer:
         self.last_storage: dict[int, bytes] = {}
         self.last_event_head = 0
         self._fresh = None
+        self._you_prev: list | None = None  # last tick's `you` source arrays (_dirty_slots)
 
     # ----- setup -----
 
@@ -248,10 +276,13 @@ class GameServer:
         self.accounts = AccountStore(self.chars_dir / "accounts")
         self.roster = characters.load_roster(self.chars_dir)
         self._prepared = True
+        gc.freeze()  # the world, tables and jit caches are long-lived: keep them out of every gc pass
 
     async def start(self, host: str, port: int) -> None:
         self.prepare()
-        self._server = await websockets.serve(self._handler, host, port, backlog=1024)
+        # compression=None: permessage-deflate cost 27% of the loop at 480 clients (zlib per message per client), and
+        # the Godot WebSocketPeer does not negotiate it, so every client now gets what Godot clients already got
+        self._server = await websockets.serve(self._handler, host, port, backlog=1024, compression=None)
         self.port = self._server.sockets[0].getsockname()[1]
         self._tick_task = asyncio.create_task(self._tick_loop())
         log.info("listening on %s:%d", host, self.port)
@@ -500,7 +531,14 @@ class GameServer:
     # ----- tick -----
 
     def tick_once(self) -> None:
-        """One game tick: one jit (inputs, step, entity table, deltas), one host pull, snapshots, periodic save."""
+        """One game tick, synchronously: one jit (inputs, step, entity table, deltas), one host pull, snapshots,
+        periodic save. The tick loop runs the same three steps pipelined (see _tick_loop)."""
+        self._dispatch()
+        self._publish(*self._collect())
+
+    def _dispatch(self) -> None:
+        """Gather the humans' inputs and call the jitted tick. Returns at once: XLA computes the tick on its own
+        threads (no GIL) until _collect pulls the results."""
         self._process_storage()
         pos = self.pos_host
         hmask = np.zeros(MAX_PLAYERS, bool)
@@ -527,19 +565,25 @@ class GameServer:
             v[:] = _NONE_INPUTS[k]
         self.world, self.prev_tab, self.known, pull = _tick_jit(
             self.world, hmask, hmove, hattack, heat, hro, self.prev_tab, self.known, viewer)
-        pull = jax.device_get(pull)  # the one host pull of the tick
+        chat, self.chat_msgs = self.chat_msgs, []  # routed with this tick's positions, as in the unpipelined order
+        self._inflight = (pull, viewer, chat)
+
+    def _collect(self) -> tuple:
+        """Wait for the dispatched tick and make the one host pull of the tick; returns (pull, viewer, chat)."""
+        pull, viewer, chat = self._inflight
+        self._inflight = None
+        pull = jax.device_get(pull)
         self.pos_host = np.array(pull["players"]["pos"])
         self.tick += 1
         self._walked.clear()
+        return pull, viewer, chat
+
+    def _publish(self, pull: dict, viewer: np.ndarray, chat: list) -> None:
+        """Host work of a collected tick: chat, MVP events, every snapshot, the periodic save."""
         names = {s: self.owner[s] for s in self._humans()}
-        self._route_chat(pull, names)
+        self._route_chat(pull, names, [m for m in chat if m["slot"] in names])  # senders still online
         self._mvp_events(pull, names)
-        for slot in list(self.conn):
-            try:
-                self._queue_snapshot(slot, pull, names, bool(viewer[slot] >= 0))
-            except Exception:
-                log.exception("snapshot failed for slot %d; logging it out", slot)
-                self.logout(slot)
+        self._send_snapshots(pull, names, viewer)
         if self.tick % SAVE_EVERY_TICKS == 0:
             self._periodic_save(pull)
 
@@ -549,10 +593,9 @@ class GameServer:
         if c is not None and len(c.outbox) < MAX_OUTBOX:
             c.outbox.append(text)
 
-    def _route_chat(self, pull: dict, names: dict) -> None:
-        if not self.chat_msgs:
+    def _route_chat(self, pull: dict, names: dict, msgs: list) -> None:
+        if not msgs:
             return
-        msgs, self.chat_msgs = self.chat_msgs, []
         routed = self.router.route(self.tick, msgs, pull["players"]["pos"], pull["players"]["active"],
                                    pull["ro"]["party"]["party_id"], names)
         for s, out in routed.items():
@@ -650,7 +693,23 @@ class GameServer:
         self.pending[slot] = (pos[0] + dx, pos[1] + dy)
         return q[0]
 
-    def _queue_snapshot(self, slot: int, pull: dict, names: dict, viewed: bool) -> None:
+    def _dirty_slots(self, pull: dict) -> np.ndarray:
+        """Bool [MAX_PLAYERS]: slots whose `you` source rows changed since the previous tick (one vectorised compare
+        per pulled array). A slot that is not dirty and not on a full snap gets `you` = {pos, hp} only."""
+        tab = pull["tab"]
+        leaves = jax.tree_util.tree_leaves({"players": pull["players"], "safe": pull["safe"], "ro": pull["ro"],
+                                            "anim": pull.get("anim", {}),
+                                            "tab": {k: tab[k][:MAX_PLAYERS] for k in ("speed_ms",) if k in tab}})
+        prev, self._you_prev = self._you_prev, leaves
+        if prev is None or len(prev) != len(leaves):
+            return np.ones(MAX_PLAYERS, bool)
+        dirty = np.zeros(MAX_PLAYERS, bool)
+        for a, b in zip(leaves, prev):
+            dirty |= (a != b).reshape(MAX_PLAYERS, -1).any(axis=1)
+        return dirty
+
+    def _snapshot_view(self, slot: int, pull: dict, names: dict, viewed: bool, dirty: np.ndarray) -> tuple | None:
+        """Per-slot bookkeeping and the (slot, you, notice, full, fmt) entry for build_snaps; None = no snap."""
         dead = bool(pull["players"]["dead"][slot])
         if dead and not self.prev_dead.get(slot, False):
             self.notice[slot] = "you died"
@@ -661,23 +720,48 @@ class GameServer:
         c = self.conn[slot]
         if not viewed:
             self.need_full[slot] = True  # known was reset for this row; resync on the next snap
-            return  # slow client: skip this tick, never wait
+            return None  # slow client: skip this tick, never wait
         full = self.need_full.get(slot, True)
         self.need_full[slot] = False
-        extra = {}  # change-detected fields: sent on full snaps and when they differ from what this slot last got
-        members = self._members(pull, slot, names)
+        if full or dirty[slot]:
+            you = you_delta(you_full(pull, slot, self.town[slot]), c.last_you, full)
+        else:
+            p = pull["players"]
+            you = {"pos": p["pos"][slot].tolist(), "hp": int(p["hp"][slot])}
+        members = self._members(pull, slot, names)  # change-detected: sent on full snaps and when they differ
         if full or members != self.last_members.get(slot):
-            extra["members"] = self.last_members[slot] = members
+            you["members"] = self.last_members[slot] = members
         st = self.storage.get(slot)
         if st is not None and (full or st.tobytes() != self.last_storage.get(slot)):
-            extra["storage"] = st.tolist()
+            you["storage"] = st.tolist()
             self.last_storage[slot] = st.tobytes()
-        snap = snapshot(pull, slot, names, self.notice.pop(slot, None), self.tick, self.town[slot], full, extra)
-        texts, c.outbox = c.outbox + [encode(snap)], []
-        c.send_task = asyncio.create_task(self._send(c, texts))
+        return slot, you, self.notice.pop(slot, None), full, c.fmt
 
-    async def _send(self, c: Client, texts: list[str]) -> None:
+    def _send_snapshots(self, pull: dict, names: dict, viewer: np.ndarray) -> None:
+        """Every connected client's snap for this tick, encoded in one build_snaps pass, then one send task each."""
+        dirty = self._dirty_slots(pull)
+        views = []
+        for slot in list(self.conn):
+            try:
+                v = self._snapshot_view(slot, pull, names, bool(viewer[slot] >= 0), dirty)
+            except Exception:
+                log.exception("snapshot failed for slot %d; logging it out", slot)
+                self.logout(slot)
+                continue
+            if v is not None:
+                views.append(v)
+        for (slot, *_), msg in zip(views, build_snaps(pull, views, self.tick, names)):
+            c = self.conn[slot]
+            texts, c.outbox = c.outbox + [msg], []
+            # pipelined loop: this tick's viewer row was fixed before the previous send was queued, so that send
+            # can still be in flight; chain after it to keep per-client tick order
+            prev = c.send_task if c.send_task is not None and not c.send_task.done() else None
+            c.send_task = asyncio.create_task(self._send(c, texts, prev))
+
+    async def _send(self, c: Client, texts: list, after: asyncio.Task | None = None) -> None:
         try:
+            if after is not None:
+                await asyncio.wait([after])
             for text in texts:
                 await c.ws.send(text)
         except websockets.ConnectionClosed:
@@ -686,6 +770,9 @@ class GameServer:
             log.exception("send failed")
 
     async def _tick_loop(self) -> None:
+        """Pipelined when self.pipeline: each period collects the tick dispatched one period earlier (done by
+        then), dispatches the next tick, and only then builds and sends the collected tick's snapshots, so the
+        snapshot work overlaps the device tick. Cost: snaps leave one device-tick time later (~50 ms on CPU)."""
         loop = asyncio.get_running_loop()
         dt = self.tick_ms / 1000
         deadline = loop.time() + dt
@@ -694,16 +781,29 @@ class GameServer:
             await asyncio.sleep(max(delay, 0))
             t0 = time.perf_counter()
             try:
-                self.tick_once()
+                if not self.pipeline:
+                    self.tick_once()
+                else:
+                    done = self._collect() if self._inflight is not None else None
+                    t1 = time.perf_counter()
+                    self._dispatch()
+                    t2 = time.perf_counter()
+                    if done is not None:
+                        self._publish(*done)
+                    t3 = time.perf_counter()
+                    self._phase_max = [max(a, b) for a, b in zip(self._phase_max, (t1 - t0, t2 - t1, t3 - t2))]
             except Exception:
                 log.exception("tick failed")
             took = time.perf_counter() - t0
             self._max_tick_s = max(self._max_tick_s, took)
             if took > dt:
                 self.overruns += 1
-            if self.tick % 100 == 0:
-                log.info("max tick duration over the last 100 ticks: %.1f ms", self._max_tick_s * 1000)
+            if self.tick % self.stats_every == 0:  # bench/server_load.py --spawn parses this line
+                log.info("tick %d: max tick duration over the last %d ticks: %.1f ms, overruns %d "
+                         "(max collect %.1f, dispatch %.1f, publish %.1f ms)", self.tick, self.stats_every,
+                         self._max_tick_s * 1000, self.overruns, *(1000 * x for x in self._phase_max))
                 self._max_tick_s = 0.0
+                self._phase_max = [0.0, 0.0, 0.0]
             deadline += dt
             now = loop.time()
             if now > deadline + dt:
@@ -779,7 +879,7 @@ class GameServer:
                 await self._refuse(ws, err)
                 return
             self._account_login(first)
-            c = Client(ws)
+            c = Client(ws, first.get("format", "json"))
             self.conn[slot] = c
             c.send_task = asyncio.create_task(self._send(
                 c, [encode(welcome_message(slot, self.tick_ms, self.maps, self.welcome_static))]))
@@ -814,10 +914,11 @@ class GameServer:
 
     def _on_message(self, slot: int, msg: dict) -> None:
         if msg["t"] == "input":
-            self.latest_input[slot] = (msg["move"], msg["attack"], msg["eat"])
+            move = LEGACY_TO_RO[msg["move"]] if msg["move"] < len(LEGACY_TO_RO) else msg["move"]  # 4-way or RO 1..8
+            self.latest_input[slot] = (move, msg["attack"], msg["eat"])
             tap = self.tap[slot]
-            if msg["move"]:
-                tap[0] = msg["move"]
+            if move:
+                tap[0] = move
             if msg["attack"]:
                 tap[1] = True
             if msg["eat"]:
@@ -856,9 +957,11 @@ class GameServer:
             pend["skill"][slot], pend["target"][slot] = msg["id"], msg["target"]
         elif t == "learn":
             pend["learn"][slot] = msg["id"]
-        elif t in ("use_item", "equip", "refine", "drop"):
+        elif t in ("use_item", "equip", "refine", "drop", "sell"):
             v = msg["slot"]
             pend[t][slot] = v if -1 <= v < 2 ** 31 else -1  # the engine ignores anything outside 0..INV_SLOTS-1
+        elif t == "buy":
+            pend["buy"][slot] = msg["item"] if 0 < msg["item"] < 2 ** 31 else 0
         elif t == "gather":
             pend["gather"][slot] = True
         elif t == "craft":
@@ -878,6 +981,28 @@ class GameServer:
             pend["save"][slot] = True
 
 
+def bench_ticks(seed: int, n: int) -> None:
+    """Time n ticks (device tick + host pull) at MAX_VIEWERS viewers on the current jax backend."""
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        srv = GameServer(seed, Path(tmp))
+        srv.prepare()
+        z = np.zeros(MAX_PLAYERS)
+        hro = {k: v.copy() for k, v in srv.pend.items()}
+        viewer = np.arange(MAX_VIEWERS, dtype=np.int32)
+        world, tab, known, ts = srv.world, srv.prev_tab, srv.known, []
+        for i in range(n + 5):
+            t0 = time.perf_counter()
+            world, tab, known, pull = _tick_jit(world, z.astype(bool), z.astype(np.int32), z.astype(bool),
+                                                z.astype(bool), hro, tab, known, viewer)
+            jax.device_get(pull)
+            if i >= 5:
+                ts.append((time.perf_counter() - t0) * 1000)
+        print(f"backend={jax.default_backend()} devices={jax.devices()} viewers={MAX_VIEWERS} "
+              f"E={tab['kind'].shape[0]} ticks={n}: p50 {np.percentile(ts, 50):.1f} ms, "
+              f"p95 {np.percentile(ts, 95):.1f} ms, min {min(ts):.1f} ms")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="JAX tile MMO game server")
     ap.add_argument("--host", default="0.0.0.0")
@@ -886,11 +1011,21 @@ def main() -> None:
     ap.add_argument("--chars", default="characters")
     ap.add_argument("--tick-ms", type=int, default=TICK_MS)
     ap.add_argument("--require-password", action="store_true", help="refuse logins that carry no password")
+    ap.add_argument("--platform", choices=("cpu", "gpu"), default="cpu",
+                    help="jax backend; gpu sets JAX_PLATFORMS=cuda and the 80%% memory cap (run in WSL)")
+    ap.add_argument("--stats-every", type=int, default=100, help="ticks between tick-duration log lines")
+    ap.add_argument("--no-pipeline", action="store_true", help="run each tick start to end (no device overlap)")
+    ap.add_argument("--bench-ticks", type=int, default=0,
+                    help="no sockets: time N ticks with every slot a viewer, print p50/p95 ms, exit")
     args = ap.parse_args()
+    if args.bench_ticks:
+        bench_ticks(args.seed, args.bench_ticks)
+        return
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
     async def run() -> None:
-        server = GameServer(args.seed, Path(args.chars), args.tick_ms, require_password=args.require_password)
+        server = GameServer(args.seed, Path(args.chars), args.tick_ms, require_password=args.require_password,
+                            stats_every=args.stats_every, pipeline=not args.no_pipeline)
         await server.start(args.host, args.port)
         stop = asyncio.Event()
         try:

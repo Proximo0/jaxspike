@@ -7,21 +7,22 @@ import jax
 import jax.numpy as jnp
 
 from bots import policies
+from bots.ro_nav_policy import blocked as _wall_blocked
+from bots.ro_nav_policy import neighbours
 from game import ro_craft
-from game.config import DIR_DELTAS, HUNT_RETREAT_HP, MAP, MAX_PLAYERS, PLAYER_MAX_HP
+from game.config import HUNT_RETREAT_HP, MAP, MAX_PLAYERS, PLAYER_MAX_HP
 from game.data.craft import N_GATHER_KINDS, N_RECIPES, NODE_COPPER, NODE_LEVEL_REQ_A, NODE_SKILL_A, RECIPE_STATION
 from game.map_gen import DIST_UNREACHABLE
 
 GATHER_EVERY = 4  # slot i is a gatherer when i % GATHER_EVERY == 1
 
-_DIRS = jnp.array(DIR_DELTAS[1:], jnp.int32)  # moves 1..4
 _IDX = jnp.arange(MAX_PLAYERS, dtype=jnp.int32)
 _IS_GATHERER = _IDX % GATHER_EVERY == 1
 _OWN_KIND = ((_IDX // GATHER_EVERY) % N_GATHER_KINDS).astype(jnp.int32)
 
 
 def _descend(world, kind, field, enter_pz):
-    """Return (move, can): the direction 1..4 to the smallest-distance neighbour of field[kind] and whether it lowers it.
+    """Return (move, can): the move code (bots.ro_nav_policy.DELTAS) to the smallest-distance neighbour of field[kind] and whether it lowers it.
 
     `kind` is a per-player int array; the field is only ever indexed as field[kind, x, y] (never field[kind] per player).
     Walls and tiles holding a living player are unreachable; pz neighbours too unless enter_pz (walking to a station in town) or the player already
@@ -30,14 +31,14 @@ def _descend(world, kind, field, enter_pz):
     """
     pos = world["players"]["pos"]
     own = field[kind, pos[:, 0], pos[:, 1]].astype(jnp.int32)
-    tgt = jnp.clip(pos[:, None, :] + _DIRS[None], 0, MAP - 1)  # [N, 4, 2]
+    tgt, deltas = neighbours(pos)  # [N, K, 2]
     nbr = field[kind[:, None], tgt[..., 0], tgt[..., 1]].astype(jnp.int32)
     # Tiles holding a living player count as blocked: two gatherers descending different fields can otherwise
     # want each other's tile forever (the shared dist_town field of the hunting bots never has that problem).
     live = world["players"]["active"] & ~world["players"]["dead"]
     occ = jnp.zeros((MAP * MAP,), jnp.bool_).at[jnp.where(live, pos[:, 0] * MAP + pos[:, 1], MAP * MAP)].set(
         True, mode="drop")
-    blocked = (world["walls"][tgt[..., 0], tgt[..., 1]] != 0) | occ[tgt[..., 0] * MAP + tgt[..., 1]]
+    blocked = _wall_blocked(world, pos, deltas) | occ[tgt[..., 0] * MAP + tgt[..., 1]]
     on_pz = world["pz"][pos[:, 0], pos[:, 1]]
     town = world["pz"][tgt[..., 0], tgt[..., 1]] & ~(on_pz[:, None] | enter_pz)
     nbr = jnp.where(blocked | town, DIST_UNREACHABLE, nbr)

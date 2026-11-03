@@ -132,6 +132,13 @@ func _upsert(src: Dictionary) -> void:
 		e["item"] = int(src["item"])
 	if src.has("mkind"):
 		e["mkind"] = int(src["mkind"])
+	# Anim fields (docs/anim_wire.md): a missing one keeps its old value, except `h` (damage on this tick only).
+	var prev: Dictionary = _ents.get(id, {})
+	for k: String in ["a", "d", "t", "m", "s", "h", "job"]:
+		if src.has(k):
+			e[k] = int(src[k])
+		elif k != "h" and prev.has(k):
+			e[k] = prev[k]
 	_ents[id] = e
 	_changed.append(id)
 

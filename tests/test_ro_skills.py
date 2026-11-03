@@ -10,6 +10,7 @@ from game.config import (
     MONSTER_RESPAWN_TICKS,
     PLAYER_ATTACK_COOLDOWN,
     PLAYER_MAX_HP,
+    TICK_MS,
 )
 from game.data import elements as el
 from game.data import skills as sk
@@ -98,7 +99,7 @@ def test_make_state_shapes_and_dtypes():
     s = ro_skills.make_state()
     shapes = {"learned": (MP, sk.N_SKILLS), "cooldown": (MP, sk.N_SKILLS), "cast_left": (MP,), "casting": (MP,),
               "cast_target": (MP,), "cast_tile": (MP, 2), "buffs": (MP, sk.N_BUFFS), "buff_level": (MP, sk.N_BUFFS),
-              "sp": (MP,), "casts": (MP,), "skill_dmg": (MP,)}
+              "sp": (MP,), "casts": (MP,), "skill_dmg": (MP,), "after_delay": (MP,)}
     assert set(s) == set(shapes)
     for k, shp in shapes.items():
         assert s[k].shape == shp, k
@@ -110,7 +111,7 @@ def test_make_state_shapes_and_dtypes():
 
 
 def test_table_shapes():
-    assert sk.N_SKILLS == 33 and sk.N_BUFFS == 8 and sk.MAX_SKILL_LEVEL == 10
+    assert sk.N_SKILLS == 42 and sk.N_BUFFS == 8 and sk.MAX_SKILL_LEVEL == 10
     for name in ("SKILL_JOB", "SKILL_MAX_LEVEL", "SKILL_EFFECT", "SKILL_ELEMENT", "SKILL_TARGET", "SKILL_AOE",
                  "SKILL_BUFF", "SKILL_HITS", "SKILL_FLAT_HEAL"):
         assert getattr(sk, name).shape == (sk.N_SKILLS,), name
@@ -206,9 +207,10 @@ def test_cast_start_sets_sp_cooldown_cast_left():
 
 
 def test_cooldown_blocks_second_cast_then_releases():
+    # RO: Bash has no reuse cooldown; the next skill waits out the after-cast delay (ASPD based, ro-fidelity).
     s = sk.SK_BASH
-    cd = int(sk.SKILL_COOLDOWN[s, 1])
-    assert cd >= 1
+    cd = -(-int(sk.SKILL_AFTER_DELAY_MS[s, 1]) // TICK_MS)
+    assert cd >= 1 and int(sk.SKILL_COOLDOWN[s, 1]) == 0
     w = _sp(_learn(_world(kind=1), s), 50)
     w1 = _tick(w, skill=s, target=_mon(0))
     hp1 = _hp(w1)
@@ -216,8 +218,8 @@ def test_cooldown_blocks_second_cast_then_releases():
     w2 = _tick(w1, skill=s, target=_mon(0))
     assert _hp(w2) == hp1
     assert int(w2["skills"]["casts"][0]) == 1
-    w3 = _run(w1, cd)  # cooldown ticks down to zero
-    assert int(w3["skills"]["cooldown"][0, s]) == 0
+    w3 = _run(w1, cd)  # after-cast delay ticks down to zero
+    assert int(w3["skills"]["after_delay"][0]) == 0
     w4 = _tick(w3, skill=s, target=_mon(0))
     assert _hp(w4) < hp1
 
@@ -314,7 +316,8 @@ def test_kill_via_skill_sets_flags_and_credit():
 
 def test_magnum_break_hits_chebyshev_one_only():
     s = sk.SK_MAGNUM_BREAK
-    assert int(sk.SKILL_AOE[s]) == 1 and int(sk.SKILL_TARGET[s]) == sk.TARGET_SELF
+    # RO Magnum Break is 5x5 (aoe 2); ro_skills_effects R_MAX = 1 still clips it to 3x3 (ro-fidelity engine line).
+    assert int(sk.SKILL_AOE[s]) == 2 and int(sk.SKILL_TARGET[s]) == sk.TARGET_SELF
     w = _sp(_learn(_world(monster_pos=(21, 20), kind=0), s), 50)
     spots = [(19, 19), (20, 21), (22, 20), (20, 23)]  # diagonal (in), south (in), distance 2, distance 3
     m = w["monsters"]

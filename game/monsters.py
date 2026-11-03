@@ -1,12 +1,11 @@
-"""Monster AI phase: respawn countdown and one-step chase toward the nearest player.
+"""Monster AI phase: respawn countdown, RO monster modes, then the step.
 
-Only kinds with data.monsters.AGGRO chase. Non-aggro kinds never chase in v1 (they fight back only when hit, see
-combat.py). A monster moves only on ticks where tick % MOVE_TICKS[kind] == 0 (fixed shape, a mask)."""
+The decision (chase, give up and return home, random walk, assist, looting, immovable kinds) is
+game/ro_monster_modes.py and only writes move.path_dir; game/ro_move.py steps it at the kind's speed (ms per cell)."""
 import jax.numpy as jnp
 
-from game.config import MAP, MAX_MONSTERS, MONSTER_AGGRO_RANGE, MONSTER_HP
-from game.data.monsters import AGGRO, MOVE_TICKS
-from game.spatial import build_grid, nearest_in_block
+from game import ro_monster_modes, ro_move
+from game.config import MONSTER_HP
 
 _HP_TABLE = jnp.array(MONSTER_HP, dtype=jnp.int32)
 
@@ -39,47 +38,15 @@ def _occupancy(world):
     return occ.at[m["pos"][:, 0], m["pos"][:, 1]].max(m["active"])
 
 
-def _chase(world, movers):
-    """Move each mover one tile toward its nearest living player outside the protection zone; lowest index wins ties."""
-    p, m = world["players"], world["monsters"]
-    pos = m["pos"]
-    targetable = p["active"] & ~p["dead"] & ~world["pz"][p["pos"][:, 0], p["pos"][:, 1]]
-    table, _ = build_grid(p["pos"], targetable)
-    tidx, dist = nearest_in_block(table, pos, p["pos"])
-    due = world["tick"] % MOVE_TICKS[m["kind"]] == 0
-    chase = movers & AGGRO[m["kind"]] & due & (dist <= MONSTER_AGGRO_RANGE)
-
-    delta = p["pos"][tidx] - pos
-    sign = jnp.sign(delta)
-    x_first = jnp.abs(delta[:, 0]) >= jnp.abs(delta[:, 1])
-    step_x = jnp.stack([sign[:, 0], jnp.zeros_like(sign[:, 0])], axis=1)
-    step_y = jnp.stack([jnp.zeros_like(sign[:, 1]), sign[:, 1]], axis=1)
-    first = jnp.where(x_first[:, None], step_x, step_y)
-    second = jnp.where(x_first[:, None], step_y, step_x)
-
-    occ = _occupancy(world)
-
-    def free(step):
-        tgt = jnp.clip(pos + step, 0, MAP - 1)
-        return (step != 0).any(axis=1) & ~occ[tgt[:, 0], tgt[:, 1]], tgt
-
-    ok1, t1 = free(first)
-    ok2, t2 = free(second)
-    target = jnp.where(ok1[:, None], t1, t2)
-    go = chase & (ok1 | ok2)
-
-    # Scatter-min of monster index per target tile: the lowest index claims it.
-    flat = jnp.where(go, target[:, 0] * MAP + target[:, 1], MAP * MAP)
-    idx = jnp.arange(MAX_MONSTERS, dtype=jnp.int32)
-    claim = jnp.full((MAP * MAP,), MAX_MONSTERS, jnp.int32).at[flat].min(idx, mode="drop")
-    won = go & (claim[jnp.minimum(flat, MAP * MAP - 1)] == idx)
-    return jnp.where(won[:, None], target, pos)
-
-
 def monster_ai(world):
-    """Run respawn countdown, then move aggroed monsters one step toward players."""
+    """Run respawn countdown, decide each monster's step, then move them through the speed accumulators."""
+    world, legacy = ro_move.attach(world)  # no-op on worlds that carry the block
+    world = ro_monster_modes.on_deaths(world)  # per-kind respawn timers, looted items fall where a monster died
     movers = world["monsters"]["active"]  # monsters respawning this tick do not move yet
     m = _respawn(world["monsters"], _occupancy(world))
-    new_pos = _chase({**world, "monsters": m}, movers)  # occupancy includes monsters revived this tick
-    m = {**m, "pos": jnp.where(movers[:, None], new_pos, m["pos"])}
-    return {**world, "monsters": m}
+    world = {**world, "monsters": m}  # occupancy includes monsters revived this tick
+    world, path_dir = ro_monster_modes.decide(world, movers, _occupancy(world))
+    # ro-move owns the step application below: the decision above only writes move.path_dir.
+    world = ro_move.want_monsters(world, path_dir)
+    world = ro_move.step_entities(world, "monsters")
+    return ro_move.detach(world, legacy)

@@ -1,11 +1,14 @@
 import jax
 import jax.numpy as jnp
 
-from game.config import (
-    DROP_TTL, INV_SLOTS, ITEM_GOLD_COIN, ITEM_MEAT, ITEM_NONE, ITEM_SWORD,
-    LOOT_COIN_MAX, LOOT_MEAT_MAX, LOOT_SWORD_MAX, MAX_DROPS, MAX_MONSTERS,
-)
-from game.loot import loot, roll_item
+from game.config import DROP_TTL, INV_SLOTS, ITEM_GOLD_COIN, ITEM_MEAT, ITEM_NONE, ITEM_SWORD, MAX_DROPS
+from game.data import drops as drop_data
+from game.data import items as item_data
+from game.data import monsters as monster_data
+from game.data.drops import DROP_CHANCE, DROP_ITEM
+from game.data.items import ITEM_JELLOPY, ITEM_TIGER_SKIN
+from game.loot import loot
+from game.ro_drops import roll_drops
 from game.state import make_empty_world, next_key
 
 
@@ -40,36 +43,93 @@ def set_died(w, idxs, positions):
     return {**w, "monsters": m}
 
 
-def test_roll_table():
-    # Just below and at each config threshold, so the table follows the constants.
-    eps = 1e-3
-    u = jnp.array([0.0, LOOT_COIN_MAX - eps, LOOT_COIN_MAX, LOOT_MEAT_MAX - eps,
-                   LOOT_MEAT_MAX, LOOT_SWORD_MAX - eps, LOOT_SWORD_MAX, 0.999])
-    assert roll_item(u).tolist() == [
-        ITEM_GOLD_COIN, ITEM_GOLD_COIN, ITEM_MEAT, ITEM_MEAT,
-        ITEM_SWORD, ITEM_SWORD, ITEM_NONE, ITEM_NONE,
-    ]
+def _expected_drops(w, m):
+    """The drop table rolls for monster m with the loot phase's key: (items in entry order, coin or 0)."""
+    sub, _ = next_key(w)
+    items, _, zeny = roll_drops(w, sub)
+    got = [int(i) for i in items[m] if int(i) != ITEM_NONE]
+    return got, (ITEM_GOLD_COIN if int(zeny[m]) > 0 else ITEM_NONE), int(zeny[m])
 
 
-def test_died_monster_creates_drop_at_pos():
+def set_kind(w, idxs, kind):
+    m = w["monsters"]
+    return {**w, "monsters": {**m, "kind": m["kind"].at[jnp.array(idxs)].set(kind)}}
+
+
+def credit(w, m, player):
+    mvp = w["mvp"]
+    return {**w, "mvp": {**mvp, "top_damager": mvp["top_damager"].at[m].set(player)}}
+
+
+def test_drop_table_covers_every_monster_kind_with_a_card_at_one_per_mille():
+    assert drop_data.N_DROP_KINDS == monster_data.N_KINDS == 20
+    assert DROP_ITEM.shape == (20, drop_data.DROPS_PER_KIND)
+    for k in range(20):
+        row = [int(i) for i in DROP_ITEM[k] if int(i)]
+        assert row, k
+        cards = [i for i in row if int(item_data.KIND[i]) == item_data.KIND_CARD]
+        assert len(cards) == 1 and int(DROP_CHANCE[k][row.index(cards[0])]) == 1, k
+        assert 0 < int(drop_data.ZENY_MIN[k]) <= int(drop_data.ZENY_MAX[k])
+    assert ((DROP_CHANCE >= 0) & (DROP_CHANCE <= 1000)).all()
+    assert len(drop_data.table_for_client()) == 20
+
+
+def test_died_monster_creates_table_drops_at_pos():
     seen = set()
     for seed in range(12):
         w = set_died(world_with(seed), [5], [[10, 12]])
-        sub, _ = next_key(w)
-        expected = int(roll_item(jax.random.uniform(sub, (MAX_MONSTERS,)))[5])
-        out = loot(w)
+        items, coin, _ = _expected_drops(w, 5)
+        out = loot(w)  # nobody credited: zeny stays on the ground as a coin drop
         d = out["drops"]
-        seen.add(expected)
-        if expected == ITEM_NONE:
-            assert int(d["active"].sum()) == 0
-        else:
-            assert int(d["active"].sum()) == 1
-            i = int(jnp.argmax(d["active"]))
-            assert i == 0
-            assert d["pos"][i].tolist() == [10, 12]
-            assert int(d["item"][i]) == expected
-            assert int(d["ttl"][i]) == DROP_TTL - 1
-    assert len(seen) > 1
+        want = items + ([coin] if coin else [])
+        seen.update(want)
+        n = len(want)
+        assert int(d["active"].sum()) == n
+        assert d["active"][:n].all()
+        assert [int(x) for x in d["item"][:n]] == want
+        assert (d["pos"][:n] == jnp.array([10, 12])).all()
+        assert (d["ttl"][:n] == DROP_TTL - 1).all()
+    assert ITEM_JELLOPY in seen and ITEM_GOLD_COIN in seen  # kind 0 is the Poring row
+
+
+def test_zeny_goes_to_the_credited_killer_not_the_ground():
+    w = set_player(set_died(world_with(4), [7], [[30, 30]]), 2, [90, 90])
+    w = credit(w, 7, 2)
+    items, _, zeny = _expected_drops(w, 7)
+    out = loot(w)
+    assert int(out["items"]["zeny"][2]) == zeny > 0
+    assert int(out["items"]["zeny"].sum()) == zeny
+    assert int((out["drops"]["item"] == ITEM_GOLD_COIN).sum()) == 0
+    assert int(out["drops"]["active"].sum()) == len(items)
+
+
+def test_killer_who_logged_out_gets_nothing_and_coins_drop():
+    w = credit(set_died(world_with(4), [7], [[30, 30]]), 7, 2)  # player 2 not active
+    out = loot(w)
+    assert int(out["items"]["zeny"].sum()) == 0
+    assert int((out["drops"]["item"] == ITEM_GOLD_COIN).sum()) == 1
+
+
+def test_zeny_from_two_kills_adds_up_and_caps():
+    w = set_player(set_died(world_with(6), [3, 9], [[5, 5], [6, 6]]), 0, [50, 50])
+    w = credit(credit(w, 3, 0), 9, 0)
+    _, _, z3 = _expected_drops(w, 3)
+    _, _, z9 = _expected_drops(w, 9)
+    assert int(loot(w)["items"]["zeny"][0]) == z3 + z9
+    it = w["items"]
+    w = {**w, "items": {**it, "zeny": it["zeny"].at[0].set(item_data.MAX_ZENY - 1)}}
+    assert int(loot(w)["items"]["zeny"][0]) == item_data.MAX_ZENY
+
+
+def test_kind_selects_the_row():
+    # MVP Eddga (kind 19): only its own row's items (or a coin) ever drop, and its tiger skin does.
+    row = {int(i) for i in DROP_ITEM[19]} | {ITEM_GOLD_COIN}
+    seen = set()
+    for seed in range(8):
+        w = set_kind(set_died(world_with(seed), [4], [[8, 8]]), [4], 19)
+        out = loot(w)
+        seen |= {int(x) for x in out["drops"]["item"][out["drops"]["active"]]}
+    assert seen <= row and ITEM_TIGER_SKIN in seen
 
 
 def test_no_died_no_drop():
@@ -143,20 +203,20 @@ def test_several_died_get_distinct_slots():
     # occupy slots 0 and 2 so free slots are not contiguous
     w = set_drop(w, 0, [200, 200], ITEM_MEAT)
     w = set_drop(w, 2, [201, 200], ITEM_MEAT)
-    sub, _ = next_key(w)
-    items = roll_item(jax.random.uniform(sub, (MAX_MONSTERS,)))[:40]
-    n_expected = int((items != ITEM_NONE).sum())
+    # expected candidates in rank order: monster-major, table entries then the coin
+    spawned = []
+    for m in idxs:
+        items, coin, _ = _expected_drops(w, m)
+        spawned += [(m, i) for i in items + ([coin] if coin else [])]
     out = loot(w)
     d = out["drops"]
-    assert int(d["active"].sum()) == n_expected + 2
+    assert int(d["active"].sum()) == len(spawned) + 2
     assert bool(d["active"][0]) and bool(d["active"][2])
     assert d["pos"][0].tolist() == [200, 200] and d["pos"][2].tolist() == [201, 200]
-    # each spawned monster's position appears exactly once, with the rolled item
-    spawned = [i for i in idxs if int(items[i]) != ITEM_NONE]
     free_slots = [s for s in range(MAX_DROPS) if s not in (0, 2)][: len(spawned)]
-    for slot, m in zip(free_slots, spawned):
+    for slot, (m, item) in zip(free_slots, spawned):
         assert d["pos"][slot].tolist() == positions[m]
-        assert int(d["item"][slot]) == int(items[m])
+        assert int(d["item"][slot]) == item
 
 
 def test_extra_drops_discarded_when_full():

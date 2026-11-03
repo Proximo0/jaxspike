@@ -3,11 +3,12 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from game.config import (MAX_DROPS, MAX_MONSTERS, MAX_PLAYERS, MAX_VIEWERS, N_ENTITIES, VIEW_H, VIEW_K,
+from game.config import (MAX_DROPS, MAX_MONSTERS, MAX_PLAYERS, MAX_VIEWERS, VIEW_H, VIEW_K,
                          VIEW_W)
+from game.data.craft import MAX_NODES
 from game import ro_stats
 from game.state import make_empty_world
-from game.view import changed_mask, entity_table, view_update
+from game.view import N_VIEW_ENTITIES as N_ENTITIES, NODE_KIND_BASE, changed_mask, entity_table, view_update
 
 HW, HH = VIEW_W // 2, VIEW_H // 2
 M0 = MAX_PLAYERS            # first monster id
@@ -55,7 +56,7 @@ def test_entity_table_kinds_and_vis():
     w["players"]["active"] = w["players"]["active"].at[4].set(True)
     t = entity_table(w)
     assert t["pos"].shape == (N_ENTITIES, 2) and t["vis"].shape == (N_ENTITIES,)
-    assert N_ENTITIES == MAX_PLAYERS + MAX_MONSTERS + MAX_DROPS
+    assert N_ENTITIES == MAX_PLAYERS + MAX_MONSTERS + MAX_DROPS + MAX_NODES
     assert bool(t["vis"][3]) and not bool(t["vis"][4])        # dead player invisible
     assert bool(t["vis"][M0 + 5]) and bool(t["vis"][D0 + 7])
     assert int(t["kind"][3]) == 0 and int(t["kind"][M0 + 5]) == 2 and int(t["kind"][D0 + 7]) == 102
@@ -202,3 +203,36 @@ def test_dead_player_gone_for_others_but_self_still_sees_self():
     assert 1 not in ids(s[0])
     assert ids(g[1]) == [0] or ids(g[1]) == []        # the dead viewer keeps itself
     assert k2[1, 1] and 1 not in ids(g[1])
+
+
+N0 = MAX_PLAYERS + MAX_MONSTERS + MAX_DROPS  # first node id
+
+
+def with_node(w, i, x, y, kind, active=True):
+    n = dict(w["craft"]["nodes"])
+    n["pos"] = n["pos"].at[i].set(jnp.array([x, y], jnp.int32))
+    n["kind"] = n["kind"].at[i].set(kind)
+    n["placed"] = n["placed"].at[i].set(True)
+    n["active"] = n["active"].at[i].set(active)
+    return {**w, "craft": {**w["craft"], "nodes": n}}
+
+
+def test_nodes_in_entity_table():
+    w = with_node(world_with(drops=[(1, 30, 31, 299)]), 3, 40, 41, 5)
+    t = entity_table(w)
+    assert t["kind"].shape == (N_ENTITIES,) and N_ENTITIES == N0 + MAX_NODES
+    assert int(t["kind"][N0 + 3]) == NODE_KIND_BASE + 5 and bool(t["vis"][N0 + 3])
+    assert int(t["hp"][N0 + 3]) == 1 and int(t["max_hp"][N0 + 3]) == 1
+    assert tuple(int(v) for v in t["pos"][N0 + 3]) == (40, 41)
+    assert not bool(t["vis"][N0 + 4])                       # unplaced node slot: not visible
+    assert int(t["kind"][D0 + 1]) < NODE_KIND_BASE          # the highest drop kind stays below the node band
+    assert "action" not in t or int(t["action"][N0 + 3]) == 0     # nodes carry no animation
+
+
+def test_depleted_node_stays_visible_and_is_resent():
+    w = with_node(world_with(players=[(0, 40, 40)]), 3, 41, 40, 2)
+    s, g, k, now = run(w, [0])
+    assert N0 + 3 in ids(s[0])
+    w2 = with_node(w, 3, 41, 40, 2, active=False)          # gathered: depleted, still placed
+    s2, g2, _, now2 = run(w2, [0], known=jnp.asarray(k), prev=now)
+    assert N0 + 3 in ids(s2[0]) and N0 + 3 not in ids(g2[0]) and int(now2["hp"][N0 + 3]) == 0

@@ -1,19 +1,72 @@
-# Protocol v2 bandwidth notes (netperf)
+# Protocol v2 bandwidth and tick time (netperf, netperf2)
 
-Implemented server-side: snap JSON encoding runs in the default thread pool, one executor job per tick for all
-viewed clients. A client's `send_task` covers encode + send, so a client still in flight is skipped (full resync
-next snap) and per-client order is strictly by tick. The tick never awaits a client. Wire format is unchanged.
+Wire format stays protocol v2 (additive). Server flow per tick (`net/server.py`):
 
-Not implemented (would break the current Godot client; lead decision):
+- **Pipelined tick loop** (`GameServer(pipeline=True)`, the default; `--no-pipeline` turns it off). Each period
+  collects the tick dispatched one period earlier, dispatches the next tick (jit dispatch returns in about 1 ms on
+  CPU; XLA computes on its own threads without the GIL), then builds and sends the collected tick's snapshots. The
+  device tick (about 45 ms on a CPU at 512 viewers) overlaps the snapshot work. Cost: snaps leave about one device-tick
+  later. Chat lines are routed with the tick dispatched after they arrive, so routing sees the same positions as
+  without the pipeline. `tick_once()` stays synchronous (dispatch, collect, publish) for the tests.
+- **One snapshot pass** (`net.protocol.build_snaps`): each entity row is encoded once per tick and shared by every
+  viewer that is sent it; per-viewer row counts and gathers run once over all viewers in numpy. An earlier attempt
+  that encoded in the default executor lost to the GIL and is gone.
+- **No permessage-deflate** (`websockets.serve(..., compression=None)`). With 480 Python clients zlib per message per
+  client took 27% of the event loop (profile). The Godot `WebSocketPeer` does not negotiate the extension, so every
+  client now gets what the Godot client already got; the byte numbers below are wire payload bytes.
+- `gc.freeze()` after `prepare()`: the world, the welcome tables and the jit caches stay out of every gc pass.
+- A client whose previous send is still in flight when its tick is dispatched is skipped (viewer -1, full resync on
+  its next snap). With the pipeline a send can still be in flight at publish time: the new send waits for it, so
+  per-client order stays strictly by tick.
 
-1. `max_hp` only on first appearance. `EntityStore._upsert` rebuilds each entity from the message with
-   `int(src.get("max_hp", 0))` and does not carry the old value, so a missing key becomes 0. To adopt: server sends
-   `max_hp` only when `full` or the id is new to that viewer (id not in `known` last tick); client must change
-   `_upsert` to `int(src.get("max_hp", old.get("max_hp", 0)))` when the entity already exists.
-2. `snap.you.inv` only when changed. `apply_snap` replaces `you` wholesale (`_entity_store_norm_you`) and
-   `hud_text.gd` reads `you.get("inv", [])`, so an omitted `inv` empties the inventory display. To adopt: client
-   merges `you` over the previous one (keep `inv` if absent); server omits `inv` when equal to last sent (and always
-   on `full`).
+## `you` on change
+`snap.you` carries `pos` and `hp` always, and every other key only when its value differs from what this client last
+got (`net.protocol.you_delta`, per-key compare against `Client.last_you`); `full` snaps carry everything. A slot whose
+source rows did not change since the previous tick (one vectorised compare per pulled array, `_dirty_slots`) skips
+building `you` at all. `members` / `storage` keep their own change detection. Clients MUST merge `you` over their
+previous copy: the Godot `EntityStore.apply_snap` and `net.client` consumers do (test
+`test_store_merges_you_over_change_only_snaps`).
+
+## Binary snaps (`"format": "bin"` in `login`)
+msgpack is not in the venv, so the binary format is a fixed little-endian layout (`net.protocol.BIN_HEADER`,
+`BIN_ROW`, decoders `net.protocol.decode_snap_bin` and Godot `Codec.decode_snap_bin`). The default stays JSON.
+Only `snap` messages are binary frames; `welcome`, `chat`, `mvp` and `error` stay JSON text frames.
+
+| offset | type | field |
+|---|---|---|
+| 0 | 2 bytes | magic `JS` |
+| 2 | u8 | layout version (1) |
+| 3 | u8 | flags: bit0 `full`, bit1 animation columns valid |
+| 4 | u32 | tick |
+| 8 | u16 | n_ents |
+| 10 | u16 | n_gone |
+| 12 | u32 | json_len |
+| 16 | json_len bytes | UTF-8 JSON `{"you": {...}, "notice": str or null, "names": {"<id>": name}}` (human players among the ents; other players are "bot") |
+| then | n_ents x 30 bytes | rows: id u16, kind u16, x u16, y u16, hp i32, max_hp i32, t (start_tick) i32, h (hit) i32, s (speed_ms) i16, m (dur_ms) i16, a (action) i8, d (face) i8 |
+| then | n_gone x u16 | gone ids |
+
+Decoded entities have the JSON shape: `name` for kind 0, `mkind = kind - 1` for 1..99, `item = kind - 100` for
+100..399, nodes (kind >= 400) `{id, kind, pos, hp}` only; `a d t m s` for kind < 100 when flag bit1 is set, `h` only
+when != 0. Ids fit u16 while the entity table has fewer than 65536 rows (asserted).
+
+## Resource nodes in the entity table
+`game/view.py` appends the craft nodes after the drops: ids `MAX_PLAYERS + MAX_MONSTERS + MAX_DROPS + i`, table
+length `N_VIEW_ENTITIES = N_ENTITIES + MAX_NODES` (8704; `config.N_ENTITIES` does not include nodes yet). `vis` =
+`placed` (a depleted node stays visible), `hp` = `active` 0/1, `max_hp` 1, `kind = NODE_KIND_BASE + node kind` with
+`NODE_KIND_BASE = 100 + ITEM_ID_LIMIT = 400`: drops already use `100 + item id` up to 399, so 200..207 (craft_wire.md)
+and 300..307 would both collide with drops of craft items. `view_update` takes E from the table's shape.
+JSON node rows are `{id, kind, pos, hp}`.
+
+## Measuring
+`bench/server_load.py --spawn --clients N --tick-ms 100 --format json|bin` starts the server in its own process and
+runs light asyncio clients in worker processes, then reads overruns from the server's tick log for the measured
+window only. `--embedded` (server thread plus one client thread each, one process) measures the bench as much as the
+server: its 480-client runs starve the server of the GIL. `python -m net.server --bench-ticks N [--platform gpu]`
+times the device tick plus host pull at 512 viewers without sockets.
+
+BENCH_TABLE
+
+Still not done: `max_hp` only on first appearance (`EntityStore._upsert` needs `old.get("max_hp")` first).
 
 # RO systems over protocol v2 (netwire)
 
@@ -25,9 +78,8 @@ Server behaviour worth knowing:
   `skill` and `party invite` both use `inputs["target"]`; if one client sends both in the same tick the last wins.
 - Extra messages (chat lines, `mvp`) go out ahead of the next snapshot in the same send task (`Client.outbox`, cap 128);
   a client whose snapshot send is still in flight keeps them queued. Chat is therefore at most one tick late.
-- `members` / `storage` in `you` are sent on full snaps and when they change; the client must MERGE `you` over the
-  previous one (the current Godot `apply_snap` replaces `you` wholesale, so those two keys vanish until fixed).
-  `craft`, `inv`, buffs etc. are sent every snap (no change suppression).
+- `members` / `storage` in `you` are sent on full snaps and when they change, like every other `you` key (see
+  "`you` on change" above); clients merge `you` over the previous one.
 - Login: `password` / `create` optional. No password: allowed only when the name has no account (compat for name-only
   characters); a name with an account always needs its password. `GameServer(require_password=True)` /
   `--require-password` turns the compat path off. Known gap: `create` for a name that has an old name-only character
@@ -39,9 +91,7 @@ Server behaviour worth knowing:
 - `sp`: the engine keeps two SP counters (`stats.sp` regens, `skills.sp` is what casting spends and also regens). The
   wire sends `skills.sp` (the one that gates casts) with `max_sp` from `derived`. The two should be merged in the engine.
 
-Not done (lead-owned `game/view.py`): node entities (kinds 200..207, ids after the drops, `docs/craft_wire.md`) are not
-in the entity table, so `snap.ents` has no nodes; players' `max_hp` in `ents` is patched in `snapshot` from the derived
-stats, but `changed_mask` ignores `max_hp`, so other viewers see a level-up max_hp only when hp or pos changes.
-`entity_table` should use derived max_hp and `changed_mask` should compare it.
+Nodes are in the entity table now (kinds 400..407, see above). `entity_table` uses the derived max_hp for players,
+but `changed_mask` still ignores `max_hp`, so other viewers see a level-up max_hp only when hp or pos changes.
 Also: `kafra.character_storage` validates ids against `NUM_ITEMS` (4); the server uses `char["storage"]` from
 `characters.load` instead.

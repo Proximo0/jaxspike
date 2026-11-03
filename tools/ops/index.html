@@ -57,9 +57,17 @@
     <div class="ob-tile"><div class="lab">Branches green</div><div class="num" data-draw="kpi-green" data-source="kpi" data-field="green" data-row="0">—</div><div class="sub">latest checks run passed</div></div>
     <div class="ob-tile"><div class="lab">Branches red</div><div class="num" data-draw="kpi-red" data-source="kpi" data-field="red" data-row="0">—</div><div class="sub">latest checks run failed</div></div>
     <div class="ob-tile"><div class="lab">Branches stale</div><div class="num" data-draw="kpi-stale" data-source="kpi" data-field="stale" data-row="0">—</div><div class="sub">no commit for 2 h</div></div>
+    <div class="ob-tile"><div class="lab">Teams active</div><div class="num" data-draw="kpi-tactive" data-source="kpi" data-field="teams_active" data-row="0">—</div><div class="sub">teams with files changed since the round-2 contract</div></div>
+    <div class="ob-tile"><div class="lab">Teams stale</div><div class="num" data-draw="kpi-tstale" data-source="kpi" data-field="teams_stale" data-row="0">—</div><div class="sub">no file touched for 2 h</div></div>
     <div class="ob-tile"><div class="lab">Main CI</div><div class="num" data-draw="kpi-main" data-source="kpi" data-field="main_ci" data-row="0">—</div><div class="sub">latest checks run on main</div></div>
     <div class="ob-tile"><div class="lab">Engine tests</div><div class="num" data-draw="kpi-engine" data-source="kpi" data-field="engine_tests" data-row="0">—</div><div class="sub">pytest passed, engine-pytest job on main</div></div>
     <div class="ob-tile"><div class="lab">Client tests</div><div class="num" data-draw="kpi-client" data-source="kpi" data-field="client_tests" data-row="0">—</div><div class="sub">unit tests passed, client-unit job on main</div></div>
+  </section>
+
+  <section id="teams">
+    <h2 class="ob-sec">Teams (round 2)</h2>
+    <p class="empty-note">One card per team in the round-2 contract. Round 2 has no branches: each team edits its owned paths in the shared checkout, so progress is the files changed under those paths since the contract commit, the newest file time, and the team's new or changed tests collected by pytest.</p>
+    <div class="ob-grid" data-draw="team-cards" data-source="teams"></div>
   </section>
 
   <section id="branches">
@@ -104,8 +112,8 @@
 dash.calc('kpi', {
   title: 'Branch and test KPIs',
   description: 'Counts branches by the result of their latest checks run and by staleness; main CI and test counts copied from one row each.',
-  inputs: ['branches', 'ci_runs', 'tests'],
-  fn: (branches, ci_runs, tests) => {
+  inputs: ['branches', 'ci_runs', 'tests', 'teams'],
+  fn: (branches, ci_runs, tests, teams) => {
     const latest = {};
     for (const r of ci_runs) if (!(r.branch in latest)) latest[r.branch] = r;
     const res = (b) => (latest[b.branch] || {}).result || 'none';
@@ -114,6 +122,8 @@ dash.calc('kpi', {
       green: branches.filter((b) => res(b) === 'success').length,
       red: branches.filter((b) => res(b) === 'failure').length,
       stale: branches.filter((b) => b.stale === true).length,
+      teams_active: teams.filter((x) => Number(x.files_changed) > 0).length,
+      teams_stale: teams.filter((x) => x.stale === true).length,
       no_ci: branches.filter((b) => res(b) === 'none').length,
       main_ci: res({branch: 'main'}),
       engine_tests: t('engine (CI main)').passed ?? null,
@@ -169,9 +179,37 @@ const kpiNum = (name, field, color) => dash.draw(name, (el) => {
 kpiNum('kpi-green', 'green', (v) => v > 0 ? 'ok' : '');
 kpiNum('kpi-red', 'red', (v) => v > 0 ? 'bad' : '');
 kpiNum('kpi-stale', 'stale', (v) => v > 0 ? 'warn' : '');
+kpiNum('kpi-tactive', 'teams_active', (v) => v > 0 ? 'ok' : '');
+kpiNum('kpi-tstale', 'teams_stale', (v) => v > 0 ? 'warn' : '');
 kpiNum('kpi-main', 'main_ci', (v) => v === 'success' ? 'ok' : (v === 'failure' ? 'bad' : 'warn'));
 kpiNum('kpi-engine', 'engine_tests');
 kpiNum('kpi-client', 'client_tests');
+
+dash.draw('team-cards', (box) => {
+  const t = dash.data('teams');
+  box.replaceChildren();
+  if (t.status !== 'ok') { const p = document.createElement('p'); p.className = 'ob-fail'; p.textContent = t.status === 'error' ? 'Failed to load' : '—'; box.append(p); return; }
+  const now = new Date();
+  const fmt = d3.format(',');
+  for (const tm of t.data) {
+    if (tm._empty !== undefined) continue;
+    const n = Number(tm.files_changed);
+    const card = document.createElement('article');
+    card.className = 'ob-card ob-branch ' + (tm.stale ? 's-warn' : (n > 0 ? 's-ok' : ''));
+    const name = document.createElement('div'); name.className = 'name'; name.textContent = tm.team; card.append(name);
+    const line = (cls, ...parts) => { const l = document.createElement('div'); l.className = 'line ' + cls; for (const x of parts) l.append(x); card.append(l); return l; };
+    const b = (text, cls) => Object.assign(document.createElement('b'), {textContent: text, className: cls || ''});
+    const tx = (text) => document.createTextNode(text);
+    line('', tx('Owns: ' + tm.owns));
+    line('', b(fmt(n) + ' files changed'), tx(' (' + fmt(Number(tm.files_new)) + ' new, ' + fmt(Number(tm.files_shared)) + ' shared with another team) · +' + fmt(Number(tm.lines_added)) + ' / −' + fmt(Number(tm.lines_removed)) + ' lines in tracked files'));
+    line('', tm.last_activity ? b('Last activity ' + ago(tm.last_activity, now) + (tm.stale ? ' · stale' : '')) : b('No file touched yet · stale'), tm.newest_file ? tx(' · ' + tm.newest_file) : tx(''));
+    const l4 = line('', tx('Tests: '));
+    const col = tm.tests_collected;
+    l4.append(Object.assign(document.createElement('span'), {className: 'pill ' + (col !== null && col !== undefined && String(tm.collect_note) === 'ok' ? 'p-ok' : (String(tm.collect_note).startsWith('collect error') ? 'p-bad' : 'p-warn')), textContent: (col === null || col === undefined ? '—' : fmt(Number(col)) + ' collected') + ' · ' + tm.collect_note}));
+    if (tm.test_names) line('', tx(fmt(Number(tm.test_files)) + ' test file(s): ' + tm.test_names));
+    box.append(card);
+  }
+});
 
 dash.draw('branch-cards', (box) => {
   const b = dash.data('branches'), r = dash.data('ci_runs'), j = dash.data('ci_jobs');

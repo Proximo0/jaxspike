@@ -19,8 +19,8 @@ def test_table_shape_and_order():
 
 
 def test_legacy_slots_and_tuples():
-    assert M.MONSTER_HP_TUPLE[:2] == (40, 120)
-    assert M.MONSTER_DAMAGE_TUPLE[:2] == (3, 9)
+    assert M.MONSTER_HP_TUPLE[:2] == (50, 1400)  # RO pre-re Poring / Orc Warrior (ro-fidelity)
+    assert M.MONSTER_DAMAGE_TUPLE[:2] == (10, 126)
     assert len(M.MONSTER_HP_TUPLE) == len(M.MONSTER_DAMAGE_TUPLE) == 20
 
 
@@ -28,12 +28,12 @@ def test_values_sane():
     assert (np.asarray(M.ATK_MIN) <= np.asarray(M.ATK_MAX)).all()
     assert (np.asarray(M.MOVE_TICKS) >= 1).all() and (np.asarray(M.ELEMENT) < len(M.ELEMENTS)).all()
     assert (np.asarray(M.SIZE) <= 2).all()
-    lv = np.asarray(M.LEVEL)[2:]
-    assert (np.diff(lv) >= 0).all() and lv[-1] > lv[0]
+    lv = np.asarray(M.LEVEL)  # RO levels (ro-fidelity): rows are not sorted by level (Poporing 14 before Willow 4)
+    assert (lv >= 1).all() and lv[-1] > lv[0]
     mvp = [M.NAMES[i] for i in np.flatnonzero(np.asarray(M.MVP))]
     assert mvp == ["Golden Thief Bug", "Eddga"]
     for i in (18, 19):
-        assert 3000 <= M.MONSTER_HP_TUPLE[i] <= 5000 and 60 <= M.MONSTER_DAMAGE_TUPLE[i] <= 120
+        assert M.MONSTER_HP_TUPLE[i] >= 100_000 and M.MONSTER_DAMAGE_TUPLE[i] >= 1000  # RO pre-re MVPs
 
 
 def test_layout_names_exist():

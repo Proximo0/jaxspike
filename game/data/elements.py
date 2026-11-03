@@ -23,21 +23,23 @@ N_ELEMENTS = 10
 
 ELEM_NAME = ("Neutral", "Water", "Earth", "Fire", "Wind", "Poison", "Holy", "Shadow", "Ghost", "Undead")
 
-# Source: classic Ragnarok Online pre-renewal element chart (iRO wiki "Element" page), defender level 1 column
-# (same-element level 1 is 25%; the 0% immunities appear only at higher defender levels).
+# Source: rAthena db/pre-re/attr_fix.yml, defender element level 1 (audited by ro-fidelity 2026-11-02; iRO wiki
+# "Element" agrees). Negative entries (Poison/Shadow vs Undead heal 25%) are clamped to 0 (no healing hits).
+# Monsters with element level 2-4 (Lunatic, Thief Bug Neutral 3; Hode Earth 2; Mummy Undead 2; GTB Fire 2) use
+# this level-1 row: a deliberate simplification (docs/ro_fidelity.md).
 # Rows = attack element, columns = defend element.
 #            Neu  Wat  Ear  Fir  Win  Poi  Hol  Sha  Gho  Und
 _TABLE = (
     (100, 100, 100, 100, 100, 100, 100, 100,  25, 100),  # Neutral attack
     (100,  25, 100, 150,  50, 100,  75, 100, 100, 100),  # Water attack
-    (100, 100, 100,  50, 150, 125,  75, 100, 100, 100),  # Earth attack
+    (100, 100, 100,  50, 150, 100,  75, 100, 100, 100),  # Earth attack
     (100,  50, 150,  25, 100, 100,  75, 100, 100, 125),  # Fire attack
     (100, 175,  50, 100,  25, 100,  75, 100, 100, 100),  # Wind attack
-    (100, 100, 125, 125, 125,   0,  75,  50, 100,  50),  # Poison attack
-    (100, 100, 100, 100, 100, 100,   0, 125, 100, 125),  # Holy attack
-    (100, 100, 100, 100, 100,  50, 125,   0, 100,   0),  # Shadow attack
-    ( 25, 100, 100, 100, 100, 100,  75, 100, 125, 100),  # Ghost attack
-    (100, 100, 100, 100, 100,  50, 100, 100, 100, 100),  # Undead attack
+    (100, 100, 125, 125, 125,   0,  75,  50, 100,   0),  # Poison attack (RO -25: heals; clamped to 0)
+    (100, 100, 100, 100, 100, 100,   0, 125, 100, 150),  # Holy attack
+    (100, 100, 100, 100, 100,  50, 125,   0, 100,   0),  # Shadow attack (RO -25 vs Undead: clamped to 0)
+    ( 25, 100, 100, 100, 100, 100,  75,  75, 125, 100),  # Ghost attack
+    (100, 100, 100, 100, 100,  50, 100,   0, 100,   0),  # Undead attack
 )
 ELEM_MULT = jnp.asarray(_TABLE, dtype=jnp.int32)
 

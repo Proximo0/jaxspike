@@ -33,11 +33,13 @@ var dials: Array[Dial] = []
 
 func _ready() -> void:
 	theme = load("res://game/ui/theme/ro_theme.tres") as Theme
+	theme_type_variation = &"HotkeyBar"
 	var row := HBoxContainer.new()
 	add_child(row)
 	for i: int in range(UiStatsCalc.BAR_SLOTS):
 		var b := Button.new()
-		b.custom_minimum_size = Vector2(48, 40)
+		b.theme_type_variation = &"HotkeySlot"
+		b.custom_minimum_size = Vector2(44, 44)
 		b.clip_text = true
 		b.focus_mode = Control.FOCUS_NONE
 		b.pressed.connect(press_slot.bind(i))

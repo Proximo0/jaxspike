@@ -15,27 +15,30 @@ _E = {n: i for i, n in enumerate(ELEMENTS)}
 Monster = namedtuple("Monster", "name hp atk_min atk_max def_ element level base_exp job_exp aggro move_ticks size mvp")
 
 # name, hp, atk_min, atk_max, def, element, level, base_exp, job_exp, aggro, move_ticks, size, mvp
+# Classic pre-renewal numbers from rAthena db/pre-re/mob_db.yml (ro-fidelity, 2026-11-02): HP, Attack/Attack2,
+# Defense (hard DEF, percent), Level, BaseExp/JobExp, Element (level 1 table; Lunatic/Thief Bug are Neutral 3,
+# Hode Earth 2, Mummy Undead 2, GTB Fire 2), Size (0 small, 1 medium, 2 large), aggro = rAthena Ai 04/07/21.
 _ROWS = (
-    ("Poring", 40, 1, 3, 0, "Water", 1, 2, 1, False, 2, 1, False),
-    ("Orc Warrior", 120, 6, 9, 5, "Earth", 14, 60, 40, True, 1, 2, False),
-    ("Fabre", 55, 2, 4, 0, "Earth", 2, 4, 2, False, 2, 0, False),
-    ("Lunatic", 60, 2, 5, 1, "Neutral", 3, 6, 3, False, 1, 0, False),
-    ("Drops", 70, 3, 5, 2, "Fire", 3, 7, 4, False, 2, 0, False),
-    ("Poporing", 90, 4, 7, 2, "Poison", 4, 10, 6, False, 2, 1, False),
-    ("Willow", 100, 4, 7, 3, "Earth", 4, 11, 7, False, 2, 1, False),
-    ("Rocker", 130, 5, 9, 4, "Earth", 6, 16, 10, False, 2, 1, False),
-    ("Spore", 150, 6, 10, 3, "Water", 7, 20, 12, False, 2, 1, False),
-    ("Thief Bug", 140, 6, 11, 5, "Shadow", 8, 24, 15, True, 1, 0, False),
-    ("Zombie", 220, 8, 14, 6, "Undead", 10, 32, 20, True, 3, 1, False),
-    ("Wolf", 240, 9, 16, 8, "Earth", 12, 40, 26, True, 1, 1, False),
-    ("Skeleton", 280, 10, 18, 10, "Undead", 14, 48, 30, True, 2, 1, False),
-    ("Peco Peco", 320, 11, 20, 8, "Fire", 16, 56, 35, False, 1, 2, False),
-    ("Hode", 360, 12, 22, 10, "Earth", 18, 66, 42, True, 2, 1, False),
-    ("Soldier Skeleton", 420, 14, 26, 14, "Undead", 20, 80, 50, True, 2, 1, False),
-    ("Bigfoot", 520, 16, 30, 12, "Earth", 24, 100, 62, True, 2, 2, False),
-    ("Mummy", 600, 18, 34, 16, "Undead", 28, 120, 75, True, 3, 1, False),
-    ("Golden Thief Bug", 3000, 60, 100, 40, "Fire", 35, 1500, 900, True, 1, 2, True),
-    ("Eddga", 5000, 80, 120, 30, "Fire", 45, 3000, 1800, True, 1, 2, True),
+    ("Poring", 50, 7, 10, 0, "Water", 1, 2, 1, False, 2, 1, False),
+    ("Orc Warrior", 1400, 104, 126, 10, "Earth", 24, 408, 160, True, 1, 1, False),
+    ("Fabre", 63, 8, 11, 0, "Earth", 2, 3, 2, False, 2, 0, False),
+    ("Lunatic", 60, 9, 12, 0, "Neutral", 3, 6, 2, False, 1, 0, False),
+    ("Drops", 55, 10, 13, 0, "Fire", 3, 4, 3, False, 2, 1, False),
+    ("Poporing", 344, 59, 72, 0, "Poison", 14, 81, 44, False, 2, 1, False),
+    ("Willow", 95, 9, 12, 5, "Earth", 4, 5, 4, False, 2, 1, False),
+    ("Rocker", 198, 24, 29, 5, "Earth", 9, 20, 16, False, 2, 1, False),
+    ("Spore", 510, 24, 48, 0, "Water", 16, 66, 108, False, 2, 1, False),
+    ("Thief Bug", 126, 18, 24, 5, "Neutral", 6, 17, 5, True, 1, 0, False),
+    ("Zombie", 534, 67, 79, 0, "Undead", 15, 50, 33, True, 3, 1, False),
+    ("Wolf", 919, 37, 46, 0, "Earth", 25, 329, 199, False, 1, 1, False),
+    ("Skeleton", 234, 39, 47, 10, "Undead", 10, 18, 14, False, 2, 1, False),
+    ("Peco Peco", 531, 50, 64, 0, "Fire", 19, 159, 72, False, 1, 2, False),
+    ("Hode", 2282, 146, 177, 0, "Earth", 26, 550, 300, False, 2, 1, False),
+    ("Soldier Skeleton", 2334, 221, 245, 10, "Undead", 29, 372, 226, True, 2, 1, False),
+    ("Bigfoot", 1619, 198, 220, 10, "Earth", 25, 310, 188, False, 2, 2, False),
+    ("Mummy", 5176, 305, 360, 0, "Undead", 37, 800, 602, True, 3, 1, False),
+    ("Golden Thief Bug", 126000, 870, 1145, 60, "Fire", 64, 14300, 7150, True, 1, 2, True),
+    ("Eddga", 152000, 1215, 1565, 15, "Fire", 65, 25025, 12870, True, 1, 2, True),
 )
 
 MONSTERS = tuple(Monster(r[0], r[1], r[2], r[3], r[4], _E[r[5]], *r[6:]) for r in _ROWS)
@@ -65,3 +68,59 @@ AGGRO = _arr("aggro", jnp.bool_)
 MOVE_TICKS = _arr("move_ticks")
 SIZE = _arr("size")
 MVP = _arr("mvp", jnp.bool_)
+
+# RO monster modes and movement per kind (team ro-monsters, docs/round2_contract.md section 0 "Monster modes").
+# Kept apart from _ROWS so number fixes there and mode fixes here do not collide. Values follow pre-renewal
+# rAthena mob_db where known (walk speed ms/cell, mode bits), approximated otherwise; ro-fidelity may correct.
+# AGGRO above stays the "aggressive" mode bit. Sight is capped by the spatial grid (game/spatial.py sees one
+# CELL = 8 tiles around a query), so RO's 10-12 cell sight is 8 here until the grid grows.
+#   assist: joins a kind-mate within sight that is fighting   looter: picks up drops within sight (Poring-style)
+#   immovable: never moves (plants)   cast_sensor: placeholder, aggro on a nearby cast once casts expose a target
+#   sight: cells (manhattan) to notice a player or drop   chase: cells (chebyshev) from the spawn before giving up
+#   speed_ms: ms per cell (replaces move_ticks; ro_move reads SPEED_MS)   atk_range: cells   respawn_ms: field timer
+ModeRow = namedtuple("ModeRow", "assist looter immovable cast_sensor sight chase speed_ms atk_range respawn_ms")
+_MODE_ROWS = {
+    "Poring": (False, True, False, False, 6, 10, 400, 1, 6000),
+    "Orc Warrior": (False, False, False, False, 8, 14, 200, 1, 9000),
+    "Fabre": (False, False, False, False, 6, 10, 400, 1, 6000),
+    "Lunatic": (False, False, False, False, 6, 10, 200, 1, 6000),
+    "Drops": (False, True, False, False, 6, 10, 400, 1, 6000),
+    "Poporing": (False, True, False, False, 7, 12, 300, 1, 7000),
+    "Willow": (False, False, False, False, 7, 12, 200, 1, 7000),
+    "Rocker": (False, False, False, False, 7, 12, 200, 1, 7000),
+    "Spore": (False, False, False, False, 7, 12, 200, 1, 7000),
+    "Thief Bug": (True, True, False, False, 8, 14, 150, 1, 8000),
+    "Zombie": (False, False, False, True, 7, 12, 400, 1, 9000),
+    "Wolf": (True, False, False, False, 8, 14, 200, 1, 9000),
+    "Skeleton": (False, False, False, True, 8, 14, 200, 1, 9000),
+    "Peco Peco": (False, False, False, False, 8, 14, 200, 1, 9000),
+    "Hode": (False, False, False, False, 8, 14, 200, 1, 10000),
+    "Soldier Skeleton": (True, False, False, True, 8, 16, 200, 1, 10000),
+    "Bigfoot": (False, False, False, False, 8, 16, 300, 1, 10000),
+    "Mummy": (False, False, False, True, 8, 16, 300, 1, 12000),
+    "Golden Thief Bug": (True, False, False, True, 8, 20, 100, 1, 0),  # MVP: timer lives in game/ro_mvp.py
+    "Eddga": (False, False, False, True, 8, 20, 300, 1, 0),
+}
+assert set(_MODE_ROWS) == set(NAMES)
+MODES = tuple(ModeRow(*_MODE_ROWS[n]) for n in NAMES)
+
+
+def _mode_arr(field, dtype=jnp.int32):
+    return jnp.asarray([getattr(r, field) for r in MODES], dtype)
+
+
+ASSIST = _mode_arr("assist", jnp.bool_)
+LOOTER = _mode_arr("looter", jnp.bool_)
+IMMOVABLE = _mode_arr("immovable", jnp.bool_)
+CAST_SENSOR = _mode_arr("cast_sensor", jnp.bool_)
+SIGHT = _mode_arr("sight")
+CHASE = _mode_arr("chase")
+SPEED_MS = _mode_arr("speed_ms")
+ATTACK_RANGE = _mode_arr("atk_range")
+RESPAWN_MS = _mode_arr("respawn_ms")
+# Idle random walk (RO: a short wander every few seconds), bounded to a box around the spawn tile.
+WANDER_MIN_MS = 3000
+WANDER_MAX_MS = 5000
+WANDER_MIN_CELLS = 1
+WANDER_MAX_CELLS = 5
+WANDER_BOX = 6  # chebyshev cells from the spawn a wander goal may reach

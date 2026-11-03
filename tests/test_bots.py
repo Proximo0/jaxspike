@@ -3,6 +3,7 @@ import jax.numpy as jnp
 
 from bots.policies import HUNT_RADIUS, bot_inputs
 from game.config import HUNT_RETREAT_HP, ITEM_MEAT, MAP, MAX_PLAYERS, PLAYER_MAX_HP
+from game.ro_move import DIR_DELTAS9
 from game.state import make_empty_world
 
 
@@ -22,9 +23,10 @@ KEY = jax.random.PRNGKey(1)
 
 
 def test_steps_toward_monster():
-    cases = [((50, 50), (50, 53), 2), ((50, 50), (50, 47), 1),
-             ((50, 50), (47, 50), 3), ((50, 50), (53, 50), 4),
-             ((50, 50), (54, 52), 4), ((50, 50), (51, 55), 2)]
+    cases = [((50, 50), (50, 53), 1), ((50, 50), (50, 47), 5),
+             ((50, 50), (47, 50), 3), ((50, 50), (53, 50), 7),
+             ((50, 50), (54, 52), 8), ((50, 50), (51, 55), 8),
+             ((50, 50), (51, 51), 7)]  # diagonal neighbour: step along x to become adjacent
     for p, m, code in cases:
         out = bot_inputs(_world(p, m), KEY)
         assert int(out["move"][0]) == code
@@ -34,7 +36,7 @@ def test_steps_toward_monster():
 def test_attacks_when_adjacent():
     out = bot_inputs(_world((50, 50), (51, 50)), KEY)
     assert bool(out["attack"][0])
-    assert int(out["move"][0]) == 4
+    assert int(out["move"][0]) == 7
 
 
 def test_out_of_range_monster_ignored():
@@ -47,9 +49,9 @@ def test_random_wander():
     w = {**w, "players": {**w["players"], "active": jnp.ones((MAX_PLAYERS,), bool)}}
     out = bot_inputs(w, KEY)
     mv = out["move"]
-    assert bool(jnp.all((mv >= 0) & (mv <= 4)))
+    assert bool(jnp.all((mv >= 0) & (mv <= 8)))
     assert int(jnp.count_nonzero(mv)) > 0
-    assert len(set(mv.tolist())) >= 3
+    assert len(set(mv.tolist())) >= 5
     assert not bool(out["attack"].any())
 
 
@@ -81,10 +83,10 @@ def test_jit_and_vmap():
     keys = jax.random.split(KEY, 2)
     out = jax.jit(jax.vmap(bot_inputs))(batch, keys)
     assert out["move"].shape == (2, MAX_PLAYERS)
-    assert int(out["move"][0, 0]) == 2 and not bool(out["attack"][0, 0])
-    assert int(out["move"][1, 0]) == 4 and bool(out["attack"][1, 0])
+    assert int(out["move"][0, 0]) == 1 and not bool(out["attack"][0, 0])
+    assert int(out["move"][1, 0]) == 7 and bool(out["attack"][1, 0])
     single = jax.jit(bot_inputs)(worlds[0], keys[0])
-    assert int(single["move"][0]) == 2
+    assert int(single["move"][0]) == 1
 
 
 def _meat_world(hp, meat=True, dead=False):
@@ -121,7 +123,7 @@ def _hunt_world(pos, hp=PLAYER_MAX_HP, pz=False, monster_pos=None, wall=None):
 
 def test_hunting_bot_walks_away_from_gate():
     out = bot_inputs(_hunt_world((50, 50)), KEY)
-    assert int(out["move"][0]) == 4  # east: larger distance
+    assert int(out["move"][0]) == 7  # east: larger distance
 
 
 def test_healthy_bot_in_town_heads_for_gate():
@@ -148,7 +150,7 @@ def test_bot_at_hunt_radius_keeps_a_heading():
     w = _hunt_world((40 + HUNT_RADIUS + 5, 50))
     a = int(bot_inputs(w, KEY)["move"][0])
     b = int(bot_inputs(w, jax.random.PRNGKey(9))["move"][0])
-    assert a == b and 1 <= a <= 4  # same tick, different keys: the heading does not change
+    assert a == b and 1 <= a <= 8  # same tick, different keys: the heading does not change
     moves = {int(bot_inputs({**w, "tick": jnp.int32(t * 50)}, KEY)["move"][0]) for t in range(8)}
     assert len(moves) >= 2
 
@@ -157,12 +159,12 @@ def test_bot_does_not_step_into_wall():
     for pos in ((50, 50), (40 + HUNT_RADIUS + 5, 50)):
         for k in range(6):
             out = bot_inputs(_hunt_world(pos, wall=(pos[0] + 1, pos[1])), jax.random.PRNGKey(k))
-            assert int(out["move"][0]) != 4
+            assert int(out["move"][0]) != 7
 
 
 def test_healthy_bot_outside_still_fights():
     out = bot_inputs(_hunt_world((50, 50), monster_pos=(51, 50)), KEY)
-    assert bool(out["attack"][0]) and int(out["move"][0]) == 4
+    assert bool(out["attack"][0]) and int(out["move"][0]) == 7
 
 
 def test_bot_on_gate_apron_does_not_walk_back_into_town():
@@ -171,3 +173,27 @@ def test_bot_on_gate_apron_does_not_walk_back_into_town():
     w["pz"] = w["pz"].at[39, 50].set(True)
     for k in range(6):
         assert int(bot_inputs(w, jax.random.PRNGKey(k))["move"][0]) != 3
+
+
+def test_chase_emits_diagonals():
+    moves = {}
+    for m in ((53, 53), (47, 53), (47, 47), (53, 47)):
+        moves[m] = int(bot_inputs(_world((50, 50), m), KEY)["move"][0])
+    assert moves == {(53, 53): 8, (47, 53): 2, (47, 47): 4, (53, 47): 6}
+
+
+def test_gate_distance_step_never_cuts_a_corner():
+    # Field falls toward the west. Wall at (49, 50) (west): SW/NW diagonals would cut it.
+    # Wall at (49, 51) only: SW target is free but the orthogonal (49, 50)... is free; S side tile (50, 51) free,
+    # so check both orthogonal sides separately.
+    for wall in ((49, 50), (49, 51), (50, 51), (50, 49), (49, 49)):
+        w = _hunt_world((50, 50), pz=True, wall=wall)
+        for k in range(4):
+            mv = int(bot_inputs(w, jax.random.PRNGKey(k))["move"][0])
+            if mv == 0:
+                continue
+            dx, dy = DIR_DELTAS9[mv]
+            tx, ty = 50 + dx, 50 + dy
+            assert int(w["walls"][tx, ty]) == 0
+            if dx and dy:
+                assert int(w["walls"][tx, 50]) == 0 and int(w["walls"][50, ty]) == 0

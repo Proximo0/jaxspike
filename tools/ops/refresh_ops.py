@@ -3,13 +3,16 @@
 
 Usage:
   python tools/ops/refresh_ops.py [--repo .] [--out tools/ops] [--pytest-log tools/ops/logs/pytest_latest.log]
-                                  [--no-fetch] [--stale-hours 2]
+                                  [--no-fetch] [--stale-hours 2] [--baseline 6451f3e] [--no-collect]
 
 Sources (nothing is self-reported by a session):
   git         fetch origin, branches main + ro/* + claude/ro-*, ahead/behind origin/main, worktree list
   gh          latest `checks` workflow run per branch and its jobs; recent failed runs and their jobs
   gh logs     test counts from the engine-pytest and client-unit job logs of the latest finished main run
   local log   test counts from the latest local pytest log, when the file exists
+  contract    round-2 team rows (docs/round2_contract.md section 2): owned paths per team
+  git diff    files changed (tracked diff against --baseline plus untracked), line counts; file mtimes for last activity
+  pytest      `--collect-only -q` of each team's new or changed Python test files (shared checkout, no branches)
 
 Writes <out>/ops_data.json (every dataset under one key, plus `generated`) and one <out>/out/<id>.json per
 dataset for upload to the Dashboard artifact. Every row carries `updated` (collection time, ISO UTC) and
@@ -17,6 +20,7 @@ dataset for upload to the Dashboard artifact. Every row carries `updated` (colle
 (standard library only, read-only git, gh CLI). Prints PROBLEM lines, then one OPS_REFRESH summary line.
 """
 import argparse
+import fnmatch
 import json
 import os
 import re
@@ -226,6 +230,115 @@ def c_worktrees(repo, now, stale_after):
 	return out
 
 
+# ---------- round 2: per-team view (shared checkout, no branches) ----------
+
+CONTRACT = "docs/round2_contract.md"
+IGNORED = ("tools/ops/out/", "tools/ops/logs/", "tools/ops/ops_data.json", "__pycache__/", ".pytest_cache/")
+TEAM_ROW_RE = re.compile(r"^\|\s*\*\*([\w-]+)\*\*\s*\|(.*?)\|(.*)\|\s*$")
+# Tests the contract names only as "tests" are attributed to a team by file-name keyword.
+TEAM_TEST_KEYS = {"ro-move": ("move", "pathing", "direction"), "ro-anim": ("anim",), "client-anim": ("anim",),
+	"ro-fidelity": ("fidelity",), "ro-monsters": ("monster",), "ro-world2": ("world", "warp", "map_gen", "terrain"),
+	"ro-items2": ("item", "drop", "shop", "kafra"), "netperf2": ("protocol", "server", "net_", "view"),
+	"bots2": ("bot", "policy", "soak"), "art-anim": ("asset", "slot"), "client-feel": ("hud", "minimap", "input", "audio")}
+
+
+def parse_teams(repo):
+	"""[(team, [owned path patterns])] from the contract's section 2 table. Only backticked tokens holding a `/` count."""
+	path = os.path.join(repo, CONTRACT)
+	if not os.path.exists(path):
+		problems.append("contract %s missing" % CONTRACT)
+		return []
+	rows, in_sec = [], False
+	for line in open(path, encoding="utf-8", errors="replace").read().splitlines():
+		if line.startswith("## "):
+			in_sec = line.startswith("## 2.")
+		m = TEAM_ROW_RE.match(line) if in_sec else None
+		if m:
+			pats = [t for t in re.findall(r"`([^`]+)`", m.group(2)) if "/" in t and " " not in t]
+			rows.append((m.group(1), pats))
+	return rows
+
+
+def path_matches(f, pat):
+	if pat.endswith("/**") or (pat.endswith("/*") and "*" not in pat[:-2]):
+		return f.startswith(pat.rsplit("/", 1)[0] + "/")
+	if "*" in pat:
+		return fnmatch.fnmatch(f, pat)
+	return f == pat
+
+
+def changed_files(repo, baseline):
+	"""{path: (added, removed, is_new)} for tracked changes against the baseline plus untracked files; read-only git."""
+	files = {}
+	for line in git(repo, "diff", "--numstat", baseline).splitlines():
+		a, r, f = line.split("\t", 2)
+		files[f] = (int(a) if a.isdigit() else 0, int(r) if r.isdigit() else 0, False)
+	for f in git(repo, "ls-files", "--others", "--exclude-standard").splitlines():
+		files[f] = (0, 0, True)
+	return {f: v for f, v in files.items() if not any(i in f for i in IGNORED)}
+
+
+def is_test_file(f):
+	b = os.path.basename(f)
+	return (f.endswith(".gd") and "/tests/" in "/" + f) or (b.startswith("test_") and b.endswith(".py"))
+
+
+def collect_tests(repo, files):
+	"""(count or None, note): `pytest --collect-only -q` over Python test files; Godot tests cannot be collected here."""
+	py = [f for f in files if f.endswith(".py")]
+	if not py:
+		return None, "godot tests only" if files else "no test files"
+	try:
+		r = subprocess.run([sys.executable, "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider"] + py,
+			cwd=repo, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=240,
+			env=dict(os.environ, JAX_PLATFORMS="cpu"))
+	except Exception as e:
+		return None, "collect did not run: %s" % str(e)[:80]
+	m = re.search(r"(\d+) tests? collected", r.stdout)
+	n = int(m.group(1)) if m else len([l for l in r.stdout.splitlines() if "::" in l]) or None
+	if r.returncode != 0 or n is None:
+		tail = [l for l in (r.stdout + r.stderr).splitlines() if l.strip()][-1:] or ["collect failed"]
+		return n, "collect error: " + tail[0][:100]
+	return n, "ok"
+
+
+def c_teams(repo, baseline, now, stale_after, do_collect):
+	"""One row per team in the contract: owned paths, changed files since the baseline commit, newest mtime, tests."""
+	try:
+		changed = changed_files(repo, baseline)
+	except Exception as e:
+		problems.append("team diff against %s: %s" % (baseline, e))
+		return []
+	teams = parse_teams(repo)
+	owners = {}
+	for name, pats in teams:
+		for f in changed:
+			if any(path_matches(f, p) for p in pats):
+				owners.setdefault(f, []).append(name)
+	rows = []
+	for name, pats in teams:
+		mine = sorted(f for f, o in owners.items() if name in o)
+		shared = [f for f in mine if len(owners[f]) > 1]
+		tests = set(f for f in mine if is_test_file(f))
+		keys = TEAM_TEST_KEYS.get(name, ())
+		for f in changed:
+			if f not in owners and is_test_file(f) and any(k in os.path.basename(f) for k in keys):
+				tests.add(f)
+		tests = sorted(tests)
+		mt = [(os.path.getmtime(os.path.join(repo, f)), f) for f in sorted(set(mine) | set(tests))
+			if os.path.exists(os.path.join(repo, f))]
+		last = datetime.fromtimestamp(max(mt)[0], timezone.utc) if mt else None
+		n_col, note = collect_tests(repo, tests) if do_collect else (None, "skipped (--no-collect)")
+		rows.append({"team": name, "owns": ", ".join(pats)[:300], "files_changed": len(mine),
+			"files_new": sum(1 for f in mine if changed[f][2]), "files_shared": len(shared),
+			"lines_added": sum(changed[f][0] for f in mine), "lines_removed": sum(changed[f][1] for f in mine),
+			"newest_file": max(mt)[1] if mt else "", "last_activity": iso(last) if last else "",
+			"test_files": len(tests), "test_names": ", ".join(os.path.basename(t) for t in tests)[:300],
+			"tests_collected": n_col, "collect_note": note, "baseline": baseline,
+			"updated": iso(now), "stale": last is None or (now - last) > stale_after})
+	return rows
+
+
 # ---------- main ----------
 
 def main():
@@ -235,6 +348,8 @@ def main():
 	ap.add_argument("--pytest-log", default=None, help="latest local pytest log (default: <out>/logs/pytest_latest.log)")
 	ap.add_argument("--no-fetch", action="store_true")
 	ap.add_argument("--stale-hours", type=float, default=2.0)
+	ap.add_argument("--baseline", default="6451f3e", help="round-2 contract commit the team view diffs against")
+	ap.add_argument("--no-collect", action="store_true", help="skip the per-team pytest --collect-only")
 	args = ap.parse_args()
 	repo = os.path.abspath(args.repo)
 	out = os.path.abspath(args.out or os.path.dirname(os.path.abspath(__file__)))
@@ -260,6 +375,11 @@ def main():
 	except Exception as e:
 		problems.append("worktrees: %s" % e)
 		data["worktrees"] = []
+	try:
+		data["teams"] = c_teams(repo, args.baseline, now, stale_after, not args.no_collect)
+	except Exception as e:
+		problems.append("teams: %s" % e)
+		data["teams"] = []
 	remote = run(["git", "-C", repo, "remote", "get-url", "origin"], check=False).strip()
 	main_sha = run(["git", "-C", repo, "rev-parse", "--short", "origin/main"], check=False).strip()
 	data["meta"] = [{"generated": iso(now), "repo": remote, "main_sha": main_sha, "stale_hours": args.stale_hours,
@@ -284,10 +404,12 @@ def main():
 	tests = {r["suite"]: r for r in data["tests"]}
 	eng = tests.get("engine (CI main)", {}).get("passed", "?")
 	cli = tests.get("client (CI main)", {}).get("passed", "?")
+	teams = data["teams"]
 	for p in problems:
 		print("PROBLEM", p)
-	print("OPS_REFRESH branches=%d green=%d red=%d stale=%d main_ci=%s engine_tests=%s client_tests=%s worktrees=%d problems=%d at=%s"
-		% (len(data["branches"]), green, red, stale, main_ci, eng, cli, len(data["worktrees"]), len(problems), iso(now)))
+	print("OPS_REFRESH teams=%d teams_active=%d teams_stale=%d tests_collected=%d branches=%d green=%d red=%d stale=%d main_ci=%s engine_tests=%s client_tests=%s worktrees=%d problems=%d at=%s"
+		% (len(teams), sum(1 for t in teams if t["files_changed"]), sum(1 for t in teams if t["stale"]),
+		sum(t["tests_collected"] or 0 for t in teams), len(data["branches"]), green, red, stale, main_ci, eng, cli, len(data["worktrees"]), len(problems), iso(now)))
 	return 0
 
 

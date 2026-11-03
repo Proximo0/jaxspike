@@ -2,6 +2,9 @@ class_name EntitySprite
 extends Node2D
 ## One pooled entity: coloured quad, optional HP bar and name label, all drawn in _draw (no child nodes).
 ## The node origin is the tile centre. Call `configure` when something other than position changed.
+## Players and monsters are animated once `set_clip` is called (round2 contract 1.3): one ActSheet frame (art-anim's
+## sheet or a baked PlaceholderClips sheet), feet on the tile, mirrored for directions 5..7; drops and nodes keep
+## the quad / static texture.
 
 const BAR_H: float = 4.0
 const BAR_BG: Color = Color(0.25, 0.05, 0.05, 0.9)
@@ -19,6 +22,47 @@ var label_px: int = 12
 var tex: Texture2D = null  ## Art for this entity when its slot resolved; null draws the coloured quad.
 var depleted: bool = false  ## Nodes with hp 0 are drawn grey.
 var cat: int = ViewMath.CAT_MONSTER
+
+const FEET_Y: float = 0.28  ## feet sit this many tiles below the tile centre
+const HEAD_PX: float = 40.0  ## animated figure height at a 32 px tile (bar and label go above it)
+
+var animated: bool = false  ## set_clip was called: draw the clip instead of the quad
+var look: int = 0  ## job (players) or monster art index
+var sheet: ActSheet = null
+var clip_name: String = "idle"
+var clip_anim: StringName = &""
+var frame: int = 0
+var frames: int = 1
+var face: int = 0
+var flip: bool = false
+var flash: float = 0.0  ## hurt tint
+
+
+## Sets the clip frame to draw. Returns true when a redraw was queued (only when something visible changed).
+func set_clip(new_sheet: ActSheet, new_look: int, new_clip: String, new_anim: StringName, new_frame: int,
+		new_frames: int, new_face: int, new_flip: bool, new_flash: float) -> bool:
+	if animated and new_sheet == sheet and new_look == look and new_clip == clip_name and new_anim == clip_anim 			and new_frame == frame and new_frames == frames and new_face == face and new_flip == flip 			and is_equal_approx(new_flash, flash):
+		return false
+	animated = true
+	sheet = new_sheet
+	look = new_look
+	clip_name = new_clip
+	clip_anim = new_anim
+	frame = new_frame
+	frames = new_frames
+	face = new_face
+	flip = new_flip
+	flash = new_flash
+	queue_redraw()
+	return true
+
+
+## Back to the static look (quad or texture): drops, nodes, or an entity that lost its clip.
+func clear_clip() -> void:
+	if animated:
+		animated = false
+		sheet = null
+		queue_redraw()
 
 
 ## Returns true when a redraw was queued.
@@ -69,7 +113,11 @@ static func node_points(shape: int, half: float) -> PackedVector2Array:
 func _draw() -> void:
 	var edge: float = tile_px * ViewMath.cat_scale(cat)
 	var half: float = edge * 0.5
-	if tex != null:
+	var head_top: float = -half
+	var clip_drawn: bool = animated and _draw_clip()
+	if clip_drawn:
+		head_top = tile_px * FEET_Y - _clip_height()
+	elif tex != null:
 		var tint: Color = ViewMath.NODE_DEPLETED_COLOR if (cat == ViewMath.CAT_NODE and depleted) else Color.WHITE
 		draw_texture_rect(tex, Rect2(-half, -half, edge, edge), false, tint)
 		if is_own:
@@ -78,10 +126,10 @@ func _draw() -> void:
 		draw_colored_polygon(node_points(ViewMath.node_shape(kind - ViewMath.NODE_KIND_BASE), half), quad_color())
 	else:
 		draw_rect(Rect2(-half, -half, edge, edge), quad_color())
-	var top: float = -half
+	var top: float = head_top
 	if ViewMath.cat_has_hp_bar(cat):
 		var w: float = tile_px * 0.9
-		var bar_y: float = -tile_px * 0.5 - BAR_H - 1.0
+		var bar_y: float = minf(-tile_px * 0.5, head_top) - BAR_H - 1.0
 		draw_rect(Rect2(-w * 0.5, bar_y, w, BAR_H), BAR_BG)
 		draw_rect(Rect2(-w * 0.5, bar_y, w * hp_frac, BAR_H), BAR_FG)
 		top = bar_y
@@ -91,3 +139,28 @@ func _draw() -> void:
 		var pos := Vector2(-sz.x * 0.5, top - 3.0)
 		draw_string(font, pos + Vector2(1, 1), label, HORIZONTAL_ALIGNMENT_LEFT, -1, label_px, LABEL_SHADOW)
 		draw_string(font, pos, label, HORIZONTAL_ALIGNMENT_LEFT, -1, label_px, LABEL_COLOR)
+
+
+## Draws the clip frame with the feet at FEET_Y; false when the sheet has no such frame (the quad is drawn).
+func _draw_clip() -> bool:
+	if sheet == null:
+		return false
+	var tex_f: Texture2D = sheet.frame_texture(clip_anim, frame)
+	if tex_f == null:
+		return false
+	var s: float = tile_px / 32.0
+	var feet := Vector2(0.0, tile_px * FEET_Y)
+	if is_own:
+		draw_arc(feet, 11.0 * s, 0.0, TAU, 20, OWN_RING, 1.5)
+	var size := Vector2(sheet.frame_w, sheet.frame_h) * s
+	var anc: Vector2 = sheet.anchor * s
+	var tint: Color = Color.WHITE.lerp(Color(1.0, 0.6, 0.6), flash * 0.4)  # sheets bake their own flinch flash
+	draw_set_transform(feet, 0.0, Vector2(-1.0 if flip else 1.0, 1.0))
+	draw_texture_rect(tex_f, Rect2(-anc, size), false, tint)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	return true
+
+
+## Height (px) above the feet that the bar and label clear.
+func _clip_height() -> float:
+	return HEAD_PX * tile_px / 32.0

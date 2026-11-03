@@ -1,9 +1,23 @@
 """Kafra storage: pure numpy moves between a character's inventory and its storage."""
 import numpy as np
 
-from game.config import ITEM_NONE, NUM_ITEMS
+from game.config import ITEM_NONE
+from game.data import items as item_data
 
 STORAGE_SLOTS = 100
+# Ids a storage slot may hold: ITEM_NONE or any real row of the item table (RO items and craft ids 100..299);
+# reserved ids (kind 0) and anything outside [0, N_ITEMS) are invalid.
+_VALID_ID = np.asarray(item_data.KIND) != item_data.KIND_NONE
+_VALID_ID[ITEM_NONE] = True
+
+
+def valid_ids(ids) -> bool:
+    """True when every id in `ids` is ITEM_NONE or a real item id of game/data/items.py."""
+    ids = np.asarray(ids)
+    if ids.dtype.kind not in "iu":
+        return False
+    inside = (ids >= 0) & (ids < item_data.N_ITEMS)
+    return bool(inside.all() and _VALID_ID[ids].all())
 
 
 def new_storage() -> np.ndarray:
@@ -35,7 +49,7 @@ def character_storage(char) -> np.ndarray:
     s = char.get("storage")
     try:
         s = np.asarray(s)
-        if s.dtype == np.int32 and s.shape == (STORAGE_SLOTS,) and ((s >= 0) & (s < NUM_ITEMS)).all():
+        if s.dtype == np.int32 and s.shape == (STORAGE_SLOTS,) and valid_ids(s):
             return s.copy()
     except (TypeError, ValueError):
         pass

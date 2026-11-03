@@ -3,7 +3,7 @@ import jax.numpy as jnp
 
 from game import ro_items, ro_stats
 from game.combat import combat
-from game.config import MONSTER_ATTACK_COOLDOWN, MONSTER_HP, MONSTER_RESPAWN_TICKS
+from game.config import PLAYER_MAX_HP, MONSTER_ATTACK_COOLDOWN, MONSTER_HP, MONSTER_RESPAWN_TICKS
 from game.data import monsters as mdata
 from game.state import empty_inputs, make_empty_world
 
@@ -181,10 +181,14 @@ def test_not_adjacent_no_attack():
 
 
 def test_monster_hits_adjacent_player_in_atk_range():
-    w = _world(kind=ORC)
+    # A fresh Novice has 40 hp (classic RO), so pick the hardest aggressive hitter that cannot one-shot it
+    # (Thief Bug, 18..24): an Orc Warrior's 104..126 would read as 40 every time, and passive kinds never swing.
+    kind = max((k for k in range(len(mdata.MONSTERS)) if bool(mdata.AGGRO[k]) and int(mdata.ATK_MAX[k]) < PLAYER_MAX_HP),
+               key=lambda k: int(mdata.ATK_MAX[k]))
+    w = _world(kind=kind)
     hits = [d for d in _dmg_to_player(w) if d]
     assert len(hits) >= 20  # 95% against a fresh Novice
-    assert all(int(mdata.ATK_MIN[ORC]) <= d <= int(mdata.ATK_MAX[ORC]) for d in hits)
+    assert all(int(mdata.ATK_MIN[kind]) <= d <= int(mdata.ATK_MAX[kind]) for d in hits)
     assert len(set(hits)) > 1  # uniform in a range, not a constant
     o = combat(w, empty_inputs())
     assert int(o["monsters"]["attack_cd"][0]) == MONSTER_ATTACK_COOLDOWN
@@ -196,7 +200,7 @@ def test_monster_hits_adjacent_player_in_atk_range():
 def test_player_def_reduces_monster_damage(monkeypatch):
     w = _stat(_world(kind=ORC), vit=120)  # soft def far above the 80% cap
     hits = [d for d in _dmg_to_player(w) if d]
-    assert hits and max(hits) <= 2  # 9 * 20 / 100 = 1, min 1
+    assert hits and max(hits) <= int(mdata.ATK_MAX[ORC]) * 20 // 100  # DEF capped at 80% (RO Orc 104-126 -> <= 25)
     _fake_equipped(monkeypatch, armor_def=50)
     hits = [d for d in _dmg_to_player(_world(kind=ORC)) if d]
     assert hits and max(hits) <= int(mdata.ATK_MAX[ORC]) * 50 // 100

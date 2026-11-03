@@ -5,7 +5,7 @@ import numpy as np
 
 from game.config import (MAP, T_FLOOR, T_GRASS, T_ROAD, T_ROCK, T_TEMPLE, T_TREE, T_WALL,
                          T_WATER)
-from game.data.terrain import T_CAVE, T_KAFRA, T_STATION, T_WARP
+from game.data.terrain import T_CAVE, T_KAFRA, T_SHOP, T_STATION, T_WARP
 from game.world_layout import (FOREST_THRESHOLD, NOISE_CELLS, ROAD_HALF_WIDTH, ROADS,
                                TEMPLE_TILES, TREE_DENSITY, WATER_THRESHOLD, town_boxes,
                                town_centers)
@@ -65,7 +65,7 @@ def protection_zone(terrain):
     in_town = jnp.zeros((MAP, MAP), bool)
     for x0, y0, x1, y1 in town_boxes().tolist():
         in_town |= _in_rect(xs, ys, x0, y0, x1, y1)
-    special = (terrain == T_KAFRA) | (terrain == T_STATION)
+    special = (terrain == T_KAFRA) | (terrain == T_STATION) | (terrain == T_SHOP)
     return (terrain == T_FLOOR) | (terrain == T_TEMPLE) | (((terrain == T_ROAD) | special) & in_town)
 
 
@@ -146,7 +146,8 @@ def warp_table(terrain=None):
 
 
 def make_terrain_ro(key):
-    """Return int8 [MAP, MAP] terrain of the RO world: make_terrain plus dungeons, warps, kafras, stations."""
+    """Return int8 [MAP, MAP] terrain of the RO world: make_terrain plus dungeons, zone split lines with
+    portals, town layouts (plaza, streets, decoration, shops), warps, kafras, stations."""
     t = make_terrain(key)
     xs, ys = jnp.meshgrid(jnp.arange(MAP), jnp.arange(MAP), indexing="ij")
     hw = ROAD_HALF_WIDTH
@@ -185,16 +186,41 @@ def make_terrain_ro(key):
         t = jnp.where(inner, T_CAVE, t)
         t = jnp.where(pillar, T_ROCK, t)
 
-    # d. special tiles last
+    # d. zone split lines: one tile of rock across the map outside town and dungeon boxes; the portal
+    #    warps of step f sit on the road tiles either side of each crossing
+    keep = jnp.zeros((MAP, MAP), bool)
+    for box in wl.zone_boxes()[[z[1] != wl.ZONE_FIELD for z in wl.ZONES]].tolist():
+        keep |= _in_rect(xs, ys, *box)
+    line = jnp.zeros((MAP, MAP), bool)
+    for v in wl.zone_line_tiles():
+        line |= (xs == v) | (ys == v)
+    t = jnp.where(line & ~keep, T_ROCK, t)
+
+    # e. town layouts: decoration over floor only, then plaza and streets, then Prontera's fountains
+    decor_tid = {"wall": T_WALL, "water": T_WATER, "tree": T_TREE}
+    for _, kind, x0, y0, x1, y1, period, size in wl.town_decor():
+        m = _in_rect(xs, ys, x0, y0, x1, y1) & ((xs - x0) % period < size) & ((ys - y0) % period < size)
+        t = jnp.where(m & (t == T_FLOOR), decor_tid[kind], t)
+    for _, x0, y0, x1, y1 in wl.town_paving():
+        t = jnp.where(_in_rect(xs, ys, x0, y0, x1, y1) & (t != T_TEMPLE), T_ROAD, t)
+    for _, x0, y0, x1, y1 in wl.town_fountains():
+        t = jnp.where(_in_rect(xs, ys, x0, y0, x1, y1), T_WATER, t)
+
+    # f. special tiles last (warps include the zone portals)
     src, dst = wl.warp_tiles()
-    for arr, tid in ((src, T_WARP), (dst, T_STATION),
-                     (wl.kafra_tiles(), T_KAFRA), (wl.town_station_tiles(), T_STATION)):
+    for arr, tid in ((src, T_WARP), (dst, T_STATION), (wl.kafra_tiles(), T_KAFRA),
+                     (wl.town_station_tiles(), T_STATION), (wl.shop_tiles()[0], T_SHOP)):
         t = t.at[arr[:, 0], arr[:, 1]].set(tid)
     return t.astype(jnp.int8)
 
 
 def distance_fields_ro(terrain):
-    """Return int16 [NT, MAP, MAP] like distance_fields, but relaxing across warps: d[src] <= d[dst] + 1."""
+    """Return int16 [NT, MAP, MAP] like distance_fields, but relaxing across warps: d[src] <= d[dst] + 1.
+
+    Towns are independent, so the relaxation runs one town at a time (`lax.map` over the town axis):
+    the loop's temporaries are [MAP, MAP] instead of [NT, MAP, MAP] (docs/world_scale.md plan item 1),
+    and the result is identical to relaxing all towns together.
+    """
     free = blocking(terrain) == 0
     d0 = jnp.where(gate_aprons(terrain), 0, DIST_UNREACHABLE).astype(jnp.int32)
     src, dst = warp_table(terrain)
@@ -203,14 +229,17 @@ def distance_fields_ro(terrain):
     dx, dy = jnp.clip(dst[:, 0], 0, MAP - 1), jnp.clip(dst[:, 1], 0, MAP - 1)
 
     def relax(d):
-        d = jnp.where(free[None], jnp.minimum(d, jnp.minimum(_shift_min(d) + 1, DIST_UNREACHABLE)), DIST_UNREACHABLE)
-        via = jnp.where(real[None], jnp.minimum(d[:, dx, dy] + 1, DIST_UNREACHABLE), DIST_UNREACHABLE)
-        return d.at[:, sx, sy].min(via)
+        d = jnp.where(free, jnp.minimum(d, jnp.minimum(_shift_min(d) + 1, DIST_UNREACHABLE)), DIST_UNREACHABLE)
+        via = jnp.where(real, jnp.minimum(d[dx, dy] + 1, DIST_UNREACHABLE), DIST_UNREACHABLE)
+        return d.at[sx, sy].min(via)
 
     def body(carry):
         d, _ = carry
         nd = relax(d)
         return nd, jnp.any(nd != d)
 
-    d, _ = jax.lax.while_loop(lambda c: c[1], body, (d0, jnp.bool_(True)))
-    return d.astype(jnp.int16)
+    def one_town(d):
+        d, _ = jax.lax.while_loop(lambda c: c[1], body, (d, jnp.bool_(True)))
+        return d.astype(jnp.int16)
+
+    return jax.lax.map(one_town, d0)

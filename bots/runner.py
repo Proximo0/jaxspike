@@ -73,6 +73,7 @@ def make_world_batch(seed, batch):
     RO terrain (towns, roads, dungeons, warps, kafra and station tiles), warp-aware distance fields, resource
     nodes with their distance fields, monsters by band, players on their temples.
     """
+    from bots import ro_nav_policy
     from game import map_gen, ro_craft
 
     keys = jax.random.split(jax.random.PRNGKey(seed), batch)
@@ -94,6 +95,7 @@ def make_world_batch(seed, batch):
     fields = jax.lax.map(map_gen.distance_fields_ro, worlds["terrain"])
     worlds = {**worlds, "dist_town": fields}
     worlds = jax.lax.map(lambda wk: ro_craft.with_craft(wk[0], wk[1]), (worlds, k_nodes))
+    worlds = jax.lax.map(ro_nav_policy.with_dungeon_fields, worlds)  # bots2: dungeon entrance fields for diving bots
     return jax.vmap(spawn_population)(worlds, k_spawn)
 
 

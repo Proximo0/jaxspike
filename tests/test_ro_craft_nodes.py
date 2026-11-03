@@ -94,7 +94,7 @@ def test_lookup_hand_built():
     assert int(na[11 * MAP + 10]) == 7
     assert int(na[0]) == MAX_NODES
     near = nodes_near(na, jnp.array([[10, 10], [12, 10], [0, 0]], jnp.int32))
-    assert near.shape == (3, 5)
+    assert near.shape == (3, 9)
     assert int(near[0].min()) == 3 and int((near[0] == 7).sum()) == 1
     assert int(near[1].min()) == 7
     assert int(near[2].min()) == MAX_NODES

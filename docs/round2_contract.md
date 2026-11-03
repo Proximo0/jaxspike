@@ -46,6 +46,9 @@ interpolates positions. **No animation logic on the server's Python side.**
   `cost = speed_ms` for straight and `speed_ms * 14 // 10` for diagonal; `acc -= cost` (the remainder carries).
   With TICK_MS 100 and speed 150: steps at ticks 2, 3, 5, 6, 8... exactly 1 cell per 150 ms on average.
   Occupancy and conflicts stay as today (lowest slot wins); a blocked step keeps `acc` (retry next tick).
+  Integration note (lead, 2026-11-02): `acc` is "ms since the last step", capped at one step cost before the tick adds
+  `TICK_MS`; while idle it refills up to that cap. So a rested entity steps on its first intent (RO starts walking at
+  once) and nobody banks more than one step by standing still. A fresh block starts rested.
 - `DIR_DELTAS` grows to 9 entries: 0 stay, 1..8 = S, SW, W, NW, N, NE, E, SE (`game/config.py`, lead applies).
   Diagonal moves require both orthogonal neighbours walkable (no corner cutting through walls), as RO.
 - Click-to-walk: `net/pathing.py` A* becomes 8-connected with the 14/10 cost; the server feeds one `path_dir`

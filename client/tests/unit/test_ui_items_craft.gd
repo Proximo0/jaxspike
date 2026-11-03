@@ -42,11 +42,11 @@ func test_level_fraction() -> void:
 func test_gather_adjacency() -> void:
 	var store := EntityStore.new()
 	store.apply_snap({"tick": 1, "full": true, "ents": [
-		{"id": 9000, "kind": 201, "pos": [10, 11], "hp": 1},
-		{"id": 9001, "kind": 204, "pos": [20, 20], "hp": 1},
-		{"id": 9002, "kind": 202, "pos": [12, 10], "hp": 0},
-		{"id": 9003, "kind": 206, "pos": [9, 10], "hp": 1},
-		{"id": 9004, "kind": 205, "pos": [10, 9], "hp": 1, "item": 105},
+		{"id": 9000, "kind": 401, "pos": [10, 11], "hp": 1},
+		{"id": 9001, "kind": 404, "pos": [20, 20], "hp": 1},
+		{"id": 9002, "kind": 402, "pos": [12, 10], "hp": 0},
+		{"id": 9003, "kind": 406, "pos": [9, 10], "hp": 1},
+		{"id": 9004, "kind": 405, "pos": [10, 9], "hp": 1, "item": 305},
 	]})
 	assert_true(CraftPanel.can_gather(store, Vector2i(10, 10)))
 	assert_false(CraftPanel.can_gather(store, Vector2i(20, 22)))

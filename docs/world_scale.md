@@ -1,6 +1,6 @@
 # World build scale: measured at MAP 512, estimated at 2048
 
-Bench: `bench/world_scale.py` (CPU, JAX, seed 0, batch 1 and 4). MAP is a config constant, so 2048 numbers are
+Bench: `bench/world_scale.py` (CPU, JAX, seed 0, batch 1 and 4). **2048 has now been executed: see "Measured at MAP 2048" at the end.** The first sections below are the round-1 estimates; MAP is a config constant, so those 2048 numbers are
 **estimates by scaling**, not runs. `map_gen.distance_fields_ro` did not exist when this was measured; rerun
 the bench once it lands (the script times it automatically). Expect it to cost about the same as
 `distance_fields`, plus extra iterations for the warp hops (dungeon tiles are reached through the exit warp).
@@ -100,3 +100,52 @@ rival. Item 3 saves more wall time (12 min per world) and should come second, be
    3300-iteration relaxation. It keeps the stored field identical (`tests/test_map.py` already compares the
    JAX field to this BFS). Worth it only if GPU relaxation turns out slower than expected; the JAX path stays
    the default per the "JAX first" rule.
+
+## Measured at MAP 2048 (ro-world2, 2026-11-02, CPU, executed, not estimated)
+Run in a scratch copy of the repo (`game bots bench net` copied, `MAP = 2048` in its `game/config.py`; the shared
+checkout keeps 512): `python -u bench/world_scale.py --batches 1`. The machine was shared with about ten other
+team sessions (24 cores), so treat the times as upper bounds; the ratios hold. Code: zones with rock split lines and
+14 portal pairs (32 warps), RO town layouts, and `distance_fields_ro` relaxing **one town at a time** (plan item 1).
+
+| item | MAP 512 | MAP 2048 | ratio |
+|---|---|---|---|
+| `make_terrain` (jit, second call) | 0.01 s | 0.13 s | 13x |
+| `distance_fields` (plain, all 5 towns in one loop; the old shape) | 14.7 s, 816 iterations | 152.7 s, 3280 iterations | 10x |
+| `distance_fields_ro` (warps + zones, per-town `lax.map`) | **2.6 s**, 809 iterations | **105.6 s**, 3598 iterations | 41x |
+| `make_world_batch(0, 1)` second call | 9.5 s | 216.1 s | 23x |
+| world pytree | 8.0 MB | 116.8 MB | 15x |
+| `dist_town` | 2.5 MB | 40.0 MB | 16x |
+| terrain / walls / pz | 0.25 MB each | 4.0 MB each | 16x |
+| jax live buffers after one world | 13.4 MB | 200.9 MB | |
+| process peak RSS (whole bench) | | 551 MB after the fields, 1000 MB after `make_world_batch` | |
+
+- **The relaxation does dominate** the field build (fields = 106 of 216 s per world), but the estimate of 720 s for
+  the plain field was 4.7x too pessimistic: per-iteration cost grew 13x (area 16x, better vectorised at size), not
+  the feared 16x on top of the 4x iterations.
+- **Per-town `lax.map` (implemented in `map_gen.distance_fields_ro`)**: identical results (tests/test_ro_map.py
+  compares against a warp-aware BFS), temporaries `[MAP, MAP]` instead of `[5, MAP, MAP]`, and faster: per
+  iteration 29 ms vs 47 ms at 2048 (one 16 MB int32 plane stays in cache better than five), 5.6x faster at 512.
+- Iterations grow 3280 -> 3598 with zones: the rock split lines force walks through the portals on the roads, so
+  far field tiles are a little further from a gate. int16 still holds it (max finite 3597 < 32767).
+- The other half of `make_world_batch` at 2048 (about 110 s) is not the town fields: it is
+  `ro_craft.with_craft` (resource-node distance fields, another relaxation) plus spawning. Owner: ro-craft. Same
+  per-kind `lax.map` trick applies there.
+- The world pytree is 117 MB, not the 54 MB estimated above: the craft block and other round-1 blocks added
+  per-tile arrays. At 2048, `dist_town` is 34 % of the world, no longer 72 %.
+
+### GPU command for the lead (WSL, 80 % cap)
+```bash
+rsync -a --exclude venv --exclude .git --exclude client /mnt/c/Users/crp27/jaxspike/ ~/jaxspike2048/
+sed -i 's/^MAP = 512 /MAP = 2048/' ~/jaxspike2048/game/config.py
+cd ~/jaxspike2048 && JAX_PLATFORMS=cuda XLA_PYTHON_CLIENT_PREALLOCATE=false XLA_PYTHON_CLIENT_MEM_FRACTION=0.8 \
+  ~/jaxgpu/bin/python -u bench/world_scale.py --batches 1 4 --no-base
+```
+(`bench/world_scale.py` sets `JAX_PLATFORMS=cpu` only when it is unset, so the explicit `cuda` wins.) Expect the
+3598-iteration loop to be seconds on the GPU; report `distance_fields_ro` and `make_world_batch` second-call times
+and `nvidia-smi` peak. Do **not** run `--census` at 2048 until the int32 claim-key overflow below is fixed.
+
+### Next steps for 2048, ranked (updated)
+1. Done: per-town `lax.map` in `distance_fields_ro`.
+2. Same per-kind split in `ro_craft.with_craft` (ro-craft): it is now the bigger half of a 2048 build.
+3. Fix the int32 claim keys in `movement.py` / `ro_warps.py` (below) before any 2048 tick or soak.
+4. Cache fields per seed on disk (item 3 below): turns 216 s per world into a file read for repeated seeds.

@@ -1,8 +1,9 @@
 # Ops board
 
 Board: **https://claude.ai/artifact/CYTg8hXicgNUYbM55yrLvo** (a claude.ai Dashboard artifact, private until shared
-from its Share menu). It shows the state of the `ro/*` team branches and `main` from primary sources only: git,
-the GitHub Actions API and CI job logs. No session reports its own numbers (see `docs/lessons_learned.md`,
+from its Share menu). It shows `main`, the `ro/*` branches and, since round 2, one card per team in
+`docs/round2_contract.md` section 2 (round 2 has no branches), from primary sources only: git, file times, pytest
+collection, the GitHub Actions API and CI job logs. No session reports its own numbers (see `docs/lessons_learned.md`,
 "Dashboards").
 
 ## Refresh
@@ -18,10 +19,13 @@ file) and `tools/ops/out/<dataset>.json` (one file per dataset, the upload forma
 followed by one summary line:
 
 ```
-OPS_REFRESH branches=12 green=0 red=1 stale=0 main_ci=failure engine_tests=162 client_tests=66 worktrees=10 problems=0 at=2026-11-02T20:44:25Z
+OPS_REFRESH teams=12 teams_active=10 teams_stale=2 tests_collected=74 branches=17 green=0 red=1 stale=11 main_ci=failure engine_tests=490 client_tests=133 worktrees=10 problems=0 at=2026-11-02T22:57:58Z
 ```
 
-Options: `--repo <path>` (default `.`), `--out <dir>` (default `tools/ops`), `--pytest-log <file>` (default
+It takes about 80 s now: the team view runs `pytest --collect-only` on each team's test files (`--no-collect` skips it).
+
+Options: `--baseline <commit>` (default `6451f3e`, the round-2 contract commit the team view diffs against),
+`--no-collect`, `--repo <path>` (default `.`), `--out <dir>` (default `tools/ops`), `--pytest-log <file>` (default
 `tools/ops/logs/pytest_latest.log`; to feed it, run
 `venv\Scripts\python.exe -m pytest tests -q 2>&1 | tee tools/ops/logs/pytest_latest.log`), `--no-fetch`,
 `--stale-hours` (default 2).
@@ -47,6 +51,15 @@ snapshot is more than 2 h old, and a red line when the last refresh had collecto
 - *Engine tests*: tests passed, parsed from the `engine-pytest` job log of the latest finished `checks` run on
   `main` (the `N passed` pytest summary line).
 - *Client tests*: tests passed, parsed from the `client-unit` job log of the same run (`TESTS passed=N failed=M`).
+
+**Teams (round 2)** (dataset `teams`, one row per team row of the contract table, refreshed with the contract):
+the owned paths are the backticked tokens containing `/` in the table's "owns" cell. Files changed = tracked files
+differing from the baseline commit (`git diff --numstat`) plus untracked files, matched against those paths; a file
+owned by two teams counts for both and shows as "shared". Last activity = newest modification time among those files
+and the team's tests; **stale** = nothing touched for 2 h, or nothing yet. Tests = new or changed Python test files in
+the team's paths (or named like the team's area, `TEAM_TEST_KEYS`) passed to `pytest --collect-only -q`: the count is
+tests collected, not passed, and a collection error shows in red. Godot test files are listed but not collected.
+KPI tiles *Teams active* (files changed > 0) and *Teams stale* sit beside the branch tiles.
 
 **Branch cards** (datasets `branches`, `ci_runs`, `ci_jobs`), one per `main`, `ro/*` and `claude/ro-*` branch, local
 or on origin. Left stripe: green when the latest run passed, red when it failed, amber when the branch is stale

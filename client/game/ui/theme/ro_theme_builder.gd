@@ -17,6 +17,8 @@ const SP := Color(0.25, 0.45, 0.95)
 const EXP := Color(0.95, 0.80, 0.25)
 const BAR_BG := Color(0.08, 0.09, 0.12)
 const CLEAR := Color(0.0, 0.0, 0.0, 0.0)
+const HOTKEY_BG := Color(0.24, 0.27, 0.36)
+const ZONE_TITLE_PX: int = 34
 const FONT_SIZE: int = 12
 const MARGIN_X: float = 4.0
 const MARGIN_Y: float = 2.0
@@ -91,7 +93,74 @@ static func build() -> Theme:
 		t.set_type_variation(variation, "ProgressBar")
 		t.set_stylebox("background", variation, box(BAR_BG, PANEL_BORDER))
 		t.set_stylebox("fill", variation, box(c, c.darkened(0.4)))
+	add_feel(t)
 	return t
+
+
+## Team client-feel variations: basic info window, bar numbers, zone banner, minimap frame, chat window and tabs,
+## RO hotkey slots (bevelled square slots on a darker strip).
+static func add_feel(t: Theme) -> void:
+	var info: StyleBoxFlat = box(PANEL_BG, PANEL_BORDER)
+	info.content_margin_left = 6.0
+	info.content_margin_right = 6.0
+	info.content_margin_top = 4.0
+	info.content_margin_bottom = 4.0
+	t.set_type_variation("InfoWindow", "PanelContainer")
+	t.set_stylebox("panel", "InfoWindow", info)
+	t.set_type_variation("InfoName", "Label")
+	t.set_color("font_color", "InfoName", Color.WHITE)
+	t.set_font_size("font_size", "InfoName", 14)
+	t.set_type_variation("InfoBadge", "Label")
+	t.set_color("font_color", "InfoBadge", HP.lightened(0.3))
+	t.set_type_variation("BarText", "Label")
+	t.set_color("font_color", "BarText", Color.WHITE)
+	t.set_color("font_outline_color", "BarText", Color(0, 0, 0, 0.9))
+	t.set_constant("outline_size", "BarText", 3)
+	t.set_font_size("font_size", "BarText", 10)
+	t.set_type_variation("ZoneTitle", "Label")
+	t.set_font_size("font_size", "ZoneTitle", ZONE_TITLE_PX)
+	t.set_color("font_color", "ZoneTitle", Color.WHITE)
+	t.set_color("font_outline_color", "ZoneTitle", Color(0.08, 0.06, 0.12))
+	t.set_constant("outline_size", "ZoneTitle", 8)
+	t.set_type_variation("ZoneSubtitle", "Label")
+	t.set_font_size("font_size", "ZoneSubtitle", 14)
+	t.set_color("font_color", "ZoneSubtitle", TEXT)
+	t.set_color("font_outline_color", "ZoneSubtitle", Color(0.08, 0.06, 0.12))
+	t.set_constant("outline_size", "ZoneSubtitle", 4)
+	t.set_type_variation("MinimapFrame", "PanelContainer")
+	t.set_stylebox("panel", "MinimapFrame", box(PANEL_BG, PANEL_BORDER))
+	t.set_type_variation("ChatWindow", "PanelContainer")
+	var chat: StyleBoxFlat = box(Color(PANEL_BG, 0.82), PANEL_BORDER)
+	t.set_stylebox("panel", "ChatWindow", chat)
+	# TabBar (chat tabs): the selected tab takes the title colour.
+	t.set_stylebox("tab_selected", "TabBar", box(TITLE_BG, EXP))
+	t.set_stylebox("tab_unselected", "TabBar", box(BUTTON_PRESSED, PANEL_BORDER))
+	t.set_stylebox("tab_hovered", "TabBar", box(BUTTON_HOVER, PANEL_BORDER))
+	t.set_stylebox("tab_disabled", "TabBar", box(BUTTON_DISABLED, TEXT_DISABLED))
+	t.set_stylebox("tab_focus", "TabBar", StyleBoxEmpty.new())
+	t.set_color("font_selected_color", "TabBar", Color.WHITE)
+	t.set_color("font_unselected_color", "TabBar", TEXT_DISABLED.lightened(0.2))
+	t.set_color("font_hovered_color", "TabBar", TEXT)
+	t.set_font_size("font_size", "TabBar", FONT_SIZE)
+	# Hotkey bar: dark strip, square bevelled slots with a gold rim when pressed.
+	t.set_type_variation("HotkeyBar", "PanelContainer")
+	t.set_stylebox("panel", "HotkeyBar", box(BAR_BG.lightened(0.05), PANEL_BORDER))
+	t.set_type_variation("HotkeySlot", "Button")
+	var slot: StyleBoxFlat = box(HOTKEY_BG, HOTKEY_BG.lightened(0.35))
+	slot.border_width_bottom = 2
+	slot.border_width_right = 2
+	slot.border_color = HOTKEY_BG.lightened(0.35)
+	t.set_stylebox("normal", "HotkeySlot", slot)
+	var hover: StyleBoxFlat = slot.duplicate() as StyleBoxFlat
+	hover.bg_color = HOTKEY_BG.lightened(0.15)
+	t.set_stylebox("hover", "HotkeySlot", hover)
+	var pressed: StyleBoxFlat = box(HOTKEY_BG.darkened(0.3), EXP)
+	pressed.set_border_width_all(2)
+	t.set_stylebox("pressed", "HotkeySlot", pressed)
+	t.set_stylebox("disabled", "HotkeySlot", box(BUTTON_DISABLED.darkened(0.2), TEXT_DISABLED))
+	t.set_font_size("font_size", "HotkeySlot", 10)
+	t.set_color("font_outline_color", "HotkeySlot", Color(0, 0, 0, 0.9))
+	t.set_constant("outline_size", "HotkeySlot", 2)
 
 
 static func save(path: String) -> int:

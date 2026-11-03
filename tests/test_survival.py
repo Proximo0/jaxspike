@@ -16,7 +16,9 @@ def _world(hp=100, inv=None, tick=0, dead=False):
          "hp": p["hp"].at[0].set(hp)}
     if inv is not None:
         p["inv"] = p["inv"].at[0].set(jnp.array(inv, jnp.int32))
-    return {**w, "players": p, "tick": jnp.int32(tick)}
+    # RO max HP (ro-fidelity): a level-1 Novice caps at 40, so the regen/eat checks use a level-20 slot (cap > 200).
+    st = {**w["stats"], "base_level": w["stats"]["base_level"].at[0].set(20)}
+    return {**w, "players": p, "stats": st, "tick": jnp.int32(tick)}
 
 
 def _inv(*items):
@@ -69,7 +71,7 @@ def _set_hp(w, hp):
     return {**w, "players": {**w["players"], "hp": w["players"]["hp"].at[0].set(hp)}}
 
 
-def _leveled(w, level=10, vit=20):
+def _leveled(w, level=30, vit=20):
     st = dict(w["stats"])
     st["base_level"] = st["base_level"].at[0].set(level)
     st["vit"] = st["vit"].at[0].set(vit)

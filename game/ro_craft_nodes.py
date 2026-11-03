@@ -36,8 +36,8 @@ def node_at(nodes):
 
 
 def nodes_near(tile_nodes, pos):
-    """Return int32 [N, 5]: node index (or MAX_NODES) on each pos's own tile and its 4 neighbours (clipped)."""
-    d = jnp.asarray(DIR_DELTAS, jnp.int32)  # [5, 2], row 0 is (0, 0)
+    """Return int32 [N, 9]: node index (or MAX_NODES) on each pos's own tile and its 8 neighbours (clipped)."""
+    d = jnp.asarray(DIR_DELTAS, jnp.int32)  # [9, 2], row 0 is (0, 0): RO talk range is the 8 neighbours
     p = jnp.clip(pos[:, None, :] + d[None], 0, MAP - 1)
     return tile_nodes[p[..., 0] * MAP + p[..., 1]]
 

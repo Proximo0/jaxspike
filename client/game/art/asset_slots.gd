@@ -24,6 +24,20 @@ const UI_NAMES: Array[String] = [
 	"panel", "panel_title", "button", "button_pressed", "button_hover", "slot", "hpbar_bg", "hpbar_fill",
 	"spbar_fill", "expbar_fill", "cursor", "icon_close",
 ]
+## Round 2 animated sheets (docs/round2_contract.md 1.4): `anim.<kind>.<action>` -> act json + action png under
+## `res://assets/anim/<kind>/`. Index = engine anim action id (`world["anim"]["action"]`).
+const ANIM_ACTIONS: Array[String] = [
+	"idle", "walk", "sit", "pickup", "standby", "attack", "hurt", "dead", "cast",
+]
+const ANIM_MONSTER_ACTIONS: Array[String] = ["idle", "walk", "attack", "hurt", "dead"]
+## Monster kinds in engine order (`game/data/monsters.py`), unlike the legacy MONSTER_NAMES table.
+const ANIM_MONSTER_KINDS: Array[String] = [
+	"poring", "orc_warrior", "fabre", "lunatic", "drops", "poporing", "willow", "rocker", "spore", "thief_bug",
+	"zombie", "wolf", "skeleton", "peco_peco", "hode", "soldier_skeleton", "bigfoot", "mummy",
+	"golden_thief_bug", "eddga",
+]
+## Player-only actions a monster sheet lacks, and the monster action drawn instead.
+const ANIM_MONSTER_FALLBACK: Dictionary = {"sit": "idle", "pickup": "idle", "standby": "idle", "cast": "attack"}
 const FALLBACK_PX: int = 16
 const TILE_FALLBACK_COLORS: Array[Color] = [
 	Color(0.30, 0.55, 0.25),
@@ -43,7 +57,7 @@ const FALLBACK_VALUE: float = 0.85
 const HUE_STEPS: int = 360
 
 var errors: PackedStringArray = []
-## key -> {"path": String, "region": Rect2i, "has_region": bool, "sheet": bool, "anim": String}
+## key -> {"path": String, "region": Rect2i, "has_region": bool, "sheet": bool, "anim": String, "png": String}
 var _slots: Dictionary = {}
 var _cache: Dictionary = {}
 
@@ -74,6 +88,43 @@ static func anim_name(anim: String, dir: int) -> String:
 		return "dead_down"
 	var d: String = DIRS[dir] if dir >= 0 and dir < DIRS.size() else DIRS[0]
 	return "%s_%s" % [anim, d]
+
+
+static func anim_key(kind: String, action: String) -> String:
+	return "anim.%s.%s" % [kind, action]
+
+
+static func anim_action_name(action_id: int) -> String:
+	if action_id < 0 or action_id >= ANIM_ACTIONS.size():
+		return ANIM_ACTIONS[0]
+	return ANIM_ACTIONS[action_id]
+
+
+## Slot key for a job (0..6, JOB_NAMES order) and an engine anim action id.
+static func job_anim_key(job: int, action_id: int) -> String:
+	var j: int = job if job >= 0 and job < JOB_NAMES.size() else 0
+	return anim_key(JOB_NAMES[j], anim_action_name(action_id))
+
+
+## Slot key for an engine monster kind and an engine anim action id; player-only actions map to a monster one.
+static func monster_anim_key(mkind: int, action_id: int) -> String:
+	if mkind < 0 or mkind >= ANIM_MONSTER_KINDS.size():
+		return "anim.unknown.idle"
+	var action: String = anim_action_name(action_id)
+	if ANIM_MONSTER_FALLBACK.has(action):
+		action = ANIM_MONSTER_FALLBACK[action]
+	return anim_key(ANIM_MONSTER_KINDS[mkind], action)
+
+
+static func expected_anim_keys() -> PackedStringArray:
+	var out: PackedStringArray = []
+	for j: String in JOB_NAMES:
+		for a: String in ANIM_ACTIONS:
+			out.append(anim_key(j, a))
+	for m: String in ANIM_MONSTER_KINDS:
+		for a: String in ANIM_MONSTER_ACTIONS:
+			out.append(anim_key(m, a))
+	return out
 
 
 static func expected_keys() -> PackedStringArray:
@@ -154,7 +205,11 @@ func _parse_entry(key: String, entry: Dictionary) -> Dictionary:
 		if not (anim is String) or String(anim).is_empty():
 			errors.append("%s: sheet slot needs an anim" % key)
 			return {}
-		return {"path": String(sheet), "region": Rect2i(), "has_region": false, "sheet": true, "anim": String(anim)}
+		var png: Variant = entry.get("path", "")
+		return {
+			"path": String(sheet), "region": Rect2i(), "has_region": false, "sheet": true, "anim": String(anim),
+			"png": String(png) if png is String else "",
+		}
 	var path: Variant = entry.get("path")
 	if not (path is String) or String(path).is_empty():
 		errors.append("%s: needs a path or a sheet" % key)
@@ -179,7 +234,7 @@ func _parse_entry(key: String, entry: Dictionary) -> Dictionary:
 			return {}
 		region = Rect2i(vals[0], vals[1], vals[2], vals[3])
 		has_region = true
-	return {"path": String(path), "region": region, "has_region": has_region, "sheet": false, "anim": ""}
+	return {"path": String(path), "region": region, "has_region": has_region, "sheet": false, "anim": "", "png": ""}
 
 
 func has(key: String) -> bool:
@@ -212,6 +267,14 @@ func anim_of(key: String) -> String:
 		return ""
 	var s: Dictionary = _slots[key]
 	return s["anim"]
+
+
+## For an anim sheet slot: the action png (rows = directions 0..4, columns = frames). Empty when not given.
+func png_of(key: String) -> String:
+	if not _slots.has(key):
+		return ""
+	var s: Dictionary = _slots[key]
+	return s["png"]
 
 
 func is_sheet(key: String) -> bool:
@@ -262,5 +325,16 @@ func missing_keys() -> PackedStringArray:
 	for k: String in expected_keys():
 		var p: String = path_of(k)
 		if p.is_empty() or not FileAccess.file_exists(p):
+			out.append(k)
+	return out
+
+
+## Expected anim keys whose slot is absent or whose act json or png does not exist.
+func missing_anim_keys() -> PackedStringArray:
+	var out: PackedStringArray = []
+	for k: String in expected_anim_keys():
+		var act: String = path_of(k)
+		var png: String = png_of(k)
+		if act.is_empty() or png.is_empty() or not FileAccess.file_exists(act) or not FileAccess.file_exists(png):
 			out.append(k)
 	return out

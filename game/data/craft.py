@@ -37,7 +37,7 @@ NODE_FIRE = 7             # station: cooking recipes
 N_NODE_KINDS = 8
 N_GATHER_KINDS = 6        # kinds 0..5 are gatherable; 6..7 are stations
 NODE_NAMES = ("copper ore", "iron ore", "coal", "fishing spot", "herb", "tree", "furnace", "cooking fire")
-NODE_VIEW_KIND_BASE = 200  # proposed view-layer kind code: 200 + node kind (view.py is lead-owned)
+NODE_VIEW_KIND_BASE = 400  # view kind 400 + node kind: drops are view kinds 100 + item id (100..399), game/view.py
 
 # ---- item ids ------------------------------------------------------------------------------------
 ITEM_COPPER_ORE = 100

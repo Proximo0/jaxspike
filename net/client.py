@@ -5,7 +5,7 @@ import threading
 import numpy as np
 import websockets
 
-from net.protocol import decode, decode_map, encode
+from net.protocol import decode, decode_map, decode_snap_bin, encode
 
 
 def apply_snap(ents: dict, snap: dict) -> None:
@@ -19,17 +19,19 @@ def apply_snap(ents: dict, snap: dict) -> None:
 
 
 class NetClient(threading.Thread):
-    def __init__(self, host: str, port: int, name: str, password: str | None = None, create: bool = False):
+    def __init__(self, host: str, port: int, name: str, password: str | None = None, create: bool = False,
+                 fmt: str = "json"):
         super().__init__(daemon=True)
         self.host, self.port, self.name_ = host, port, name
         self.password, self.create = password, create  # None: name-only login (server compat path)
+        self.fmt = fmt  # snap encoding asked for at login: "json" or "bin" (net.protocol.SNAP_FORMATS)
         self.welcome = None
         self.error = None
         self.connected = False
         self.terrain = None  # int8 [MAP, MAP] indexed [x, y], decoded from welcome
         self.pz = None  # bool [MAP, MAP] indexed [x, y]
         self.snap_count = 0  # snap messages received
-        self.snap_bytes = 0  # characters of snap text received (JSON is ASCII)
+        self.snap_bytes = 0  # bytes of snap frames received (JSON is ASCII, so characters == bytes)
         self._snap = None
         self._ents = {}
         self._lock = threading.Lock()
@@ -88,6 +90,8 @@ class NetClient(threading.Thread):
             login = {"t": "login", "name": self.name_}
             if self.password is not None:
                 login["password"], login["create"] = self.password, self.create
+            if self.fmt != "json":
+                login["format"] = self.fmt
             await ws.send(encode(login))
             msg = decode(await ws.recv())
             if msg is None or msg["t"] == "error":
@@ -107,7 +111,7 @@ class NetClient(threading.Thread):
 
             async def recv_loop():
                 async for text in ws:
-                    m = decode(text)
+                    m = decode_snap_bin(text) if isinstance(text, bytes) else decode(text)
                     if m is None:
                         continue
                     if m["t"] == "snap":

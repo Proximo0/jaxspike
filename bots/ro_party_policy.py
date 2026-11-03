@@ -1,4 +1,4 @@
-"""Bot party policy: one party per home town. Pure, read-only on the world."""
+"""Bot party policy: parties per home town (a new one when the town's parties are full). Pure, read-only."""
 import jax.numpy as jnp
 
 from game.config import MAX_PLAYERS
@@ -17,8 +17,10 @@ def party_inputs(world, key):
     live = pl["active"] & ~pl["dead"]
     in_party = pid >= 0
 
-    # The lowest living partyless uninvited slot of a town creates, only while the town has no party.
-    town_has_party = jnp.zeros((NT,), jnp.bool_).at[_TOWN].max(pl["active"] & in_party)
+    # The lowest living partyless uninvited slot of a town creates, only while no party of the town has room
+    # (a town with more bots than PARTY_MAX_MEMBERS gets a second party once the first is full).
+    room_pl = in_party & (st["member_count"][jnp.clip(pid, 0, MAX_PARTIES - 1)] < PARTY_MAX_MEMBERS)
+    town_has_party = jnp.zeros((NT,), jnp.bool_).at[_TOWN].max(pl["active"] & room_pl)
     free = live & ~in_party & (inv_from == -1)
     low_free = jnp.full((NT,), MAX_PLAYERS, jnp.int32).at[_TOWN].min(jnp.where(free, _PIDX, MAX_PLAYERS))
     create = free & (_PIDX == low_free[_TOWN]) & ~town_has_party[_TOWN]

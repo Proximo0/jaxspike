@@ -1,7 +1,8 @@
 import jax
 import jax.numpy as jnp
 
-from game.config import MONSTER_AGGRO_RANGE, MONSTER_HP
+from game import ro_monster_modes
+from game.config import MAX_MONSTERS, MONSTER_AGGRO_RANGE, MONSTER_HP
 from game.data.monsters import AGGRO, KIND_BY_NAME, MOVE_TICKS
 from game.monsters import monster_ai
 from game.state import make_empty_world
@@ -20,6 +21,7 @@ def build(players=(), monsters=(), walls=(), pz=(), kind=1, tick=0):
         m["hp"] = m["hp"].at[i].set(20)
         m["kind"] = m["kind"].at[i].set(kind)  # default 1 = Orc Warrior: aggro, moves every tick
     w["tick"] = jnp.int32(tick)
+    w["monai"] = {**w["monai"], "wander_in": jnp.full_like(w["monai"]["wander_in"], 1000)}  # no random walks here
     for x, y in walls:
         w["walls"] = w["walls"].at[x, y].set(1)
     for x, y in pz:
@@ -33,7 +35,7 @@ def mpos(w, i):
 
 def test_moves_toward_player_in_range():
     w = monster_ai(build(players=[(20, 20)], monsters=[(24, 21)]))
-    assert mpos(w, 0) == (23, 21)  # longer axis is x
+    assert mpos(w, 0) == (23, 20)  # 8 directions: diagonal while both axes differ
 
 
 def test_ignores_player_outside_aggro():
@@ -60,8 +62,8 @@ def test_monster_does_not_enter_pz():
 
 
 def test_monster_steps_around_pz_tile():
-    w = monster_ai(build(players=[(20, 20)], monsters=[(24, 21)], pz=[(23, 21)]))
-    assert mpos(w, 0) == (24, 20)
+    w = monster_ai(build(players=[(20, 20)], monsters=[(24, 21)], pz=[(23, 20)]))
+    assert mpos(w, 0) == (23, 21)  # the diagonal is a pz tile, so the x step
 
 
 def test_does_not_step_onto_player_or_monster():
@@ -101,10 +103,10 @@ def test_dead_monster_does_not_move():
 
 
 def test_lowest_index_wins_collision():
-    # m0 (dx=2, dy=-1) steps in x and m1 (dx=1, dy=-2) steps in y: both want (23,21).
-    w = monster_ai(build(players=[(24, 20)], monsters=[(22, 21), (23, 22)]))
-    assert mpos(w, 0) == (23, 21)
-    assert mpos(w, 1) == (23, 22)
+    # m0 (dx=2, dy=-1) and m1 (dx=2, dy=1) both step diagonally onto (23,20).
+    w = monster_ai(build(players=[(24, 20)], monsters=[(22, 21), (22, 19)]))
+    assert mpos(w, 0) == (23, 20)
+    assert mpos(w, 1) == (22, 19)
 
 
 def test_chase_does_not_step_onto_reviving_monster():
@@ -140,23 +142,28 @@ def test_non_aggro_kind_never_chases():
         k = KIND_BY_NAME[name]
         assert not bool(AGGRO[k])
         for tick in range(4):
-            w = monster_ai(build(players=[(20, 20)], monsters=[(24, 21)], kind=k, tick=tick))
+            w = build(players=[(20, 20)], monsters=[(24, 21)], kind=k, tick=tick)
+            w["monsters"]["hp"] = w["monsters"]["hp"].at[0].set(MONSTER_HP[k])  # unhurt: a hurt one fights back
+            w["monai"] = {**ro_monster_modes.make_state(), "wander_in": jnp.full((MAX_MONSTERS,), 1000, jnp.int32)}
+            w = monster_ai(w)
             assert mpos(w, 0) == (24, 21)
 
 
 def test_aggro_kind_chases():
     k = KIND_BY_NAME["Thief Bug"]
     assert bool(AGGRO[k]) and int(MOVE_TICKS[k]) == 1
-    assert mpos(monster_ai(build(players=[(20, 20)], monsters=[(24, 21)], kind=k)), 0) == (23, 21)
+    assert mpos(monster_ai(build(players=[(20, 20)], monsters=[(24, 21)], kind=k)), 0) == (23, 20)
 
 
 def test_move_ticks_gate_the_step():
-    for name in ("Zombie", "Skeleton", "Orc Warrior"):
-        k = KIND_BY_NAME[name]
+    slow = [k for k in range(len(MONSTER_HP)) if bool(AGGRO[k]) and int(MOVE_TICKS[k]) > 1][:2]
+    assert slow  # pick from the table: ro-fidelity edits the aggro and move_ticks numbers
+    for k in slow + [KIND_BY_NAME["Orc Warrior"]]:
+        name = k
         mt = int(MOVE_TICKS[k])
-        assert bool(AGGRO[k])
         for tick in range(2 * mt + 1):
-            w = monster_ai(build(players=[(20, 20)], monsters=[(24, 21)], kind=k, tick=tick))
-            expect = (23, 21) if tick % mt == 0 else (24, 21)
+            w = build(players=[(20, 20)], monsters=[(24, 21)], kind=k, tick=tick)
+            w = monster_ai({k2: v for k2, v in w.items() if k2 != "move"})  # legacy pace: no move block
+            expect = (23, 20) if tick % mt == 0 else (24, 21)
             assert mpos(w, 0) == expect, (name, tick)
     assert max(int(v) for v in MOVE_TICKS) > 1

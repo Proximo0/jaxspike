@@ -14,7 +14,7 @@ def test_encode_decode_round_trip_and_rejects():
 def test_validate_client():
     assert validate_client({"t": "input", "move": 4, "attack": True, "eat": False, "junk": 1}) == \
         {"t": "input", "move": 4, "attack": True, "eat": False}
-    assert validate_client({"t": "input", "move": 5, "attack": True, "eat": False}) is None
+    assert validate_client({"t": "input", "move": 9, "attack": True, "eat": False}) is None
     assert validate_client({"t": "input", "move": 1, "attack": 1, "eat": False}) is None
     assert validate_client({"t": "walk_to", "x": MAP, "y": 0}) is None
     assert validate_client({"t": "walk_to", "x": 3, "y": 4}) == {"t": "walk_to", "x": 3, "y": 4}
@@ -137,9 +137,9 @@ def test_validate_ro_messages_accept(msg, want):
 @pytest.mark.parametrize("msg", [
     {"t": "allot", "stat": 6}, {"t": "allot", "stat": -1}, {"t": "allot", "stat": True}, {"t": "allot"},
     {"t": "allot", "stat": "1"}, {"t": "job", "job": 0}, {"t": "job", "job": 7}, {"t": "job", "job": 1.0},
-    {"t": "skill", "id": 0, "target": -1}, {"t": "skill", "id": 33, "target": -1},
+    {"t": "skill", "id": 0, "target": -1}, {"t": "skill", "id": 42, "target": -1},
     {"t": "skill", "id": 4, "target": -2}, {"t": "skill", "id": 4, "target": N_ENTITIES}, {"t": "skill", "id": 4},
-    {"t": "skill", "id": True, "target": -1}, {"t": "learn", "id": 0}, {"t": "learn", "id": 33},
+    {"t": "skill", "id": True, "target": -1}, {"t": "learn", "id": 0}, {"t": "learn", "id": 42},
     {"t": "use_item", "slot": "1"}, {"t": "equip", "slot": True}, {"t": "refine"}, {"t": "drop", "slot": 1.5},
     {"t": "craft", "recipe": 0}, {"t": "craft", "recipe": 99}, {"t": "craft"},
     {"t": "party", "op": "kick", "target": None}, {"t": "party", "op": "invite", "target": 5}, {"t": "party"},
@@ -151,6 +151,7 @@ def test_validate_ro_messages_reject(msg):
     assert validate_client(msg) is None
 
 def test_welcome_static_tables():
+    from game import world_layout
     from game.data import items as item_data
     st = build_welcome_static()
     w = decode(encode(welcome_message(2, 120, ("a", "b"), st)))  # JSON round trip
@@ -162,13 +163,13 @@ def test_welcome_static_tables():
     world = w["world"]
     assert [t["name"] for t in world["towns"]][0] == "Prontera" and len(world["towns"]) == 5
     assert world["towns"][0]["kafra"] == [264, 256] and world["towns"][0]["station"] == [248, 256]
-    assert world["dungeons"][0]["box"] == [228, 18, 284, 74] and len(world["warps"]) == 4
+    assert world["dungeons"][0]["box"] == [228, 18, 284, 74] and len(world["warps"]) == len(world_layout.WARPS)
     assert world["warps"][0] == {"from": [256, 77], "to": [256, 71]}
-    assert world["terrain_names"][8:] == ["warp", "kafra", "station", "cave"] and len(world["terrain_names"]) == 12
+    assert world["terrain_names"][8:] == ["warp", "kafra", "station", "cave", "shop"] and len(world["terrain_names"]) == 13
     assert len(world["monsters"]) == 20 and world["monsters"][18]["mvp"] is True and world["monsters"][0]["name"] == "Poring"
     assert len(w["items"]) == item_data.N_ITEMS and w["items"][5]["id"] == 5
     assert w["drops"][0]["kind"] == 0 and "drops" in w["drops"][0]
-    assert len(w["skills"]["names"]) == 33 and len(w["skills"]["list"]) == 32 and w["skills"]["jobs"][1] == "Swordsman"
+    assert len(w["skills"]["names"]) == 42 and len(w["skills"]["list"]) == 41 and w["skills"]["jobs"][1] == "Swordsman"
     bash = next(s for s in w["skills"]["list"] if s["name"] == "Bash")
     assert len(bash["levels"]) == bash["max_level"] and set(bash["levels"][0]) == \
         {"sp", "cast", "cooldown", "range", "power", "buff_ticks"}
@@ -228,3 +229,71 @@ def test_exp_next_is_zero_at_the_caps():
     st = {**w["stats"], "base_level": w["stats"]["base_level"].at[0].set(99), "job_level": w["stats"]["job_level"].at[0].set(10)}
     s = snapshot(_ro_pull({**w, "stats": st}, [0]), 0, {}, None, 1, 0, True)
     assert s["you"]["base_exp_next"] == 0 and s["you"]["job_exp_next"] == 0  # Novice job cap is 10
+
+
+# ----- netperf2: batched snaps, binary format, you on change, node rows -----
+from game.view import NODE_KIND_BASE  # noqa: E402
+from net.protocol import BIN_ROW, build_snaps, decode_snap_bin, you_delta, you_full  # noqa: E402
+
+N0 = 512 + 4096 + 2048  # first node id (MAX_PLAYERS + MAX_MONSTERS + MAX_DROPS)
+
+
+def _node_world():
+    w = _world()
+    n = dict(w["craft"]["nodes"])
+    n = {**n, "pos": n["pos"].at[2].set(np.array([101, 98])), "kind": n["kind"].at[2].set(4),
+         "placed": n["placed"].at[2].set(True), "active": n["active"].at[2].set(False)}
+    return {**w, "craft": {**w["craft"], "nodes": n}}
+
+
+def test_node_rows_are_id_kind_pos_hp():
+    pull = _pull(_node_world(), [0])
+    rows = entity_rows(np.array([N0 + 2]), pull["tab"], {})
+    assert rows == [{"id": N0 + 2, "kind": NODE_KIND_BASE + 4, "pos": [101, 98], "hp": 0}]
+    s = snapshot(pull, 0, {}, None, 1, 0, True)
+    assert any(e["id"] == N0 + 2 for e in s["ents"])  # in view: sent like any entity
+
+
+def test_build_snaps_json_matches_snapshot():
+    pull = _ro_pull(_node_world(), [0, 7])
+    names = {0: "me", 7: "bob"}
+    views = [(sl, you_full(pull, sl, 0), "hi" if sl else None, sl == 0, "json") for sl in (0, 7)]
+    msgs = build_snaps(pull, views, 9, names)
+    for (sl, you, notice, full, _), text in zip(views, msgs):
+        want = snapshot(pull, sl, names, notice, 9, 0, full)
+        got = decode(text)
+        assert got == {**want, "v": PROTOCOL_VERSION}
+
+
+def test_binary_snap_decodes_to_the_json_snap():
+    pull = _ro_pull(_node_world(), [0, 7])
+    pull["gone"] = np.array(pull["gone"]); pull["gone"][0][:2] = [3, N0 + 5]
+    names = {0: "me", 7: "bob"}
+    views = [(0, you_full(pull, 0, 0), "hi", True, "bin"), (0, you_full(pull, 0, 0), "hi", True, "json")]
+    data, text = build_snaps(pull, views, 9, names)
+    assert isinstance(data, bytes) and isinstance(text, str)
+    assert decode_snap_bin(data) == decode(text)
+    n = len(decode(text)["ents"])
+    assert len(data) < len(text) and BIN_ROW.itemsize == 30 and n >= 5
+    assert decode_snap_bin(data[:-1]) is None and decode_snap_bin(b"XX" + data[2:]) is None
+    assert decode_snap_bin(b"") is None
+
+
+def test_you_delta_sends_changes_only():
+    last = {}
+    you = {"pos": [1, 2], "hp": 5, "inv": [1], "zeny": 3}
+    assert you_delta(you, last, True) == you
+    assert you_delta(dict(you), last, False) == {"pos": [1, 2], "hp": 5}
+    assert you_delta({**you, "zeny": 4}, last, False) == {"pos": [1, 2], "hp": 5, "zeny": 4}
+    assert you_delta({**you, "zeny": 4}, last, False) == {"pos": [1, 2], "hp": 5}
+    assert you_delta({**you, "new": 1}, last, False)["new"] == 1   # a key never sent before goes out
+    assert you_delta({**you, "zeny": 4}, last, True)["inv"] == [1]  # full: everything again
+
+
+def test_validate_login_format():
+    assert validate_client({"t": "login", "name": "a", "format": "bin"})["format"] == "bin"
+    assert validate_client({"t": "login", "name": "a", "format": "json"})["format"] == "json"
+    assert "format" not in validate_client({"t": "login", "name": "a"})
+    assert validate_client({"t": "login", "name": "a", "format": "xml"}) is None
+    assert validate_client({"t": "login", "name": "a", "format": 1}) is None
+

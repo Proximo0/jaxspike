@@ -1,0 +1,37 @@
+# Windows build of the Godot client, on manual dispatch only (Actions tab -> export-windows -> Run workflow).
+# Uses the pinned Linux editor from the setup-godot action and client/tools/export_windows.sh, which downloads the
+# Windows export templates itself. The zip is uploaded as a workflow artifact. No credentials are injected: the
+# git-ignored config/*credentials* files do not exist on the runner, so an online-service build needs the owner's PC
+# (client/tools/export_windows_pc.sh).
+name: export-windows
+
+on:
+  workflow_dispatch:
+
+env:
+  GODOT_VERSION: 4.7.2
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-godot
+      - name: Import project
+        shell: bash
+        run: |
+          set -o pipefail
+          godot --headless --path . --import > /tmp/import.log 2>&1 || { cat /tmp/import.log; exit 1; }
+      - name: Export Windows build
+        shell: bash
+        run: tools/export_windows.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Jaxspike-windows
+          path: client/build/Jaxspike-windows.zip
+          if-no-files-found: error
+          retention-days: 14

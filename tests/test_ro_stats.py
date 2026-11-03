@@ -67,7 +67,7 @@ def _veteran(w, slot, level=20, job=S.JOB_SWORDSMAN, job_level=20):
 
 def test_fresh_novice_derived():
     d = ro_stats.derived(_world())
-    assert 150 <= int(d["max_hp"][0]) <= 153
+    assert int(d["max_hp"][0]) == 40  # RO pre-re Novice level 1 = 40 HP
     assert int(d["hit"][0]) == 177
     assert int(d["flee"][0]) == 102
     assert 4 <= int(d["aspd_ticks"][0]) <= 7

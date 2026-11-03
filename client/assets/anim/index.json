@@ -1,0 +1,52 @@
+{
+ "version": 1,
+ "jobs": [
+  "novice",
+  "swordsman",
+  "mage",
+  "archer",
+  "acolyte",
+  "thief",
+  "merchant"
+ ],
+ "monsters": [
+  "poring",
+  "orc_warrior",
+  "fabre",
+  "lunatic",
+  "drops",
+  "poporing",
+  "willow",
+  "rocker",
+  "spore",
+  "thief_bug",
+  "zombie",
+  "wolf",
+  "skeleton",
+  "peco_peco",
+  "hode",
+  "soldier_skeleton",
+  "bigfoot",
+  "mummy",
+  "golden_thief_bug",
+  "eddga"
+ ],
+ "player_actions": [
+  "idle",
+  "walk",
+  "sit",
+  "pickup",
+  "standby",
+  "attack",
+  "hurt",
+  "dead",
+  "cast"
+ ],
+ "monster_actions": [
+  "idle",
+  "walk",
+  "attack",
+  "hurt",
+  "dead"
+ ]
+}

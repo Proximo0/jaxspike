@@ -22,7 +22,7 @@ Every landed player hit is reported with ro_mvp.record_damage(world, attacker_id
 import jax
 import jax.numpy as jnp
 
-from game import ro_items, ro_mvp, ro_skills, ro_stats
+from game import ro_anim, ro_items, ro_mvp, ro_skills, ro_stats
 from game.config import MAP, MONSTER_ATTACK_COOLDOWN, MONSTER_HP, MONSTER_RESPAWN_TICKS, MAX_PLAYERS
 from game.data import monsters as mdata
 from game.data.elements import MONSTER_ELEMENT, elem_mult
@@ -88,7 +88,7 @@ def combat(world, inputs):
     # Player auto-attacks on the nearest adjacent monster.
     mtable, _ = build_grid(m["pos"], m["active"])
     tgt, dist = nearest_in_block(mtable, p["pos"], m["pos"])
-    swing = alive & inputs["attack"] & (p["attack_cd"] == 0) & (dist <= 1) & m["active"][tgt]
+    swing = alive & inputs["attack"] & (p["attack_cd"] == 0) & (dist <= ro_items.weapon_range(world)) & m["active"][tgt]
     tkind = kind[tgt]
     atk = d["atk"] + eq["weapon_atk"] + mod["atk_flat"]
     atk = atk * (100 + mod["atk_pct"]) // 100
@@ -152,4 +152,5 @@ def combat(world, inputs):
         "attack_cd": m_cd,
     }
     world = {**world, "players": players, "monsters": monsters}
+    world = ro_anim.on_combat(world, swing, tgt, mswing, ptgt, dmg_m, dmg_p)  # ro-anim: attack, hurt, hit numbers
     return ro_mvp.record_damage(world, pidx, tgt, dmg_p_out)

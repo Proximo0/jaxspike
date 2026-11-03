@@ -60,8 +60,8 @@ func run() -> Array:
 	var wl: Dictionary = _welcome()
 	link.push_inbound(Codec.encode(wl))
 	var nodes: Array = [
-		{"id": 9000, "kind": 201, "pos": [10, 11], "hp": 1},
-		{"id": 9001, "kind": 206, "pos": [9, 10], "hp": 1},
+		{"id": 9000, "kind": 401, "pos": [10, 11], "hp": 1},
+		{"id": 9001, "kind": 406, "pos": [9, 10], "hp": 1},
 	]
 	link.push_inbound(_snap(1, {"craft": {"level": [1, 1, 1, 1, 1, 1], "exp": [0, 25, 0, 0, 0, 0]},
 			"members": ["Odin", "Bob"]}, nodes))
@@ -112,7 +112,7 @@ func run() -> Array:
 	rows.append(row("gather_adjacent", _same(_last(link), {"t": "gather"}), link.sent[link.sent.size() - 1]))
 
 	# craft/members omitted from the next snap: cached values stay.
-	link.push_inbound(_snap(2, {}, [{"id": 9000, "kind": 201, "pos": [30, 30], "hp": 1}]))
+	link.push_inbound(_snap(2, {}, [{"id": 9000, "kind": 401, "pos": [30, 30], "hp": 1}]))
 	session.poll()
 	await host.get_tree().process_frame
 	await host.get_tree().process_frame

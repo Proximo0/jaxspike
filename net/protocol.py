@@ -1,8 +1,10 @@
 """Wire protocol v2: codec, message validation, map blobs and per-viewer delta snapshots (numpy, json, zlib)."""
 import base64
 import json
+import struct
 import zlib
 
+import jax.numpy as jnp
 import numpy as np
 
 from game.config import INV_SLOTS, MAP, N_ENTITIES, PLAYER_MAX_HP, PROTOCOL_VERSION, VIEW_H, VIEW_W
@@ -14,7 +16,8 @@ from game.data import monsters as monster_data
 from game.data import skills as skill_data
 from game.data import stats as stats_data
 from game.data import terrain as terrain_data
-from game import world_layout
+from game import ro_shop, world_layout
+from game.view import N_VIEW_ENTITIES, NODE_KIND_BASE
 from net.chat import CHAT_KINDS, validate_chat
 
 PARTY_OPS = ("create", "leave", "invite", "accept")
@@ -56,8 +59,12 @@ def validate_client(msg: dict) -> dict | None:
             if not isinstance(msg["create"], bool):
                 return None
             out["create"] = msg["create"]
+        if "format" in msg:  # snap encoding for this connection; absent = "json"
+            if msg["format"] not in SNAP_FORMATS:
+                return None
+            out["format"] = msg["format"]
         return out
-    if t == "input" and _is_int(msg.get("move")) and 0 <= msg["move"] <= 4 \
+    if t == "input" and _is_int(msg.get("move")) and 0 <= msg["move"] <= 8 \
             and isinstance(msg.get("attack"), bool) and isinstance(msg.get("eat"), bool):
         return {"t": t, "move": msg["move"], "attack": msg["attack"], "eat": msg["eat"]}
     if t == "walk_to" and all(_is_int(msg.get(k)) and 0 <= msg[k] < MAP for k in ("x", "y")):
@@ -77,8 +84,10 @@ def _validate_ro(t, msg: dict) -> dict | None:
     if t == "learn":
         ok = _is_int(msg.get("id")) and 1 <= msg["id"] < skill_data.N_SKILLS
         return {"t": t, "id": msg["id"]} if ok else None
-    if t in ("use_item", "equip", "refine", "drop"):  # any int: the engine ignores slots outside 0..INV_SLOTS-1
+    if t in ("use_item", "equip", "refine", "drop", "sell"):  # any int: the engine ignores slots outside 0..INV_SLOTS-1
         return {"t": t, "slot": msg["slot"]} if _is_int(msg.get("slot")) else None
+    if t == "buy":  # docs/items_wire.md: item id; the engine ignores ids the town does not stock
+        return {"t": t, "item": msg["item"]} if _is_int(msg.get("item")) else None
     if t == "gather":
         return {"t": t}
     if t == "craft":
@@ -147,6 +156,19 @@ def build_welcome_static() -> dict:
     dungeons = [{"idx": i, "name": d[3], "box": boxes[i]} for i, d in enumerate(world_layout.DUNGEONS)]
     src, dst = world_layout.warp_tiles()
     warps = [{"from": a, "to": b} for a, b in zip(src.tolist(), dst.tolist())]
+    # ro-world2 (docs/world_wire.md): zones, portals, shop tiles, kafra teleport, save points
+    zb = world_layout.zone_boxes().tolist()
+    zones = [{"id": i, "name": z[0], "kind": world_layout.ZONE_KINDS[z[1]], "box": zb[i], "levels": list(z[3]),
+              "music": z[4]} for i, z in enumerate(world_layout.ZONES)]
+    psrc, pdst = world_layout.portal_warp_tiles()
+    pzone = np.asarray(world_layout.zone_of(jnp.asarray(np.concatenate([psrc, pdst])))).reshape(2, -1)
+    portals = [{"from": a, "to": b, "zones": [int(pzone[0, k]), int(pzone[1, k])]}
+               for k, (a, b) in enumerate(zip(psrc.tolist(), pdst.tolist()))]
+    st, stown = world_layout.shop_tiles()
+    shop_tiles = [{"tile": t, "town": int(k)} for t, k in zip(st.tolist(), stown.tolist())]
+    arrive = world_layout.kafra_teleport_dest().tolist()
+    kafra_teleport = [{"from": a, "to": b, "zeny": z, "arrive": arrive[b]} for a, b, z in world_layout.KAFRA_TELEPORT]
+    save_points = world_layout.save_point_tiles().tolist()
     monsters = [{"kind": k, "name": m.name, "hp": m.hp, "level": m.level, "mvp": bool(m.mvp), "size": int(m.size)}
                 for k, m in enumerate(monster_data.MONSTERS)]
     cd = craft_data
@@ -158,7 +180,10 @@ def build_welcome_static() -> dict:
               "product": int(cd.NODE_PRODUCT[k])} for k in range(cd.N_NODE_KINDS)]
     return {
         "world": {"towns": towns, "dungeons": dungeons, "warps": warps,
-                  "terrain_names": list(terrain_data.TERRAIN_NAMES), "monsters": monsters},
+                  "terrain_names": list(terrain_data.TERRAIN_NAMES), "monsters": monsters,
+                  "zones": zones, "portals": portals, "shops": shop_tiles, "kafra_teleport": kafra_teleport,
+                  "save_points": save_points},
+        "shops": ro_shop.stock_for_client(),  # docs/items_wire.md: per-town NPC stock
         "items": item_data.table_for_client(), "drops": drops_data.table_for_client(),
         "skills": {"names": list(sk.SKILL_NAME), "jobs": list(stats_data.JOB_NAMES), "list": skill_list},
         "elements": list(elem_data.ELEM_NAME), "elem_mult": np.asarray(elem_data.ELEM_MULT).tolist(),
@@ -183,14 +208,26 @@ def welcome_message(slot: int, tick_ms: int, maps: tuple[str, str], static: dict
     return msg
 
 
+_ANIM_COLS = ("action", "face", "start_tick", "dur_ms", "speed_ms", "hit")
+_ANIM_KEYS = ("a", "d", "t", "m", "s")
+
+
 def entity_rows(ids: np.ndarray, tab: dict, names: dict) -> list[dict]:
     """JSON entities for the global ids (numpy int array, no padding) from the pulled entity table."""
     pos, hp = tab["pos"][ids].tolist(), tab["hp"][ids].tolist()
     max_hp, kind = tab["max_hp"][ids].tolist(), tab["kind"][ids].tolist()
+    anim = [tab[k][ids].tolist() for k in _ANIM_COLS] if "action" in tab else None
     out = []
     for i, e in enumerate(ids.tolist()):
         k = kind[i]
+        if k >= NODE_KIND_BASE:  # netperf2: resource node rows are {id, kind, pos, hp} (docs/craft_wire.md)
+            out.append({"id": e, "kind": k, "pos": pos[i], "hp": hp[i]})
+            continue
         ent = {"id": e, "kind": k, "pos": pos[i], "hp": hp[i], "max_hp": max_hp[i]}
+        if anim is not None and k < 100:  # docs/anim_wire.md: a, d, t, m, s and h only on a hit this tick
+            ent.update(zip(_ANIM_KEYS, (col[i] for col in anim[:5])))
+            if anim[5][i]:
+                ent["h"] = anim[5][i]
         if k == 0:
             ent["name"] = names.get(e, "bot")
         elif k >= 100:
@@ -247,7 +284,30 @@ def ro_you(pull: dict, slot: int) -> dict:
         "equip": it["equip"][slot].tolist(),
         "craft": {"level": cr["level"][slot].tolist(), "exp": cr["exp"][slot].tolist()},
         "party": int(pa["party_id"][slot]), "leader": bool(pa["leader"][slot]),
+        **_anim_you(pull, slot),
     }
+
+
+def _anim_you(pull: dict, slot: int) -> dict:
+    """docs/anim_wire.md: speed_ms from the entity table, amotion_ms from pull["anim"], after_delay (ticks) from the
+    skills rows; 0 while the server does not pull them yet."""
+    tab, anim, sk = pull.get("tab", {}), pull.get("anim", {}), pull["ro"]["skills"]
+    it = pull["ro"]["items"]
+    return {"speed_ms": int(tab["speed_ms"][slot]) if "speed_ms" in tab else 0,
+            "range": int(it["range"][slot]) if "range" in it else 1,  # docs/items_wire.md: weapon range in cells
+            "amotion_ms": int(anim["amotion_ms"][slot]) if "amotion_ms" in anim else 0,
+            "after_delay": int(sk["after_delay"][slot]) if "after_delay" in sk else 0}
+
+
+def you_full(pull: dict, slot: int, town: int) -> dict:
+    """Every `snap.you` field for one viewer (v1 fields, then the RO fields when the pull has them)."""
+    p = pull["players"]
+    you = {"pos": p["pos"][slot].tolist(), "hp": int(p["hp"][slot]), "max_hp": PLAYER_MAX_HP,
+           "kills": int(p["kills"][slot]), "deaths": int(p["deaths"][slot]),
+           "inv": p["inv"][slot][:INV_SLOTS].tolist(), "town": int(town), "safe": bool(pull["safe"][slot])}
+    if "ro" in pull:
+        you.update(ro_you(pull, slot))
+    return you
 
 
 def snapshot(pull: dict, slot: int, names: dict, notice: str | None, tick: int, town: int, full: bool,
@@ -257,14 +317,10 @@ def snapshot(pull: dict, slot: int, names: dict, notice: str | None, tick: int, 
     pull: {"send", "gone": int [MAX_VIEWERS, VIEW_K] with -1 pads, "tab": entity table, "players": arrays, "safe",
     "ro": RO block rows (optional: without it the v1 `you` fields are sent)}. `you_extra` is merged into `you`
     (the server's change-detected `members` / `storage`)."""
-    p = pull["players"]
     send, gone = pull["send"][slot], pull["gone"][slot]
-    you = {"pos": p["pos"][slot].tolist(), "hp": int(p["hp"][slot]), "max_hp": PLAYER_MAX_HP,
-           "kills": int(p["kills"][slot]), "deaths": int(p["deaths"][slot]),
-           "inv": p["inv"][slot][:INV_SLOTS].tolist(), "town": int(town), "safe": bool(pull["safe"][slot])}
+    you = you_full(pull, slot, town)
     ents = entity_rows(send[send >= 0], pull["tab"], names)
     if "ro" in pull:
-        you.update(ro_you(pull, slot))
         max_hp = pull["ro"]["derived"]["max_hp"]
         for e in ents:
             if e["kind"] == 0:  # the view table carries the constant PLAYER_MAX_HP for players
@@ -273,3 +329,133 @@ def snapshot(pull: dict, slot: int, names: dict, notice: str | None, tick: int, 
         you.update(you_extra)
     return {"t": "snap", "tick": tick, "you": you, "ents": ents,
             "gone": gone[gone >= 0].tolist(), "notice": notice, "full": bool(full)}
+
+
+# ----- netperf2: change-only `you`, one batched snap pass, binary snaps (docs/proto_v2_notes.md) -----
+SNAP_FORMATS = ("json", "bin")
+YOU_ALWAYS = ("pos", "hp")  # in every `you`: the Godot store rebuilds pos from each `you` it merges
+_MISSING = object()
+_JSON = json.JSONEncoder(separators=(",", ":"))
+
+
+def you_delta(you: dict, last: dict, full: bool) -> dict:
+    """The `you` keys to send: all on `full`, else pos, hp and every key whose value differs from `last` (this
+    slot's last-sent values, updated in place). The client merges `you` over its previous copy."""
+    if full:
+        last.clear()
+        last.update(you)
+        return you
+    out = {}
+    for k, v in you.items():
+        if k in YOU_ALWAYS or last.get(k, _MISSING) != v:
+            out[k] = last[k] = v
+    return out
+
+
+# Binary snap (login "format": "bin"), little-endian, no padding. Header (16 bytes):
+#   0 "JS" | 2 u8 layout (1) | 3 u8 flags: bit0 full, bit1 anim columns valid | 4 u32 tick | 8 u16 n_ents |
+#   10 u16 n_gone | 12 u32 json_len
+# then json_len bytes of UTF-8 JSON {"you": {...}, "notice": str or null, "names": {"<id>": name}} (names: the
+# human players among the ents; any other player is "bot"), then n_ents BIN_ROW records, then n_gone u16 ids.
+# Decoded like JSON: name for kind 0, mkind = kind - 1 for 1..99, item = kind - 100 for 100..NODE_KIND_BASE-1,
+# a/d/t/m/s for kind < 100 when flag bit1 is set, h only when != 0.
+BIN_MAGIC = b"JS"
+BIN_LAYOUT = 1
+BIN_HEADER = np.dtype([("magic", "S2"), ("layout", "u1"), ("flags", "u1"), ("tick", "<u4"), ("n_ents", "<u2"),
+                       ("n_gone", "<u2"), ("json_len", "<u4")])
+BIN_ROW = np.dtype([("id", "<u2"), ("kind", "<u2"), ("x", "<u2"), ("y", "<u2"), ("hp", "<i4"), ("max_hp", "<i4"),
+                    ("t", "<i4"), ("h", "<i4"), ("s", "<i2"), ("m", "<i2"), ("a", "i1"), ("d", "i1")])
+_BIN_ANIM = (("a", "action"), ("d", "face"), ("t", "start_tick"), ("m", "dur_ms"), ("s", "speed_ms"), ("h", "hit"))
+assert N_VIEW_ENTITIES < 2 ** 16 and BIN_HEADER.itemsize == 16 and BIN_ROW.itemsize == 30
+_BIN_PACK = struct.Struct("<2sBBIHHI")  # BIN_HEADER for one snap, packed without numpy
+
+
+def _bin_table(tab: dict) -> np.ndarray:
+    """The whole pulled entity table as BIN_ROW records: one numpy pass per tick, shared by every viewer."""
+    rows = np.zeros(tab["kind"].shape[0], BIN_ROW)
+    rows["id"] = np.arange(rows.shape[0])
+    rows["kind"], rows["hp"], rows["max_hp"] = tab["kind"], tab["hp"], tab["max_hp"]
+    rows["x"], rows["y"] = tab["pos"][:, 0], tab["pos"][:, 1]
+    if "action" in tab:
+        for col, key in _BIN_ANIM:
+            rows[col] = tab[key]
+    return rows
+
+
+def build_snaps(pull: dict, views: list, tick: int, names: dict) -> list:
+    """Encode one tick's snaps for every viewer in one pass. `views` = [(slot, you, notice, full, fmt)] with `you`
+    already reduced by you_delta; returns the messages in the same order (str for "json", bytes for "bin"). Each
+    entity row is encoded once per tick and shared by every viewer it is sent to; the per-viewer numpy work (row
+    counts, gathers) runs once over all viewers."""
+    send_all, gone_all, tab = pull["send"], pull["gone"], pull["tab"]
+    n_send = (send_all >= 0).sum(axis=1).tolist()  # rows are compacted: valid ids first, -1 pads after
+    n_gone = (gone_all >= 0).sum(axis=1).tolist()
+    out = [None] * len(views)
+    js = [i for i, v in enumerate(views) if v[4] != "bin"]
+    bn = [i for i, v in enumerate(views) if v[4] == "bin"]
+    if js:
+        rows = send_all[[views[i][0] for i in js]]
+        uniq = np.unique(rows[rows >= 0])
+        frag = [_JSON.encode(e) for e in entity_rows(uniq, tab, names)]
+        where = np.searchsorted(uniq, rows).tolist()  # -1 pads map to junk positions, cut by n_send below
+        for j, i in enumerate(js):
+            slot, you, notice, full, _ = views[i]
+            ents = ",".join([frag[k] for k in where[j][:n_send[slot]]])
+            out[i] = (f'{{"t":"snap","tick":{tick},"you":{_JSON.encode(you)},"ents":[{ents}],'
+                      f'"gone":{_JSON.encode(gone_all[slot, :n_gone[slot]].tolist())},"notice":{_JSON.encode(notice)},'
+                      f'"full":{"true" if full else "false"},"v":{PROTOCOL_VERSION}}}')
+    if bn:
+        slots = [views[i][0] for i in bn]
+        rows = _bin_table(tab)[send_all[slots]]  # [B, VIEW_K] records; -1 pads gather the last row, cut below
+        gone_u2 = gone_all[slots].astype("<u2")
+        human = np.zeros(tab["kind"].shape[0], bool)
+        human[[e for e in names if 0 <= e < human.shape[0]]] = True
+        named = [send_all[sl, :n_send[sl]] for sl in slots]
+        anim_flag = 2 if "action" in tab else 0
+        for j, i in enumerate(bn):
+            slot, you, notice, full, _ = views[i]
+            ids, n, ng = named[j], n_send[slot], n_gone[slot]
+            body = _JSON.encode({"you": you, "notice": notice,
+                                 "names": {str(e): names[e] for e in ids[human[ids]].tolist()}}).encode()
+            hdr = _BIN_PACK.pack(BIN_MAGIC, BIN_LAYOUT, int(bool(full)) | anim_flag, tick, n, ng, len(body))
+            out[i] = b"".join((hdr, body, rows[j, :n].tobytes(), gone_u2[j, :ng].tobytes()))
+    return out
+
+
+def decode_snap_bin(data: bytes) -> dict | None:
+    """Inverse of the "bin" encoding: the same dict a JSON snap decodes to; None on a bad or truncated buffer."""
+    if len(data) < BIN_HEADER.itemsize:
+        return None
+    h = np.frombuffer(data, BIN_HEADER, 1)[0]
+    if bytes(h["magic"]) != BIN_MAGIC or int(h["layout"]) != BIN_LAYOUT:
+        return None
+    n, ng, jl, off = int(h["n_ents"]), int(h["n_gone"]), int(h["json_len"]), BIN_HEADER.itemsize
+    if len(data) != off + jl + n * BIN_ROW.itemsize + 2 * ng:
+        return None
+    try:
+        head = json.loads(data[off:off + jl].decode("utf-8"))
+    except ValueError:
+        return None
+    if not isinstance(head, dict):
+        return None
+    rows = np.frombuffer(data, BIN_ROW, n, off + jl)
+    gone = np.frombuffer(data, "<u2", ng, off + jl + n * BIN_ROW.itemsize)
+    anim, names, ents = bool(h["flags"] & 2), head.get("names", {}), []
+    for e_id, k, x, y, hp, max_hp, t, hit, s, m, a, d in rows.tolist():
+        if k >= NODE_KIND_BASE:
+            ents.append({"id": e_id, "kind": k, "pos": [x, y], "hp": hp})
+            continue
+        ent = {"id": e_id, "kind": k, "pos": [x, y], "hp": hp, "max_hp": max_hp}
+        if anim and k < 100:
+            ent.update(a=a, d=d, t=t, m=m, s=s)
+            if hit:
+                ent["h"] = hit
+        if k == 0:
+            ent["name"] = names.get(str(e_id), "bot")
+        elif k < 100:
+            ent["mkind"] = k - 1
+        else:
+            ent["item"] = k - 100
+        ents.append(ent)
+    return {"t": "snap", "v": PROTOCOL_VERSION, "tick": int(h["tick"]), "you": head.get("you", {}), "ents": ents,
+            "gone": gone.tolist(), "notice": head.get("notice"), "full": bool(h["flags"] & 1)}

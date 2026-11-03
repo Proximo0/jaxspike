@@ -1,58 +1,45 @@
-"""Loot phase: drops from kills, player pickup, ground item decay."""
-import jax
+"""Loot phase: RO drop tables for kills, zeny to the killer, player pickup, ground item decay."""
 import jax.numpy as jnp
 
-from game.config import (
-    DROP_TTL,
-    ITEM_GOLD_COIN,
-    ITEM_MEAT,
-    ITEM_NONE,
-    ITEM_SWORD,
-    LOOT_COIN_MAX,
-    LOOT_MEAT_MAX,
-    LOOT_SWORD_MAX,
-    MAP,
-    MAX_DROPS,
-    MAX_MONSTERS,
-    MAX_PLAYERS,
-)
+from game import ro_drops
+from game.config import ITEM_NONE, MAP, MAX_DROPS, MAX_MONSTERS, MAX_PLAYERS
+from game.data import items as item_data
 from game.state import next_key
 
 
-def roll_item(u):
-    """Map uniform rolls in [0, 1) to item ids using the LOOT_*_MAX thresholds in config."""
-    return jnp.where(
-        u < LOOT_COIN_MAX, ITEM_GOLD_COIN,
-        jnp.where(u < LOOT_MEAT_MAX, ITEM_MEAT, jnp.where(u < LOOT_SWORD_MAX, ITEM_SWORD, ITEM_NONE)),
-    ).astype(jnp.int32)
+def killer_of(world):
+    """int32 [MAX_MONSTERS]: the player slot credited with each monster (-1 = nobody).
+
+    The credit is ro_mvp's `top_damager` (combat reports every landed hit through ro_mvp.record_damage; the mvp
+    phase clears it after loot), kept only when that player is still logged in. Worlds without the mvp block
+    credit nobody.
+    """
+    if "mvp" not in world:
+        return jnp.full((MAX_MONSTERS,), -1, jnp.int32)
+    who = world["mvp"]["top_damager"]
+    safe = jnp.clip(who, 0, MAX_PLAYERS - 1)
+    return jnp.where((who >= 0) & world["players"]["active"][safe], who, -1).astype(jnp.int32)
 
 
 def _spawn_drops(world):
-    """Create drops for monsters that died this tick, in free drop slots."""
+    """Roll the kind's drop table for every monster that died this tick and place the hits on its tile.
+
+    Zeny goes straight to the credited killer's `items.zeny` (capped at MAX_ZENY); a kill nobody is credited with
+    leaves its zeny on the ground as GOLD_COIN (ro_drops.place_drops), which pickup turns into zeny.
+    """
     sub, world = next_key(world)
-    mons, drops = world["monsters"], world["drops"]
-    item = roll_item(jax.random.uniform(sub, (MAX_MONSTERS,)))
-    spawn = mons["died"] & (item != ITEM_NONE)
-
-    # Rank of each spawning monster among spawners, and of each free slot among free slots.
-    m_rank = jnp.cumsum(spawn) - 1
-    free = ~drops["active"]
-    f_rank = jnp.cumsum(free) - 1
-    slot_of_rank = jnp.full((MAX_DROPS,), MAX_DROPS, jnp.int32).at[
-        jnp.where(free, f_rank, MAX_DROPS)
-    ].set(jnp.arange(MAX_DROPS, dtype=jnp.int32), mode="drop")
-    # Rank beyond the free-slot count maps to MAX_DROPS, i.e. the drop is discarded.
-    slot = slot_of_rank.at[jnp.where(spawn, m_rank, MAX_DROPS)].get(
-        mode="fill", fill_value=MAX_DROPS
-    )
-
-    new = {
-        "pos": drops["pos"].at[slot].set(mons["pos"], mode="drop"),
-        "item": drops["item"].at[slot].set(item, mode="drop"),
-        "active": drops["active"].at[slot].set(True, mode="drop"),
-        "ttl": drops["ttl"].at[slot].set(DROP_TTL, mode="drop"),
-    }
-    return {**world, "drops": new}
+    items, counts, zeny = ro_drops.roll_drops(world, sub)
+    died = world["monsters"]["died"]
+    killer = killer_of(world)
+    credited = died & (killer >= 0)
+    if "items" in world:
+        it = world["items"]
+        gain = jnp.zeros((MAX_PLAYERS,), jnp.int32).at[jnp.where(credited, killer, MAX_PLAYERS)].add(
+            jnp.where(credited, zeny, 0), mode="drop")
+        new_zeny = jnp.minimum(it["zeny"] + jnp.minimum(gain, item_data.MAX_ZENY), item_data.MAX_ZENY)
+        world = {**world, "items": {**it, "zeny": new_zeny}}
+        zeny = jnp.where(credited, 0, zeny)
+    return ro_drops.place_drops(world, items, counts, zeny)
 
 
 def _pickup(world):

@@ -9,6 +9,7 @@ from game.config import (DROP_TTL, HUNT_RETREAT_HP, INV_SLOTS, ITEM_GOLD_COIN, I
                          MAX_DROPS, MAX_MONSTERS, MAX_PLAYERS, PLAYER_MAX_HP)
 from game.data import drops as D
 from game.data import items as I
+from game.data.stats import JOB_ARCHER, JOB_MAGE, JOB_NOVICE, JOB_SWORDSMAN, JOB_THIEF
 from game.state import empty_inputs, make_empty_world
 
 _phase = jax.jit(ro_items.phase)
@@ -26,6 +27,12 @@ def add_player(w, i, pos=(10, 12), hp=PLAYER_MAX_HP, dead=False):
     p["dead"] = p["dead"].at[i].set(dead)
     p["hp"] = p["hp"].at[i].set(hp)
     return {**w, "players": p}
+
+
+def set_job(w, p, job):
+    st = dict(w["stats"])
+    st["job"] = st["job"].at[p].set(job)
+    return {**w, "stats": st}
 
 
 def put(w, p, slot, item, count=None, refine=0, cards=None):
@@ -80,7 +87,7 @@ def cards_of(w, slot, p=0):
 # --- table -----------------------------------------------------------------------------------------
 
 def test_table_ids_and_shape():
-    assert I.N_ITEMS == 73
+    assert I.N_ITEMS == 300 and I.N_BASE_ITEMS <= I.CRAFT_ID_BASE == 100
     assert (I.ITEM_NONE, I.ITEM_GOLD_COIN, I.ITEM_MEAT, I.ITEM_SWORD) == (ITEM_NONE, ITEM_GOLD_COIN, ITEM_MEAT, ITEM_SWORD)
     assert (ITEM_NONE, ITEM_GOLD_COIN, ITEM_MEAT, ITEM_SWORD) == (0, 1, 2, 3)
     assert len(I.NAMES) == I.N_ITEMS
@@ -152,18 +159,20 @@ def test_equip_pointer_to_emptied_slot_clears():
 # --- use_item --------------------------------------------------------------------------------------
 
 def test_use_potion_heals_decrements_and_clears():
-    w = put(add_player(make_world(), 0, hp=100), 0, 1, I.ITEM_RED_POTION, count=2)
+    w = put(add_player(make_world(), 0, hp=1), 0, 1, I.ITEM_RED_POTION, count=2)
+    cap = int(ro_stats.derived(w)["max_hp"][0])
     out = run(w, use_item=1)
-    assert int(out["players"]["hp"][0]) == 100 + int(I.HEAL_HP[I.ITEM_RED_POTION])
+    assert int(out["players"]["hp"][0]) == min(1 + int(I.HEAL_HP[I.ITEM_RED_POTION]), cap) > 1
     assert count(out)[1] == 1 and inv(out)[1] == I.ITEM_RED_POTION
     out = run(out, use_item=1)
     assert inv(out)[1] == 0 and count(out)[1] == 0
 
 
 def test_use_potion_caps_at_max_hp():
-    w = put(add_player(make_world(), 0, hp=PLAYER_MAX_HP - 5), 0, 0, I.ITEM_WHITE_POTION, count=1)
+    w = add_player(make_world(), 0)
     cap = int(ro_stats.derived(w)["max_hp"][0])
-    assert int(run(w, use_item=0)["players"]["hp"][0]) == min(PLAYER_MAX_HP - 5 + int(I.HEAL_HP[I.ITEM_WHITE_POTION]), cap)
+    w = put(add_player(w, 0, hp=cap - 5), 0, 0, I.ITEM_WHITE_POTION, count=1)
+    assert int(run(w, use_item=0)["players"]["hp"][0]) == cap
 
 
 def test_use_potion_caps_at_derived_max_hp_for_leveled_player():
@@ -205,7 +214,7 @@ def test_equip_replaces_previous_occupant():
 
 
 def test_equip_armor_slots_and_non_equipment():
-    w = add_player(make_world(), 0)
+    w = set_job(add_player(make_world(), 0), 0, JOB_SWORDSMAN)  # a Novice may not wear a Shield
     w = put(put(put(w, 0, 0, I.ITEM_HAT, count=1), 0, 1, I.ITEM_SHIELD, count=1), 0, 2, I.ITEM_RED_POTION, count=1)
     out = run(run(run(w, equip=0), equip=1), equip=2)
     e = equip(out)
@@ -261,10 +270,10 @@ def test_equipped_armor_def_with_refine_and_item_bonus():
 
 def test_equipped_card_bonus_by_id_and_sockets_beyond_slots_ignored():
     w = add_player(make_world(), 0)
-    cards = [I.ITEM_ORC_WARRIOR_CARD, I.ITEM_ANDRE_CARD, I.ITEM_ANDRE_CARD, I.ITEM_ANDRE_CARD]  # sword has 3 sockets
+    cards = [I.ITEM_HORNET_CARD, I.ITEM_ANDRE_CARD, I.ITEM_ANDRE_CARD, I.ITEM_ANDRE_CARD]  # sword has 3 sockets
     w = wear(put(w, 0, 0, ITEM_SWORD, count=1, cards=cards), 0, I.EQ_WEAPON, 0)
     bonus = np.asarray(ro_items.equipped(w)["card_bonus"][0])
-    assert bonus[I.BONUS_ATK] == int(I.CARD_VALUE[I.ITEM_ORC_WARRIOR_CARD]) + 2 * int(I.CARD_VALUE[I.ITEM_ANDRE_CARD])
+    assert bonus[I.BONUS_ATK] == int(I.CARD_VALUE[I.ITEM_HORNET_CARD]) + 2 * int(I.CARD_VALUE[I.ITEM_ANDRE_CARD])
     assert bonus.sum() == bonus[I.BONUS_ATK]
     # a card in an item that is not worn contributes nothing
     unworn = put(add_player(make_world(), 0), 0, 0, ITEM_SWORD, count=1, cards=cards)
@@ -332,7 +341,7 @@ def test_failed_refine_destroys_item_and_clears_equip():
 
 # --- compound_card ---------------------------------------------------------------------------------
 
-def card_world(cards_in=2, card=I.ITEM_ORC_WARRIOR_CARD, weapon=ITEM_SWORD):
+def card_world(cards_in=2, card=I.ITEM_HORNET_CARD, weapon=ITEM_SWORD):
     w = add_player(make_world(), 0)
     w = put(w, 0, 0, weapon, count=1)
     w = put(w, 0, 1, card, count=cards_in)
@@ -341,10 +350,10 @@ def card_world(cards_in=2, card=I.ITEM_ORC_WARRIOR_CARD, weapon=ITEM_SWORD):
 
 def test_compound_fills_lowest_free_socket():
     out = run(card_world(), use_item=1)
-    assert cards_of(out, 0) == [I.ITEM_ORC_WARRIOR_CARD, 0, 0, 0]
+    assert cards_of(out, 0) == [I.ITEM_HORNET_CARD, 0, 0, 0]
     assert count(out)[1] == 1
     out = run(out, use_item=1)
-    assert cards_of(out, 0) == [I.ITEM_ORC_WARRIOR_CARD] * 2 + [0, 0]
+    assert cards_of(out, 0) == [I.ITEM_HORNET_CARD] * 2 + [0, 0]
     assert inv(out)[1] == 0 and count(out)[1] == 0  # last card consumed
 
 
@@ -352,11 +361,11 @@ def test_compound_refuses_when_full():
     out = card_world(cards_in=5)
     for _ in range(4):  # the sword has 3 sockets, the fourth use must be refused
         out = run(out, use_item=1)
-    assert cards_of(out, 0) == [I.ITEM_ORC_WARRIOR_CARD] * 3 + [0]
+    assert cards_of(out, 0) == [I.ITEM_HORNET_CARD] * 3 + [0]
     assert count(out)[1] == 2
-    full = put(card_world(cards_in=2), 0, 0, ITEM_SWORD, count=1, cards=[I.ITEM_ORC_WARRIOR_CARD] * 3 + [0])
+    full = put(card_world(cards_in=2), 0, 0, ITEM_SWORD, count=1, cards=[I.ITEM_HORNET_CARD] * 3 + [0])
     out = run(full, use_item=1)
-    assert count(out)[1] == 2 and cards_of(out, 0) == [I.ITEM_ORC_WARRIOR_CARD] * 3 + [0]
+    assert count(out)[1] == 2 and cards_of(out, 0) == [I.ITEM_HORNET_CARD] * 3 + [0]
 
 
 def test_compound_refuses_wrong_target_or_nothing_worn():
@@ -375,7 +384,7 @@ def test_compound_card_direct_done_flags():
     ok = jnp.zeros((MAX_PLAYERS,), jnp.bool_).at[0].set(True)
     out, done = ro_refine.compound_card(w, slot, ok)
     assert bool(done[0]) and int(done.sum()) == 1
-    assert int(out["items"]["inv_cards"][0, 0, 0]) == I.ITEM_ORC_WARRIOR_CARD
+    assert int(out["items"]["inv_cards"][0, 0, 0]) == I.ITEM_HORNET_CARD
     out2, done2 = ro_refine.compound_card(w, slot, jnp.zeros((MAX_PLAYERS,), jnp.bool_))
     assert int(done2.sum()) == 0 and int(jnp.abs(out2["items"]["inv_cards"]).sum()) == 0
 
@@ -502,7 +511,7 @@ def test_place_drops_discards_beyond_free_slots_and_ignores_living():
 # --- one jit + vmap batch --------------------------------------------------------------------------
 
 def test_vmap_batch_matches_per_world():
-    a = put(add_player(make_world(1), 0, hp=90), 0, 1, I.ITEM_RED_POTION, count=2)
+    a = put(add_player(make_world(1), 0, hp=1), 0, 1, I.ITEM_RED_POTION, count=2)
     a = put(a, 0, 3, I.ITEM_RED_POTION, count=1)
     a = put(a, 0, 5, ITEM_GOLD_COIN, count=4)
     b = wear(put(add_player(make_world(2), 0), 0, 0, ITEM_SWORD, count=1, refine=2), 0, I.EQ_WEAPON, 0)
@@ -522,7 +531,8 @@ def test_vmap_batch_matches_per_world():
         got = jax.tree_util.tree_map(lambda x: x[i], out)
         same = jax.tree_util.tree_map(lambda x, y: bool(np.array_equal(np.asarray(x), np.asarray(y))), got, ref)
         assert all(jax.tree_util.tree_leaves(same)), i
-    assert int(out["players"]["hp"][0, 0]) == 90 + int(I.HEAL_HP[I.ITEM_RED_POTION])
+    cap = int(ro_stats.derived(lean(a))["max_hp"][0])
+    assert int(out["players"]["hp"][0, 0]) == min(1 + int(I.HEAL_HP[I.ITEM_RED_POTION]), cap)
     assert int(out["items"]["inv_refine"][1, 0, 0]) == 3
 
 
@@ -544,7 +554,7 @@ def test_policy_equips_best_weapon_only_when_better():
 
 
 def test_policy_heals_when_hurt_with_potion_not_meat():
-    w = put(put(add_player(make_world(), 0, hp=HUNT_RETREAT_HP - 1), 0, 0, ITEM_MEAT, count=1), 0, 3, I.ITEM_APPLE, count=2)
+    w = put(put(add_player(make_world(), 0, hp=1), 0, 0, ITEM_MEAT, count=1), 0, 3, I.ITEM_APPLE, count=2)
     p = policy(w)
     assert p["use_item"] == 3 and p["drop"] == -1
     healthy = put(put(add_player(make_world(), 0), 0, 0, ITEM_MEAT, count=1), 0, 3, I.ITEM_APPLE, count=2)
@@ -566,15 +576,83 @@ def test_policy_refines_below_safe_limit_only():
 def test_policy_compounds_only_when_a_socket_fits():
     assert policy(card_world())["use_item"] == 1
     assert policy(card_world(card=I.ITEM_PORING_CARD))["use_item"] == -1
-    full = put(card_world(), 0, 0, ITEM_SWORD, count=1, cards=[I.ITEM_ORC_WARRIOR_CARD] * 3 + [0])
+    full = put(card_world(), 0, 0, ITEM_SWORD, count=1, cards=[I.ITEM_HORNET_CARD] * 3 + [0])
     assert policy(full)["use_item"] == -1
 
 
 def test_policy_drives_phase_end_to_end():
-    w = add_player(make_world(), 0, hp=40)
+    w = add_player(make_world(), 0, hp=1)
+    cap = int(ro_stats.derived(w)["max_hp"][0])
     w = put(put(w, 0, 0, I.ITEM_KNIFE), 0, 1, I.ITEM_RED_POTION)
     for _ in range(3):
         inp = {**empty_inputs(), **_policy(w, jax.random.PRNGKey(0))}
         w = _phase(w, inp)
     assert equip(w)[I.EQ_WEAPON] == 0
-    assert int(w["players"]["hp"][0]) == 40 + int(I.HEAL_HP[I.ITEM_RED_POTION])
+    assert int(w["players"]["hp"][0]) == min(1 + int(I.HEAL_HP[I.ITEM_RED_POTION]), cap)
+
+
+# --- round 2: craft ids in the table, job equip restrictions, weapon range -------------------------
+
+def test_craft_items_have_rows_at_their_own_ids():
+    from game.data import craft as C
+    table = I.table_for_client()
+    assert len(table) == I.N_ITEMS == 300
+    for cid in C.CRAFT_ITEM_IDS:
+        assert I.NAMES[cid] == C.ITEM_NAMES[cid] and table[cid]["name"] == C.ITEM_NAMES[cid]
+        assert int(I.KIND[cid]) != I.KIND_NONE and int(I.BUY[cid]) > 0 and int(I.SELL[cid]) > 0
+        assert table[cid]["icon"].startswith("item.")
+        assert not bool(I.STACKABLE[cid])  # ro_craft counts slots per input
+    assert int(I.KIND[C.ITEM_IRON_SWORD]) == I.KIND_WEAPON and int(I.CLASS[C.ITEM_IRON_SWORD]) == I.WC_SWORD
+    assert int(I.HEAL_HP[C.ITEM_COOKED_FISH]) > 0
+    assert table[150]["name"] == "" and table[150]["kind"] == I.KIND_NONE  # reserved
+    assert all(t["icon"] for t in table if t["kind"] != I.KIND_NONE)
+
+
+def test_craft_item_in_inventory_reads_its_own_row_not_a_card():
+    from game.data import craft as C
+    w = put(put(add_player(make_world(), 0), 0, 0, C.ITEM_COPPER_ORE), 0, 1, C.ITEM_COPPER_ORE)
+    out = run(w)
+    assert list(inv(out)[:2]) == [C.ITEM_COPPER_ORE] * 2 and list(count(out)[:2]) == [1, 1]  # not merged
+
+
+def test_equip_jobs_table_follows_classic_classes():
+    J = I.EQUIP_JOBS
+    assert J.shape == (I.N_ITEMS, I.N_JOBS)
+    assert bool(J[I.ITEM_BOW, JOB_ARCHER]) and bool(J[I.ITEM_BOW, JOB_THIEF]) and not bool(J[I.ITEM_BOW, JOB_NOVICE])
+    assert bool(J[I.ITEM_ROD, JOB_MAGE]) and not bool(J[I.ITEM_SWORD, JOB_MAGE])
+    assert bool(J[I.ITEM_KNIFE, JOB_MAGE]) and not bool(J[I.ITEM_KNIFE, 4])  # Acolyte: no daggers
+    assert bool(J[I.ITEM_HAT].all()) and bool(J[I.ITEM_JELLOPY].all())  # all-job armor, non-gear
+    assert not bool(J[I.ITEM_BOOTS, JOB_NOVICE]) and bool(J[I.ITEM_BOOTS, JOB_SWORDSMAN])
+    assert I.table_for_client()[I.ITEM_BOW]["jobs"] == [JOB_ARCHER, JOB_THIEF]
+
+
+def test_equip_refuses_items_the_job_may_not_wear():
+    w = put(put(add_player(make_world(), 0), 0, 0, I.ITEM_BOW, count=1), 0, 1, I.ITEM_KNIFE, count=1)
+    out = run(w, equip=0)  # Novice and a bow: refused
+    assert equip(out)[I.EQ_WEAPON] == -1
+    out = run(out, equip=1)  # Novice and a knife: fine
+    assert equip(out)[I.EQ_WEAPON] == 1
+    out = run(set_job(out, 0, JOB_ARCHER), equip=0)
+    assert equip(out)[I.EQ_WEAPON] == 0
+
+
+def test_unequip_is_allowed_after_a_job_change():
+    w = wear(put(add_player(make_world(), 0), 0, 0, ITEM_SWORD, count=1), 0, I.EQ_WEAPON, 0)
+    out = run(set_job(w, 0, JOB_MAGE), equip=0)  # a Mage may not wield a sword but may take it off
+    assert equip(out)[I.EQ_WEAPON] == -1
+
+
+def test_weapon_range_bow_nine_melee_and_bare_hands_one():
+    w = add_player(add_player(add_player(make_world(), 0), 1), 2)
+    w = wear(put(w, 0, 0, I.ITEM_BOW, count=1), 0, I.EQ_WEAPON, 0)
+    w = wear(put(w, 1, 0, I.ITEM_COMPOSITE_BOW, count=1), 1, I.EQ_WEAPON, 0)
+    w = wear(put(w, 2, 3, I.ITEM_BLADE, count=1), 2, I.EQ_WEAPON, 3)
+    r = np.asarray(jax.jit(ro_items.weapon_range)(w))
+    assert r.shape == (MAX_PLAYERS,) and r.dtype == np.int32
+    assert r[:4].tolist() == [9, 9, 1, 1]
+
+
+def test_node_view_kinds_sit_above_every_drop_view_kind():
+    from game import view
+    from game.data import craft as C
+    assert C.NODE_VIEW_KIND_BASE == view.NODE_KIND_BASE >= view.DROP_KIND_BASE + I.N_ITEMS

@@ -43,9 +43,9 @@ func test_kind_colors() -> void:
 
 
 func test_terrain_colors_distinct() -> void:
-	assert_eq(ViewMath.TERRAIN_COLORS.size(), 12)
-	for i: int in range(12):
-		for j: int in range(i + 1, 12):
+	assert_eq(ViewMath.TERRAIN_COLORS.size(), 13)
+	for i: int in range(13):
+		for j: int in range(i + 1, 13):
 			assert_true(ViewMath.terrain_color(i) != ViewMath.terrain_color(j), "%d vs %d" % [i, j])
 
 
@@ -115,16 +115,16 @@ func test_new_terrain_colors_match_world_wire() -> void:
 	assert_eq(ViewMath.terrain_color(9), Color(0.95, 0.80, 0.30))
 	assert_eq(ViewMath.terrain_color(10), Color(0.40, 0.70, 0.95))
 	assert_eq(ViewMath.terrain_color(11), Color(0.33, 0.28, 0.26))
-	assert_eq(ViewMath.terrain_color(12), Color(1.0, 0.0, 1.0))
+	assert_eq(ViewMath.terrain_color(13), Color(1.0, 0.0, 1.0))
 
 
 func test_node_categories() -> void:
-	assert_true(ViewMath.is_node_kind(200))
-	assert_true(ViewMath.is_node_kind(207))
+	assert_true(ViewMath.is_node_kind(400))
+	assert_true(ViewMath.is_node_kind(407))
 	assert_false(ViewMath.is_node_kind(208))
 	assert_false(ViewMath.is_node_kind(199))
-	assert_eq(ViewMath.entity_category(203, false), ViewMath.CAT_NODE)
-	assert_eq(ViewMath.entity_category(203, true), ViewMath.CAT_DROP, "a drop of item 103 shares the number")
+	assert_eq(ViewMath.entity_category(403, false), ViewMath.CAT_NODE)
+	assert_eq(ViewMath.entity_category(403, true), ViewMath.CAT_DROP, "a drop of item 303 shares the number")
 	assert_eq(ViewMath.entity_category(0, false), ViewMath.CAT_PLAYER)
 	assert_eq(ViewMath.entity_category(150, false), ViewMath.CAT_DROP)
 	assert_false(ViewMath.cat_has_hp_bar(ViewMath.CAT_NODE))
@@ -138,9 +138,9 @@ func test_node_categories() -> void:
 
 func test_node_sprite_grey_and_polygons() -> void:
 	var s := EntitySprite.new()
-	s.configure(205, false, "", 1.0, 32.0, 12, null, false, ViewMath.CAT_NODE)
+	s.configure(405, false, "", 1.0, 32.0, 12, null, false, ViewMath.CAT_NODE)
 	assert_eq(s.quad_color(), ViewMath.node_color(5))
-	s.configure(205, false, "", 1.0, 32.0, 12, null, true, ViewMath.CAT_NODE)
+	s.configure(405, false, "", 1.0, 32.0, 12, null, true, ViewMath.CAT_NODE)
 	assert_eq(s.quad_color(), ViewMath.NODE_DEPLETED_COLOR)
 	assert_eq(EntitySprite.node_points(0, 8.0).size(), 4)
 	assert_eq(EntitySprite.node_points(1, 8.0).size(), 12)

@@ -13,6 +13,7 @@ from game.state import make_empty_world
 C0 = MAP // 2  # working area around the map centre
 G = 1          # slot 1 is a gatherer of kind 0 (copper)
 KEY = jax.random.PRNGKey(7)
+S, W, E, SE = 1, 3, 7, 8  # move codes (game.ro_move: 1..8 = S, SW, W, NW, N, NE, E, SE)
 _policy = jax.jit(craft_bot_inputs)
 
 
@@ -66,22 +67,25 @@ def test_non_gatherers_never_gather_or_craft():
 
 def test_walks_downhill_ties_to_lowest_direction():
     w = make_world((C0 - 10, C0), nodes=[(0, C.NODE_COPPER, C0, C0)], fields={0: (C0, C0)})
-    assert int(run(w)["move"][G]) == 4  # east is the only lower neighbour
+    assert int(run(w)["move"][G]) == E  # east is the only lower neighbour
     w = make_world((C0 - 10, C0 - 10), nodes=[(0, C.NODE_COPPER, C0, C0)], fields={0: (C0, C0)})
     out = run(w)
-    assert int(out["move"][G]) == 2 and not bool(out["gather"][G])  # south (2) and east (4) tie: lowest code
+    assert int(out["move"][G]) == SE and not bool(out["gather"][G])  # the diagonal lowers the field by 2
+    pl = w["players"]  # a living player on the SE tile: south and east tie, lowest code wins
+    pl = {**pl, "pos": pl["pos"].at[2].set(jnp.array([C0 - 9, C0 - 9])), "active": pl["active"].at[2].set(True)}
+    assert int(run({**w, "players": pl})["move"][G]) == S
 
 
 def test_never_steps_onto_pz_toward_a_node():
     w = make_world((C0 - 10, C0 - 10), nodes=[(0, C.NODE_COPPER, C0, C0)], fields={0: (C0, C0)},
-                   pz=[(C0 - 10, C0 - 9)])  # the south neighbour is town
-    assert int(run(w)["move"][G]) == 4
+                   pz=[(C0 - 10, C0 - 9), (C0 - 9, C0 - 9)])  # the south and south-east neighbours are town
+    assert int(run(w)["move"][G]) == E
 
 
 def test_leaves_town_downhill_when_standing_on_pz():
     w = make_world((C0 - 10, C0), nodes=[(0, C.NODE_COPPER, C0, C0)], fields={0: (C0, C0)},
                    pz=[(C0 - 10, C0), (C0 - 9, C0)])
-    assert int(run(w)["move"][G]) == 4
+    assert int(run(w)["move"][G]) == E
 
 
 def test_crafts_with_two_copper_ore_next_to_furnace():
@@ -95,10 +99,10 @@ def test_walks_toward_furnace_only_with_a_full_bag_of_ore():
     kw = dict(nodes=[(1500, C.NODE_FURNACE, C0, C0)], fields={0: (C0 - 30, C0), C.NODE_FURNACE: (C0, C0)},
               pz=[(C0 - 9, C0)])  # towns are fine when walking to a station
     out = run(make_world((C0 - 10, C0), inv=[C.ITEM_COPPER_ORE] * INV_SLOTS, **kw))
-    assert int(out["move"][G]) == 4 and int(out["craft"][G]) == 0 and not bool(out["gather"][G])
+    assert int(out["move"][G]) == E and int(out["craft"][G]) == 0 and not bool(out["gather"][G])
     # With room left it keeps gathering (west, down the copper field) instead of commuting with two ore.
     out = run(make_world((C0 - 10, C0), inv=[C.ITEM_COPPER_ORE, C.ITEM_COPPER_ORE], **kw))
-    assert int(out["move"][G]) == 3 and int(out["craft"][G]) == 0
+    assert int(out["move"][G]) == W and int(out["craft"][G]) == 0
 
 
 def test_depleted_node_or_full_inventory_falls_back_to_base_move():
@@ -124,7 +128,7 @@ def test_low_level_iron_gatherer_works_copper():
     w = make_world((C0 - 10, C0), nodes=[(0, C.NODE_COPPER, C0, C0)], fields={0: (C0, C0), 1: (C0 - 30, C0)})
     pl = w["players"]
     w = {**w, "players": {**pl, "pos": pl["pos"].at[5].set(jnp.array([C0 - 10, C0])), "active": pl["active"].at[5].set(True)}}
-    assert int(run(w)["move"][5]) == 4  # level 1 < iron requirement: heads for the copper field, not iron
+    assert int(run(w)["move"][5]) == E  # level 1 < iron requirement: heads for the copper field, not iron
 
 
 def test_shapes_dtypes_jit_and_vmap():
@@ -138,18 +142,19 @@ def test_shapes_dtypes_jit_and_vmap():
     ws = jax.tree.map(lambda a, b: jnp.stack([a, b]), w1, w2)
     outs = jax.jit(jax.vmap(craft_bot_inputs))(ws, jnp.stack([KEY, KEY]))
     assert outs["gather"].shape == (2, MAX_PLAYERS)
-    assert bool(outs["gather"][0, G]) and not bool(outs["gather"][1, G]) and int(outs["move"][1, G]) == 4
+    assert bool(outs["gather"][0, G]) and not bool(outs["gather"][1, G]) and int(outs["move"][1, G]) == E
 
 
 def test_sidesteps_a_living_player_on_the_downhill_tile():
-    # South (2) and east (4) tie; a living player on the south tile makes east the only lower free neighbour,
-    # and a dead one does not block. Two gatherers on different fields could otherwise deadlock face to face.
+    # A living player on the south-east (steepest) tile and one on the south tile leave east as the only free
+    # downhill choice; dead ones do not block. Two gatherers on different fields could otherwise deadlock.
     w = make_world((C0 - 10, C0 - 10), nodes=[(0, C.NODE_COPPER, C0, C0)], fields={0: (C0, C0)})
     pl = w["players"]
-    pl = {**pl, "pos": pl["pos"].at[2].set(jnp.array([C0 - 10, C0 - 9])), "active": pl["active"].at[2].set(True)}
-    assert int(run({**w, "players": pl})["move"][G]) == 4
-    pl = {**pl, "dead": pl["dead"].at[2].set(True)}
-    assert int(run({**w, "players": pl})["move"][G]) == 2
+    for s, t in ((2, (C0 - 9, C0 - 9)), (3, (C0 - 10, C0 - 9))):
+        pl = {**pl, "pos": pl["pos"].at[s].set(jnp.array(t)), "active": pl["active"].at[s].set(True)}
+    assert int(run({**w, "players": pl})["move"][G]) == E
+    pl = {**pl, "dead": pl["dead"].at[2].set(True).at[3].set(True)}
+    assert int(run({**w, "players": pl})["move"][G]) == SE
 
 
 def test_crafts_any_held_recipe_not_only_its_own_chain():

@@ -9,6 +9,7 @@ const SIM_FILES: Array = [
 	"sim_lab_smoke",
 	"sim_ui_stats",
 	"sim_ui_items",
+	"sim_feel",
 ]
 
 
