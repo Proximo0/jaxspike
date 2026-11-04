@@ -20,7 +20,7 @@ os.environ.setdefault("JAX_PLATFORMS", "cpu")
 
 def _phases():
     import jax.numpy as jnp
-    from game import (combat, loot, monsters, movement, ro_anim, ro_craft, ro_items, ro_kafra, ro_mvp, ro_party,
+    from game import (combat, loot, monsters, movement, ro_anim, ro_craft, ro_items, ro_waybell, ro_mvp, ro_party,
                       ro_shop, ro_skills, ro_stats, ro_warps, survival)
 
     def clear_died(w, i):
@@ -44,7 +44,7 @@ def _phases():
         ("craft", ro_craft.phase),
         ("party", ro_party.phase),
         ("mvp", lambda w, i: ro_mvp.phase(w)),
-        ("kafra", ro_kafra.phase),
+        ("waybell", ro_waybell.phase),
         ("anim", lambda w, i: ro_anim.phase(w)),
         ("tick", tick_inc),
     ]

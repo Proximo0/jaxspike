@@ -83,14 +83,14 @@ func test_decode_snap_bin_rejects_bad_frames() -> void:
 func test_store_merges_you_over_change_only_snaps() -> void:
 	var store := EntityStore.new()
 	store.apply_snap({"t": "snap", "tick": 1, "full": true, "ents": [], "gone": [],
-		"you": {"pos": [1, 2], "hp": 5, "inv": [1, 2], "zeny": 3}})
+		"you": {"pos": [1, 2], "hp": 5, "inv": [1, 2], "ryn": 3}})
 	store.apply_snap({"t": "snap", "tick": 2, "full": false, "ents": [], "gone": [],
 		"you": {"pos": [1, 3], "hp": 4}})
 	assert_eq(store.you["pos"], Vector2i(1, 3))
 	assert_eq(int(store.you["hp"]), 4)
 	assert_eq(store.you["inv"], [1, 2])
-	assert_eq(int(store.you["zeny"]), 3)
+	assert_eq(int(store.you["ryn"]), 3)
 	store.apply_snap({"t": "snap", "tick": 3, "full": false, "ents": [], "gone": [],
-		"you": {"pos": [1, 3], "hp": 4, "zeny": 9}})
-	assert_eq(int(store.you["zeny"]), 9)
+		"you": {"pos": [1, 3], "hp": 4, "ryn": 9}})
+	assert_eq(int(store.you["ryn"]), 9)
 	assert_eq(store.you["inv"], [1, 2])

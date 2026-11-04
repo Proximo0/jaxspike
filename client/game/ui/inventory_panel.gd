@@ -1,7 +1,7 @@
 class_name InventoryPanel
 extends PanelContainer
-## RO inventory window (key I toggles it): 16 item slots, zeny, the 8 equipment slots and, once the server has sent
-## `you.storage`, the kafra storage list. Left click = use or equip toggle, right click = menu (Equip/Use, Refine,
+## RO inventory window (key I toggles it): 16 item slots, ryn, the 8 equipment slots and, once the server has sent
+## `you.storage`, the waybell storage list. Left click = use or equip toggle, right click = menu (Equip/Use, Refine,
 ## Drop, Store). The static helpers are pure (slot rows, click rules, message builders) and unit tested.
 
 signal message_sent(msg: Dictionary)
@@ -35,7 +35,7 @@ var equip_rows: Array[Dictionary] = []
 var storage_known: bool = false
 var at_shop: bool = false  ## a shop tile is within 1 tile of the player (enables Sell)
 var storage_items: Array = []  ## cached `you.storage` (the server sends it only on change)
-var zeny_label: Label
+var ryn_label: Label
 var slot_buttons: Array[Button] = []
 var equip_buttons: Array[Button] = []
 var storage_box: VBoxContainer
@@ -59,8 +59,8 @@ func _ready() -> void:
 	title.text = "Inventory (I)"
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(title)
-	zeny_label = Label.new()
-	head.add_child(zeny_label)
+	ryn_label = Label.new()
+	head.add_child(ryn_label)
 	var grid := GridContainer.new()
 	grid.columns = 4
 	box.add_child(grid)
@@ -91,7 +91,7 @@ func _ready() -> void:
 	storage_box.visible = false
 	box.add_child(storage_box)
 	var st_title := Label.new()
-	st_title.text = "Kafra storage (click = take out)"
+	st_title.text = "Waybell storage (click = take out)"
 	storage_box.add_child(st_title)
 	var scroll := ScrollContainer.new()
 	scroll.custom_minimum_size = Vector2(0, 120)
@@ -144,7 +144,7 @@ func refresh() -> void:
 	at_shop = near_shop_tile(_pos_tile(you.get("pos")), _shops())
 	rows = slot_rows(you, items, welcome)
 	equip_rows = equip_slot_rows(you, items, welcome)
-	zeny_label.text = "Zeny %d" % int(you.get("zeny", 0))
+	ryn_label.text = "Ryn %d" % int(you.get("ryn", 0))
 	for i: int in range(INV_SLOTS):
 		_show_slot(slot_buttons[i], rows[i])
 	for i: int in range(equip_rows.size()):
@@ -459,7 +459,7 @@ static func equip_slot_rows(you: Dictionary, items: Array, welcome_msg: Dictiona
 	return out
 
 
-## Non-empty kafra storage entries: {slot, item, name, kind}.
+## Non-empty waybell storage entries: {slot, item, name, kind}.
 static func storage_rows(storage: Array, items: Array, welcome_msg: Dictionary = {}) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for i: int in range(storage.size()):

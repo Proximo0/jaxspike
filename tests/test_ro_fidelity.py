@@ -229,18 +229,18 @@ def test_element_table_level_one_matches_attr_fix():
 # ---- monsters ----------------------------------------------------------------------------------------------------
 # name: (level, hp, atk_min, atk_max, def, base_exp, job_exp, element, size)   rAthena db/pre-re/mob_db.yml
 RO_MOBS = {
-    "Poring": (1, 50, 7, 10, 0, 2, 1, "Water", 1), "Orc Warrior": (24, 1400, 104, 126, 10, 408, 160, "Earth", 1),
-    "Fabre": (2, 63, 8, 11, 0, 3, 2, "Earth", 0), "Lunatic": (3, 60, 9, 12, 0, 6, 2, "Neutral", 0),
-    "Drops": (3, 55, 10, 13, 0, 4, 3, "Fire", 1), "Poporing": (14, 344, 59, 72, 0, 81, 44, "Poison", 1),
-    "Willow": (4, 95, 9, 12, 5, 5, 4, "Earth", 1), "Rocker": (9, 198, 24, 29, 5, 20, 16, "Earth", 1),
-    "Spore": (16, 510, 24, 48, 0, 66, 108, "Water", 1), "Thief Bug": (6, 126, 18, 24, 5, 17, 5, "Neutral", 0),
-    "Zombie": (15, 534, 67, 79, 0, 50, 33, "Undead", 1), "Wolf": (25, 919, 37, 46, 0, 329, 199, "Earth", 1),
-    "Skeleton": (10, 234, 39, 47, 10, 18, 14, "Undead", 1), "Peco Peco": (19, 531, 50, 64, 0, 159, 72, "Fire", 2),
-    "Hode": (26, 2282, 146, 177, 0, 550, 300, "Earth", 1),
-    "Soldier Skeleton": (29, 2334, 221, 245, 10, 372, 226, "Undead", 1),
-    "Bigfoot": (25, 1619, 198, 220, 10, 310, 188, "Earth", 2), "Mummy": (37, 5176, 305, 360, 0, 800, 602, "Undead", 1),
-    "Golden Thief Bug": (64, 126000, 870, 1145, 60, 14300, 7150, "Fire", 2),
-    "Eddga": (65, 152000, 1215, 1565, 15, 25025, 12870, "Fire", 2),
+    "Blobbin": (1, 50, 7, 10, 0, 2, 1, "Water", 1), "Grukk Brute": (24, 1400, 104, 126, 10, 408, 160, "Earth", 1),
+    "Wrigglet": (2, 63, 8, 11, 0, 3, 2, "Earth", 0), "Moonbun": (3, 60, 9, 12, 0, 6, 2, "Neutral", 0),
+    "Emberblob": (3, 55, 10, 13, 0, 4, 3, "Fire", 1), "Vexblob": (14, 344, 59, 72, 0, 81, 44, "Poison", 1),
+    "Bramblet": (4, 95, 9, 12, 5, 5, 4, "Earth", 1), "Fiddlehop": (9, 198, 24, 29, 5, 20, 16, "Earth", 1),
+    "Capling": (16, 510, 24, 48, 0, 66, 108, "Water", 1), "Pilferbug": (6, 126, 18, 24, 5, 17, 5, "Neutral", 0),
+    "Rotling": (15, 534, 67, 79, 0, 50, 33, "Undead", 1), "Snarlfang": (25, 919, 37, 46, 0, 329, 199, "Earth", 1),
+    "Clackbone": (10, 234, 39, 47, 10, 18, 14, "Undead", 1), "Gallopeck": (19, 531, 50, 64, 0, 159, 72, "Fire", 2),
+    "Sandgulper": (26, 2282, 146, 177, 0, 550, 300, "Earth", 1),
+    "Clackbone Guard": (29, 2334, 221, 245, 10, 372, 226, "Undead", 1),
+    "Grumblebear": (25, 1619, 198, 220, 10, 310, 188, "Earth", 2), "Tombwrap": (37, 5176, 305, 360, 0, 800, 602, "Undead", 1),
+    "Gildscarab": (64, 126000, 870, 1145, 60, 14300, 7150, "Fire", 2),
+    "Scorchstripe": (65, 152000, 1215, 1565, 15, 25025, 12870, "Fire", 2),
 }
 
 
@@ -253,13 +253,13 @@ def test_monster_numbers_match_rathena(name):
 
 
 def test_monster_aggro_follows_rathena_ai():
-    aggressive = {"Orc Warrior", "Thief Bug", "Zombie", "Soldier Skeleton", "Mummy", "Golden Thief Bug", "Eddga"}
+    aggressive = {"Grukk Brute", "Pilferbug", "Rotling", "Clackbone Guard", "Tombwrap", "Gildscarab", "Scorchstripe"}
     assert {m.name for m in M.MONSTERS if m.aggro} == aggressive
 
 
 def test_monster_walk_speed_matches_rathena():
-    ro = {"Poring": 400, "Fabre": 400, "Drops": 400, "Zombie": 400, "Thief Bug": 150, "Golden Thief Bug": 100,
-          "Poporing": 300, "Bigfoot": 300, "Mummy": 300, "Eddga": 300, "Wolf": 200, "Orc Warrior": 200}
+    ro = {"Blobbin": 400, "Wrigglet": 400, "Emberblob": 400, "Rotling": 400, "Pilferbug": 150, "Gildscarab": 100,
+          "Vexblob": 300, "Grumblebear": 300, "Tombwrap": 300, "Scorchstripe": 300, "Snarlfang": 200, "Grukk Brute": 200}
     for name, ms in ro.items():
         assert int(M.SPEED_MS[M.KIND_BY_NAME[name]]) == ms, name
 
@@ -294,10 +294,10 @@ def test_consumables():
     for item, (lo, hi, buy, w) in heal.items():
         r = _row(item)
         assert lo <= r["HEAL_HP"] <= hi and r["BUY"] == buy and r["WEIGHT"] == w
-    assert (_row(I.ITEM_FLY_WING)["BUY"], _row(I.ITEM_BUTTERFLY_WING)["BUY"]) == (60, 300)
-    assert _row(I.ITEM_FLY_WING)["KIND"] == I.KIND_CONSUMABLE and bool(I.STACKABLE[I.ITEM_FLY_WING])
+    assert (_row(I.ITEM_FLIT_FEATHER)["BUY"], _row(I.ITEM_HOMING_FEATHER)["BUY"]) == (60, 300)
+    assert _row(I.ITEM_FLIT_FEATHER)["KIND"] == I.KIND_CONSUMABLE and bool(I.STACKABLE[I.ITEM_FLIT_FEATHER])
 
 
-def test_cards_sell_for_ten_zeny():
+def test_cards_sell_for_ten_ryn():
     cards = np.flatnonzero(np.asarray(I.KIND) == I.KIND_CARD)
     assert len(cards) >= 16 and (np.asarray(I.SELL)[cards] == 10).all()

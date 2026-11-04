@@ -249,7 +249,7 @@ TEAM_TEST_KEYS = {"ro3-engine": ("stats", "combat", "skills"), "ro3-balance": ("
 	"ro3-anim3": ("anim",), "ro3-bots3": ("bot", "policy"), "ro3-names": ("name",), "ro3-netperf": ("protocol", "server", "net_"),
 	"ro-move": ("move", "pathing", "direction"), "ro-anim": ("anim",), "client-anim": ("anim",),
 	"ro-fidelity": ("fidelity",), "ro-monsters": ("monster",), "ro-world2": ("world", "warp", "map_gen", "terrain"),
-	"ro-items2": ("item", "drop", "shop", "kafra"), "netperf2": ("protocol", "server", "net_", "view"),
+	"ro-items2": ("item", "drop", "shop", "waybell"), "netperf2": ("protocol", "server", "net_", "view"),
 	"bots2": ("bot", "policy", "soak"), "art-anim": ("asset", "slot"), "client-feel": ("hud", "minimap", "input", "audio")}
 
 

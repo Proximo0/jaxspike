@@ -36,15 +36,15 @@ func _opaque_count(img: Image) -> int:
 
 
 func test_key_builders() -> void:
-	assert_eq(AssetSlots.anim_key("poring", "walk"), "anim.poring.walk")
+	assert_eq(AssetSlots.anim_key("blobbin", "walk"), "anim.blobbin.walk")
 	assert_eq(AssetSlots.job_anim_key(1, 5), "anim.swordsman.attack")
 	assert_eq(AssetSlots.job_anim_key(2, 8), "anim.mage.cast")
 	assert_eq(AssetSlots.job_anim_key(99, 0), "anim.novice.idle")
 	assert_eq(AssetSlots.job_anim_key(0, 42), "anim.novice.idle")
-	assert_eq(AssetSlots.monster_anim_key(0, 1), "anim.poring.walk")
-	assert_eq(AssetSlots.monster_anim_key(1, 7), "anim.orc_warrior.dead")
-	assert_eq(AssetSlots.monster_anim_key(19, 8), "anim.eddga.attack")
-	assert_eq(AssetSlots.monster_anim_key(5, 2), "anim.poporing.idle")
+	assert_eq(AssetSlots.monster_anim_key(0, 1), "anim.blobbin.walk")
+	assert_eq(AssetSlots.monster_anim_key(1, 7), "anim.grukk_brute.dead")
+	assert_eq(AssetSlots.monster_anim_key(19, 8), "anim.scorchstripe.attack")
+	assert_eq(AssetSlots.monster_anim_key(5, 2), "anim.vexblob.idle")
 	assert_eq(AssetSlots.monster_anim_key(20, 0), "anim.unknown.idle")
 	assert_eq(AssetSlots.ANIM_MONSTER_KINDS.size(), 20)
 	assert_eq(AssetSlots.expected_anim_keys().size(), 7 * 9 + 20 * 5)
@@ -63,8 +63,11 @@ func test_default_registry_resolves_all_anim_slots() -> void:
 	for j: int in range(AssetSlots.JOB_NAMES.size()):
 		assert_eq(reg.path_of("anim.job.%d" % j), "res://assets/anim/%s/act.json" % AssetSlots.JOB_NAMES[j])
 	for m: int in range(AssetSlots.ANIM_MONSTER_KINDS.size()):
-		var want: String = "res://assets/anim/%s/act.json" % AssetSlots.ANIM_MONSTER_KINDS[m]
+		# round 3: the folder carries the monster's original name (docs/naming.md), the key its engine kind
+		var want: String = reg.path_of(AssetSlots.anim_key(AssetSlots.ANIM_MONSTER_KINDS[m], "idle"))
 		assert_eq(reg.path_of("anim.monster.%d" % m), want)
+		assert_true(want.begins_with("res://assets/anim/") and want.ends_with("/act.json"), want)
+		assert_true(FileAccess.file_exists(want), want)
 	# old static slots keep working next to the anim ones
 	assert_true(reg.has("tile.0"))
 	assert_false(reg.is_sheet("tile.0"))
@@ -112,13 +115,20 @@ func test_act_files_match_pngs() -> void:
 			assert_eq(img.get_height(), fh * DRAWN_ROWS, "%s.%s: height" % [kind, a])
 
 
+## The act json of a kind through the registry (round 3: monster folders carry docs/naming.md names, the keys
+## still the engine kind until the repo-wide rename).
+func _act_path(reg: AssetSlots, kind: String) -> String:
+	return reg.path_of(AssetSlots.anim_key(kind, "idle"))
+
+
 func test_every_kind_draws_something_in_every_direction() -> void:
+	var reg: AssetSlots = AssetSlots.load_default()
 	var kinds: Array[String] = []
 	kinds.append_array(AssetSlots.JOB_NAMES)
 	kinds.append_array(AssetSlots.ANIM_MONSTER_KINDS)
 	for kind: String in kinds:
-		var act: Dictionary = _load_json("res://assets/anim/%s/act.json" % kind)
-		var img: Image = _load_png("res://assets/anim/%s/idle.png" % kind)
+		var act: Dictionary = _load_json(_act_path(reg, kind))
+		var img: Image = _load_png(reg.png_of(AssetSlots.anim_key(kind, "idle")))
 		assert_true(img != null and not act.is_empty(), kind)
 		if img == null or act.is_empty():
 			continue
@@ -129,12 +139,13 @@ func test_every_kind_draws_something_in_every_direction() -> void:
 
 func test_clips_have_real_motion() -> void:
 	# a walk/attack/hurt/dead clip whose frames are all identical would play as a still
-	for kind: String in ["novice", "poring", "wolf", "eddga"]:
-		var act: Dictionary = _load_json("res://assets/anim/%s/act.json" % kind)
+	var reg: AssetSlots = AssetSlots.load_default()
+	for kind: String in ["novice", "blobbin", "snarlfang", "scorchstripe"]:
+		var act: Dictionary = _load_json(_act_path(reg, kind))
 		var fw: int = int(act["frame_w"])
 		var fh: int = int(act["frame_h"])
 		for a: String in ["walk", "attack", "hurt", "dead"]:
-			var img: Image = _load_png("res://assets/anim/%s/%s.png" % [kind, a])
+			var img: Image = _load_png(reg.png_of(AssetSlots.anim_key(kind, a)))
 			var e: Dictionary = act["actions"][a]
 			var first: PackedByteArray = _frame(img, fw, fh, 0, 0).get_data()
 			var moved: bool = false
@@ -148,11 +159,12 @@ func test_round3_sheets_are_hires_prerenders() -> void:
 	# round 3 (ro3-art): every job and monster sheet is a Blender pre-render at 2x RO's native size
 	# (jobs 96x128, monsters >= 96 px), its feet anchor sits in the lower part of the frame, and the hit frame
 	# is frame 3 of the 6-frame attack (60 %).
+	var reg: AssetSlots = AssetSlots.load_default()
 	var kinds: Array[String] = []
 	kinds.append_array(AssetSlots.JOB_NAMES)
 	kinds.append_array(AssetSlots.ANIM_MONSTER_KINDS)
 	for kind: String in kinds:
-		var act: Dictionary = _load_json("res://assets/anim/%s/act.json" % kind)
+		var act: Dictionary = _load_json(_act_path(reg, kind))
 		assert_false(act.is_empty(), kind)
 		if act.is_empty():
 			continue
@@ -169,7 +181,7 @@ func test_round3_sheets_are_hires_prerenders() -> void:
 
 func test_npc_sheets() -> void:
 	var reg: AssetSlots = AssetSlots.load_default()
-	for kind: String in ["npc_shop", "npc_kafra"]:
+	for kind: String in ["npc_shop", "npc_waybell"]:
 		var act: Dictionary = _load_json("res://assets/anim/%s/act.json" % kind)
 		assert_false(act.is_empty(), "%s: act json" % kind)
 		if act.is_empty():

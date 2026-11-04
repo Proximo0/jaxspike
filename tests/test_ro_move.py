@@ -176,7 +176,7 @@ def test_dead_player_drops_intent():
 
 
 def test_monster_walks_at_its_kind_speed():
-    k = KIND_BY_NAME["Zombie"]
+    k = KIND_BY_NAME["Rotling"]
     w = world_with([], monsters=[(28, 20)], kind=k)
     speed = int(ro_move._MON_SPEED[k])
     step = jax.jit(lambda w: ro_move.step_entities(ro_move.want_monsters(w, jnp.full((MAX_MONSTERS,), W - 1)), "monsters"))
@@ -188,7 +188,7 @@ def test_monster_walks_at_its_kind_speed():
 
 
 def test_monster_and_player_share_occupancy():
-    w = world_with([(10, 10)], monsters=[(11, 10)], kind=KIND_BY_NAME["Poring"])
+    w = world_with([(10, 10)], monsters=[(11, 10)], kind=KIND_BY_NAME["Blobbin"])
     w, trail = walk(w, E, 4)
     assert trail[-1] == (10, 10)
 

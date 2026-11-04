@@ -1,4 +1,4 @@
-"""Round 3 (ro3-exp): kills by skill from range pay exp and zeny to the caster through the damage credit.
+"""Round 3 (ro3-exp): kills by skill from range pay exp and ryn to the caster through the damage credit.
 
 Runs the real phases in step order (skills -> combat -> loot -> stats -> mvp) on a world with every block, so the
 test covers the wiring: ro_skills_effects reports hits through ro_mvp.record_damage, loot and ro_stats read
@@ -51,7 +51,7 @@ def _phases(w, i):
     return ro_mvp.phase(w)
 
 
-def test_fire_bolt_kill_from_range_pays_exp_and_zeny_to_the_caster():
+def test_fire_bolt_kill_from_range_pays_exp_and_ryn_to_the_caster():
     run = jax.jit(_phases)
     w = _world()
     w = run(w, _inputs(sk.SK_FIRE_BOLT))
@@ -62,10 +62,10 @@ def test_fire_bolt_kill_from_range_pays_exp_and_zeny_to_the_caster():
         w = {**w, "monsters": {**w["monsters"], "died": jnp.zeros_like(w["monsters"]["died"])},
              "tick": w["tick"] + 1}
         w = run(w, _inputs())
-    assert not bool(w["monsters"]["active"][MON]), "the bolt should have killed the 1-hp Poring"
+    assert not bool(w["monsters"]["active"][MON]), "the bolt should have killed the 1-hp Blobbin"
     assert int(w["stats"]["base_exp"][CASTER]) == S.MONSTER_BASE_EXP[0]
     assert int(w["stats"]["job_exp"][CASTER]) == S.MONSTER_JOB_EXP[0]
     assert int(w["stats"]["base_exp"][OTHER]) == 0  # the adjacent bystander gets nothing
-    assert int(w["items"]["zeny"][CASTER]) > 0 and int(w["items"]["zeny"][OTHER]) == 0
-    assert int((w["drops"]["item"] == ITEM_GOLD_COIN).sum()) == 0  # the zeny went to the caster, not the ground
+    assert int(w["items"]["ryn"][CASTER]) > 0 and int(w["items"]["ryn"][OTHER]) == 0
+    assert int((w["drops"]["item"] == ITEM_GOLD_COIN).sum()) == 0  # the ryn went to the caster, not the ground
     assert int(w["mvp"]["top_damager"][MON]) == -1  # the credit is cleared after the payout

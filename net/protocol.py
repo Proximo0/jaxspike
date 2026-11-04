@@ -88,7 +88,7 @@ def _validate_ro(t, msg: dict) -> dict | None:
         return {"t": t, "slot": msg["slot"]} if _is_int(msg.get("slot")) else None
     if t == "buy":  # docs/items_wire.md: item id; the engine ignores ids the town does not stock
         return {"t": t, "item": msg["item"]} if _is_int(msg.get("item")) else None
-    if t == "teleport":  # docs/world_wire.md: kafra teleport destination town
+    if t == "teleport":  # docs/world_wire.md: waybell teleport destination town
         ok = _is_int(msg.get("town")) and 0 <= msg["town"] < len(world_layout.TOWNS)
         return {"t": t, "town": msg["town"]} if ok else None
     if t in ("gather", "sit"):
@@ -151,15 +151,15 @@ def build_welcome_static() -> dict:
                            "target": int(arr["SKILL_TARGET"][sid]), "element": int(arr["SKILL_ELEMENT"][sid]),
                            "aoe": int(arr["SKILL_AOE"][sid]), "hits": int(arr["SKILL_HITS"][sid]),
                            "buff": int(arr["SKILL_BUFF"][sid]), "levels": levels})
-    centers, kafra, station = (world_layout.town_centers().tolist(), world_layout.kafra_tiles().tolist(),
+    centers, waybell, station = (world_layout.town_centers().tolist(), world_layout.waybell_tiles().tolist(),
                                world_layout.town_station_tiles().tolist())
     towns = [{"idx": i, "name": world_layout.TOWN_NAMES[i], "role": world_layout.TOWN_ROLES[i],
-              "center": centers[i], "kafra": kafra[i], "station": station[i]} for i in range(len(centers))]
+              "center": centers[i], "waybell": waybell[i], "station": station[i]} for i in range(len(centers))]
     boxes = world_layout.dungeon_boxes().tolist()
     dungeons = [{"idx": i, "name": d[3], "box": boxes[i]} for i, d in enumerate(world_layout.DUNGEONS)]
     src, dst = world_layout.warp_tiles()
     warps = [{"from": a, "to": b} for a, b in zip(src.tolist(), dst.tolist())]
-    # ro-world2 (docs/world_wire.md): zones, portals, shop tiles, kafra teleport, save points
+    # ro-world2 (docs/world_wire.md): zones, portals, shop tiles, waybell teleport, save points
     zb = world_layout.zone_boxes().tolist()
     zones = [{"id": i, "name": z[0], "kind": world_layout.ZONE_KINDS[z[1]], "box": zb[i], "levels": list(z[3]),
               "music": z[4]} for i, z in enumerate(world_layout.ZONES)]
@@ -169,8 +169,8 @@ def build_welcome_static() -> dict:
                for k, (a, b) in enumerate(zip(psrc.tolist(), pdst.tolist()))]
     st, stown = world_layout.shop_tiles()
     shop_tiles = [{"tile": t, "town": int(k)} for t, k in zip(st.tolist(), stown.tolist())]
-    arrive = world_layout.kafra_teleport_dest().tolist()
-    kafra_teleport = [{"from": a, "to": b, "zeny": z, "arrive": arrive[b]} for a, b, z in world_layout.KAFRA_TELEPORT]
+    arrive = world_layout.waybell_teleport_dest().tolist()
+    waybell_teleport = [{"from": a, "to": b, "ryn": z, "arrive": arrive[b]} for a, b, z in world_layout.WAYBELL_TELEPORT]
     save_points = world_layout.save_point_tiles().tolist()
     monsters = [{"kind": k, "name": m.name, "hp": m.hp, "level": m.level, "mvp": bool(m.mvp), "size": int(m.size)}
                 for k, m in enumerate(monster_data.MONSTERS)]
@@ -184,7 +184,7 @@ def build_welcome_static() -> dict:
     return {
         "world": {"towns": towns, "dungeons": dungeons, "warps": warps,
                   "terrain_names": list(terrain_data.TERRAIN_NAMES), "monsters": monsters,
-                  "zones": zones, "portals": portals, "shops": shop_tiles, "kafra_teleport": kafra_teleport,
+                  "zones": zones, "portals": portals, "shops": shop_tiles, "waybell_teleport": waybell_teleport,
                   "save_points": save_points},
         "shops": ro_shop.stock_for_client(),  # docs/items_wire.md: per-town NPC stock
         "items": item_data.table_for_client(), "drops": drops_data.table_for_client(),
@@ -281,7 +281,7 @@ def ro_you(pull: dict, slot: int) -> dict:
         "learned": _pairs(sk["learned"][slot]),
         "casting": int(sk["casting"][slot]), "cast_left": int(sk["cast_left"][slot]),
         "cast_target": int(sk["cast_target"][slot]),
-        "zeny": int(it["zeny"][slot]),
+        "ryn": int(it["ryn"][slot]),
         "inv": _inv_rows(p["inv"][slot][:INV_SLOTS], it["inv_count"][slot], it["inv_refine"][slot],
                          it["inv_cards"][slot]),
         "equip": it["equip"][slot].tolist(),

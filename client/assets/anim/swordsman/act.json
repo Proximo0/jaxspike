@@ -1,10 +1,11 @@
 {
  "kind": "swordsman",
- "frame_w": 48,
- "frame_h": 64,
+ "engine_kind": "swordsman",
+ "frame_w": 96,
+ "frame_h": 128,
  "anchor": [
-  24,
-  60
+  48,
+  116
  ],
  "atk_frame": 3,
  "rows": 5,
@@ -106,5 +107,6 @@
    "mirror": true,
    "loop": true
   }
- }
+ },
+ "source": "client/tools/art render_kind.py (D:/jaxspike-art/src/kaykit_adv/KayKit-Character-Pack-Adventures-1.0-main/addons/kaykit_character_pack_adventures/Characters/gltf/Knight.glb)"
 }

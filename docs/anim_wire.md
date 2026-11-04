@@ -47,7 +47,7 @@ Round 3 (ro3-wire):
 | `speed_ms` | your walk speed in ms/cell (same as your entity's `s`) |
 | `amotion_ms` | your current attack clip length (ASPD and Increase AGI included) |
 | `after_delay` | ticks of after-cast delay left; no skill can start while > 0 (grey out the skill bar) |
-| `warped` | `true` only on the tick a warp, kafra teleport or respawn moved you 2+ cells (snap the camera; absent otherwise; the Godot EntityStore resets it to false on every other snap) |
+| `warped` | `true` only on the tick a warp, waybell teleport or respawn moved you 2+ cells (snap the camera; absent otherwise; the Godot EntityStore resets it to false on every other snap) |
 
 `amotion_ms` and `after_delay` read 0 until the server pulls `world["anim"]` amotion and `skills.after_delay`
 (lines reported to the lead and netperf2 in the ro-anim final report).

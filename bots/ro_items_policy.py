@@ -9,10 +9,10 @@ A living bot, each tick:
   its equip slot (a free slot counts as DEF -1, so any piece fills it); one equip per tick;
 - uses its first healing consumable (never MEAT, survival.py eats that) below POTION_PCT of max_hp; otherwise it
   uses a held card that fits a free socket of a worn item (one use_item per tick);
-- refines its worn weapon when it holds that weapon level's ore and the zeny and the next step is still a
+- refines its worn weapon when it holds that weapon level's ore and the ryn and the next step is still a
   guaranteed one (REFINE_CHANCE == 1000, i.e. below the safe limit);
 - at a shop (game.ro_shop.at_shop), when the engine has "buy" / "sell" inputs: sells one etc. loot slot, then buys
-  red potions while it holds fewer than POTION_STOCK and keeps ZENY_RESERVE (item id to buy, -1 none; sell =
+  red potions while it holds fewer than POTION_STOCK and keeps RYN_RESERVE (item id to buy, -1 none; sell =
   inventory slot). bots.ro_nav_policy walks bots that want potions to their town's shop row.
 It never drops.
 """
@@ -31,7 +31,7 @@ except ImportError:  # pragma: no cover
 
 POTION_PCT = 45
 POTION_STOCK = 10
-ZENY_RESERVE = 200
+RYN_RESERVE = 200
 BUY_ITEM = I.ITEM_RED_POTION
 
 # Weapon classes each job may wield (RO pre-renewal; Novice ... Merchant), index = job id.
@@ -89,11 +89,11 @@ def weapon_score(item, job):
 
 
 def wants_potions(world):
-    """bool [P]: a living bot with fewer than POTION_STOCK red potions and the zeny for one plus ZENY_RESERVE."""
+    """bool [P]: a living bot with fewer than POTION_STOCK red potions and the ryn for one plus RYN_RESERVE."""
     pl, it = world["players"], world["items"]
     held = (pl["inv"] == BUY_ITEM) & (it["inv_count"] > 0)
     n_pot = jnp.sum(jnp.where(held, it["inv_count"], 0), axis=1)
-    rich = it["zeny"] >= I.BUY[BUY_ITEM] + ZENY_RESERVE
+    rich = it["ryn"] >= I.BUY[BUY_ITEM] + RYN_RESERVE
     return pl["active"] & ~pl["dead"] & rich & (n_pot < POTION_STOCK)
 
 
@@ -164,7 +164,7 @@ def item_inputs(world, key):
     c_slot, c_any = _first(card & target_free)
     use_in = jnp.where(hurt, h_slot, jnp.where(live & c_any, c_slot, -1)).astype(jnp.int32)
 
-    # --- refine: worn weapon below its safe limit with ore and zeny in hand ---------------------------------
+    # --- refine: worn weapon below its safe limit with ore and ryn in hand ---------------------------------
     w_slot = jnp.clip(cur, 0, INV_SLOTS - 1)
     w_id = jnp.where(cur >= 0, inv[_PIDX, w_slot], 0)
     wl = I.WEAPON_LEVEL[w_id]
@@ -172,7 +172,7 @@ def item_inputs(world, key):
     safe_step = REFINE_CHANCE[wl, r_now] >= 1000
     ore = I.REFINE_ORE[wl]
     has_ore = jnp.any(held & (inv == ore[:, None]), axis=1)
-    can_pay = it["zeny"] >= I.REFINE_ZENY[wl]
+    can_pay = it["ryn"] >= I.REFINE_RYN[wl]
     do_refine = live & (cur >= 0) & (w_id != 0) & (r_now < I.MAX_REFINE) & safe_step & has_ore & can_pay
     refine_in = jnp.where(do_refine, cur, -1).astype(jnp.int32)
 

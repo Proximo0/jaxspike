@@ -70,7 +70,7 @@ def spawn_population(world, key):
 def make_world_batch(seed, batch):
     """Build `batch` populated RO worlds, every field batched on axis 0.
 
-    RO terrain (towns, roads, dungeons, warps, kafra and station tiles), warp-aware distance fields, resource
+    RO terrain (towns, roads, dungeons, warps, waybell and station tiles), warp-aware distance fields, resource
     nodes with their distance fields, monsters by band, players on their temples.
     """
     from bots import ro_nav_policy

@@ -127,7 +127,7 @@ def test_elem_mult_spot_checks():
     assert int(el.elem_mult(el.ELEM_HOLY, el.ELEM_UNDEAD)) in (125, 150)
     assert int(el.elem_mult(el.ELEM_FIRE, el.ELEM_WATER)) == int(el.ELEM_MULT[el.ELEM_FIRE, el.ELEM_WATER])
     assert (np.asarray(el.ELEM_MULT) >= 0).all() and (np.asarray(el.ELEM_MULT) <= 200).all()
-    assert int(el.MONSTER_ELEMENT[0]) == el.ELEM_WATER and int(el.MONSTER_ELEMENT[1]) == el.ELEM_EARTH  # Poring, Orc Warrior
+    assert int(el.MONSTER_ELEMENT[0]) == el.ELEM_WATER and int(el.MONSTER_ELEMENT[1]) == el.ELEM_EARTH  # Blobbin, Grukk Brute
     out = el.elem_mult(jnp.array([el.ELEM_NEUTRAL, el.ELEM_HOLY]), jnp.array([el.ELEM_GHOST, el.ELEM_UNDEAD]))
     assert out.shape == (2,)
 
@@ -326,7 +326,7 @@ def test_magnum_break_hits_chebyshev_one_only():
              "kind": m["kind"].at[i].set(0), "active": m["active"].at[i].set(True)}
     w = {**w, "monsters": m}
     out = _tick(w, skill=s, target=_mon(0))  # self-target ignores the target value
-    expect = _dmg(10, s, 1, int(el.MONSTER_ELEMENT[0]))  # kind 0 = Poring (Water) since the RO world merge
+    expect = _dmg(10, s, 1, int(el.MONSTER_ELEMENT[0]))  # kind 0 = Blobbin (Water) since the RO world merge
     assert expect > 0
     hps = [_hp(out, i) for i in range(5)]
     assert hps[:4] == [MONSTER_HP[0] - expect] * 4

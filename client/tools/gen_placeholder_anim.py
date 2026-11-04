@@ -37,13 +37,13 @@ CLIP = {
 }
 ATK_FRAME = 3
 
-NPCS = ["npc_shop", "npc_kafra"]
+NPCS = ["npc_shop", "npc_waybell"]
 JOBS = ["novice", "swordsman", "mage", "archer", "acolyte", "thief", "merchant"]
 # engine order (game/data/monsters.py)
 MONSTERS = [
-    "poring", "orc_warrior", "fabre", "lunatic", "drops", "poporing", "willow", "rocker", "spore", "thief_bug",
-    "zombie", "wolf", "skeleton", "peco_peco", "hode", "soldier_skeleton", "bigfoot", "mummy",
-    "golden_thief_bug", "eddga",
+    "blobbin", "grukk_brute", "wrigglet", "moonbun", "emberblob", "vexblob", "bramblet", "fiddlehop", "capling", "pilferbug",
+    "rotling", "snarlfang", "clackbone", "gallopeck", "sandgulper", "clackbone_guard", "grumblebear", "tombwrap",
+    "gildscarab", "scorchstripe",
 ]
 
 OUTLINE_DARK = 0.32
@@ -375,22 +375,22 @@ HUMANOID = {
     "npc_shop": dict(skin="#ffd9b8", hair="#6a3a1a", hair_style="short", outfit="#e8d8b0", outfit2="#3aa0d8",
                      shoes="#5a3018", eye="#3a8a4a", gear="cap", gear_c="#e8902a", weapon="sign", robe=False,
                      apron=True, pouch=True),
-    "npc_kafra": dict(skin="#ffe0c8", hair="#8a5a3a", hair_style="short", outfit="#1f3fa0", outfit2="#ffffff",
-                      shoes="#f4f4fa", eye="#2a6ad0", gear="kafra", gear_c="#ffffff", weapon="clipboard",
-                      robe=True, kafra=True),
-    "orc_warrior": dict(skin="#5ab04a", hair="#3a2a1a", hair_style="none", outfit="#8a5a30", outfit2="#c0c0c8",
+    "npc_waybell": dict(skin="#ffe0c8", hair="#8a5a3a", hair_style="short", outfit="#1f3fa0", outfit2="#ffffff",
+                      shoes="#f4f4fa", eye="#2a6ad0", gear="waybell", gear_c="#ffffff", weapon="clipboard",
+                      robe=True, waybell=True),
+    "grukk_brute": dict(skin="#5ab04a", hair="#3a2a1a", hair_style="none", outfit="#8a5a30", outfit2="#c0c0c8",
                         shoes="#3a2a1a", eye="#ffd020", gear="horns", gear_c="#9aa0b0", weapon="axe", robe=False,
                         tusks=True, scale=1.15, bulky=True),
-    "zombie": dict(skin="#9ac07a", hair="#3a4a2a", hair_style="messy", outfit="#6a5a9a", outfit2="#4a3a5a",
+    "rotling": dict(skin="#9ac07a", hair="#3a4a2a", hair_style="messy", outfit="#6a5a9a", outfit2="#4a3a5a",
                    shoes="#3a3030", eye="#ffffff", gear="none", weapon="none", robe=False, eye_style="dots",
                    arms_fwd=True, torn=True),
-    "skeleton": dict(skin="#f2ecd8", hair=None, hair_style="none", outfit="#f2ecd8", outfit2="#a89a80",
+    "clackbone": dict(skin="#f2ecd8", hair=None, hair_style="none", outfit="#f2ecd8", outfit2="#a89a80",
                      shoes="#d8d0b8", eye="#000000", gear="none", weapon="none", robe=False, eye_style="hollow",
                      ribs=True, thin=True),
-    "soldier_skeleton": dict(skin="#f2ecd8", hair=None, hair_style="none", outfit="#f2ecd8", outfit2="#a89a80",
+    "clackbone_guard": dict(skin="#f2ecd8", hair=None, hair_style="none", outfit="#f2ecd8", outfit2="#a89a80",
                              shoes="#d8d0b8", eye="#000000", gear="helm", gear_c="#8a8f9a", weapon="sword",
                              robe=False, eye_style="hollow", ribs=True, thin=True, shield=True),
-    "mummy": dict(skin="#ead9a8", hair=None, hair_style="none", outfit="#ead9a8", outfit2="#b8a070",
+    "tombwrap": dict(skin="#ead9a8", hair=None, hair_style="none", outfit="#ead9a8", outfit2="#b8a070",
                   shoes="#ead9a8", eye="#000000", gear="none", weapon="none", robe=False, eye_style="glow",
                   arms_fwd=True, wraps=True),
 }
@@ -632,7 +632,7 @@ def draw_humanoid(cv, name, d, p, ax, ay):
             pc.ellipse(X(6.5 * (1 if not side else 0) - fx * 4), Y(6), 3.0 * s, 3.2 * s)
             cv.stamp(pc)
             cv.dot(X(6.5 * (1 if not side else 0) - fx * 4) - 1, Y(6) - 1, hx("#f0d040"), 2, 2)
-        if sp.get("kafra") and not back:
+        if sp.get("waybell") and not back:
             tr = Part(WHITE)
             tr.poly([(X(-3), Y(18)), (X(3), Y(18)), (X(1.5), Y(8)), (X(-1.5), Y(8))], shading=False)
             cv.stamp(tr)
@@ -753,7 +753,7 @@ def draw_humanoid(cv, name, d, p, ax, ay):
             if not back:
                 cv.dot(X(-3 + fx * 3), Y(head_y + 7), WHITE, 1, 1)
                 cv.dot(X(2 + fx * 3), Y(head_y + 6), WHITE, 1, 1)
-        elif g == "kafra":
+        elif g == "waybell":
             band = Part(gc)
             band.ellipse(X(0), Y(head_y + 7.5), (hr + 0.4) * s, 2.6 * s, shading=False)
             cv.stamp(band)
@@ -826,12 +826,12 @@ def draw_humanoid(cv, name, d, p, ax, ay):
         draw_weapon_hand()
 
 
-# ---------------------------------------------------------------- blobs (poring family, lunatic)
+# ---------------------------------------------------------------- blobs (blobbin family, moonbun)
 BLOBS = {
-    "poring": dict(c="#ff8fc0", eye="#2a1a2a"),
-    "drops": dict(c="#ff9a2a", eye="#2a1a2a"),
-    "poporing": dict(c="#6ad84a", eye="#2a1a2a", leaf=True),
-    "lunatic": dict(c="#fbf6ff", eye="#e8203a", ears=True, small=True),
+    "blobbin": dict(c="#ff8fc0", eye="#2a1a2a"),
+    "emberblob": dict(c="#ff9a2a", eye="#2a1a2a"),
+    "vexblob": dict(c="#6ad84a", eye="#2a1a2a", leaf=True),
+    "moonbun": dict(c="#fbf6ff", eye="#e8203a", ears=True, small=True),
 }
 
 
@@ -869,7 +869,7 @@ def draw_blob(cv, name, d, p, ax, ay):
         cv.stamp(lf)
     if not back:
         style = p["eyes"]
-        draw_eyes(cv, cx, cy - 1, fx, back, style, hx(sp["eye"]) if name == "lunatic" else (60, 40, 60),
+        draw_eyes(cv, cx, cy - 1, fx, back, style, hx(sp["eye"]) if name == "moonbun" else (60, 40, 60),
                   sep=3.6 if sp.get("small") else 4.2)
         mx = cx + fx * 4 - 1
         if p["mouth"] > 0 or style == "hurt":
@@ -879,7 +879,7 @@ def draw_blob(cv, name, d, p, ax, ay):
         if abs(fx) < 0.9:
             cv.dot(cx - 7 + fx * 2, cy + 1, mix(c, (255, 60, 110), 0.4), 2, 1)
             cv.dot(cx + 6 + fx * 2, cy + 1, mix(c, (255, 60, 110), 0.4), 2, 1)
-    if name == "lunatic":
+    if name == "moonbun":
         if not back:
             cv.dot(cx + fx * 5 - 1, cy + 5, hx("#ffd0e0"), 2, 1)
         else:
@@ -893,7 +893,7 @@ def depth_sorted(items):
     return sorted(items, key=lambda it: it[0])
 
 
-def draw_fabre(cv, d, p, ax, ay):
+def draw_wrigglet(cv, d, p, ax, ay):
     fx, fy = FACE[d]
     back = d >= 3
     lx, ly = lunge_xy(p, fx, fy)
@@ -926,7 +926,7 @@ def draw_fabre(cv, d, p, ax, ay):
 
 
 def draw_bug(cv, name, d, p, ax, ay):
-    gold = name == "golden_thief_bug"
+    gold = name == "gildscarab"
     s = 1.9 if gold else 1.3
     fx, fy = FACE[d]
     back = d >= 3
@@ -1005,7 +1005,7 @@ def draw_bug(cv, name, d, p, ax, ay):
 
 
 # ---------------------------------------------------------------- plants
-def draw_willow(cv, d, p, ax, ay):
+def draw_bramblet(cv, d, p, ax, ay):
     fx, fy = FACE[d]
     back = d >= 3
     lx, ly = lunge_xy(p, fx, fy)
@@ -1045,7 +1045,7 @@ def draw_willow(cv, d, p, ax, ay):
         cv.dot(ex - 1 + fx * 2, fy_ + 5, (40, 20, 10), 3, 2 if p["mouth"] else 1)
 
 
-def draw_spore(cv, d, p, ax, ay):
+def draw_capling(cv, d, p, ax, ay):
     fx, fy = FACE[d]
     back = d >= 3
     lx, ly = lunge_xy(p, fx, fy)
@@ -1072,7 +1072,7 @@ def draw_spore(cv, d, p, ax, ay):
 
 
 # ---------------------------------------------------------------- critters
-def draw_rocker(cv, d, p, ax, ay):
+def draw_fiddlehop(cv, d, p, ax, ay):
     fx, fy = FACE[d]
     back = d >= 3
     lx, ly = lunge_xy(p, fx, fy)
@@ -1123,7 +1123,7 @@ def draw_rocker(cv, d, p, ax, ay):
         cv.stamp(bowp)
 
 
-def draw_hode(cv, d, p, ax, ay):
+def draw_sandgulper(cv, d, p, ax, ay):
     fx, fy = FACE[d]
     back = d >= 3
     lx, ly = lunge_xy(p, fx, fy)
@@ -1155,9 +1155,9 @@ def draw_hode(cv, d, p, ax, ay):
 
 
 QUADS = {
-    "wolf": dict(c="#8a9ac8", belly="#e8eef8", s=1.3, ears="point", eye="#ffd020", tail="bushy", snout=True),
-    "bigfoot": dict(c="#a0642a", belly="#d8a060", s=1.75, ears="round", eye="#2a1a1a", tail="stub", snout=True),
-    "eddga": dict(c="#ff9a1a", belly="#fff4d8", s=1.8, ears="round", eye="#30c040", tail="bush", snout=True,
+    "snarlfang": dict(c="#8a9ac8", belly="#e8eef8", s=1.3, ears="point", eye="#ffd020", tail="bushy", snout=True),
+    "grumblebear": dict(c="#a0642a", belly="#d8a060", s=1.75, ears="round", eye="#2a1a1a", tail="stub", snout=True),
+    "scorchstripe": dict(c="#ff9a1a", belly="#fff4d8", s=1.8, ears="round", eye="#30c040", tail="bush", snout=True,
                   stripes=True, mvp=True),
 }
 
@@ -1289,7 +1289,7 @@ def draw_quad(cv, name, d, p, ax, ay):
         draw(kind, a, b)
     if not back and fy >= 0:
         draw("head", hxp, hyp)
-    if name == "eddga" and not back:
+    if name == "scorchstripe" and not back:
         # MVP aura sparkle
         cv.dot(cx - 14 * s, gy - 22 * s, (255, 240, 120), 1, 2)
 
@@ -1346,33 +1346,33 @@ def kind_spec(name):
         return 48, 64, 24, 60, lambda cv, d, p, ax, ay: draw_humanoid(cv, name, d, p, ax, ay), "fall", PLAYER_ACTIONS
     if name in NPCS:
         return 48, 64, 24, 60, lambda cv, d, p, ax, ay: draw_humanoid(cv, name, d, p, ax, ay), "fall", NPC_ACTIONS
-    if name in ("zombie", "skeleton", "soldier_skeleton", "mummy"):
+    if name in ("rotling", "clackbone", "clackbone_guard", "tombwrap"):
         return 48, 64, 24, 60, lambda cv, d, p, ax, ay: draw_humanoid(cv, name, d, p, ax, ay), "fall", MONSTER_ACTIONS
-    if name == "orc_warrior":
+    if name == "grukk_brute":
         return 56, 72, 28, 68, lambda cv, d, p, ax, ay: draw_humanoid(cv, name, d, p, ax, ay), "fall", MONSTER_ACTIONS
     if name in BLOBS:
         return 40, 40, 20, 36, lambda cv, d, p, ax, ay: draw_blob(cv, name, d, p, ax, ay), "flat", MONSTER_ACTIONS
-    if name == "fabre":
-        return 48, 40, 24, 36, draw_fabre, "flat", MONSTER_ACTIONS
-    if name == "thief_bug":
+    if name == "wrigglet":
+        return 48, 40, 24, 36, draw_wrigglet, "flat", MONSTER_ACTIONS
+    if name == "pilferbug":
         return 48, 40, 24, 33, lambda cv, d, p, ax, ay: draw_bug(cv, name, d, p, ax, ay), "flip", MONSTER_ACTIONS
-    if name == "golden_thief_bug":
+    if name == "gildscarab":
         return 72, 56, 36, 46, lambda cv, d, p, ax, ay: draw_bug(cv, name, d, p, ax, ay), "flip", MONSTER_ACTIONS
-    if name == "willow":
-        return 48, 64, 24, 60, draw_willow, "fall", MONSTER_ACTIONS
-    if name == "spore":
-        return 40, 48, 20, 44, draw_spore, "flat", MONSTER_ACTIONS
-    if name == "rocker":
-        return 48, 56, 24, 52, draw_rocker, "fall", MONSTER_ACTIONS
-    if name == "hode":
-        return 40, 40, 20, 36, draw_hode, "flat", MONSTER_ACTIONS
-    if name == "wolf":
+    if name == "bramblet":
+        return 48, 64, 24, 60, draw_bramblet, "fall", MONSTER_ACTIONS
+    if name == "capling":
+        return 40, 48, 20, 44, draw_capling, "flat", MONSTER_ACTIONS
+    if name == "fiddlehop":
+        return 48, 56, 24, 52, draw_fiddlehop, "fall", MONSTER_ACTIONS
+    if name == "sandgulper":
+        return 40, 40, 20, 36, draw_sandgulper, "flat", MONSTER_ACTIONS
+    if name == "snarlfang":
         return 56, 48, 28, 44, lambda cv, d, p, ax, ay: draw_quad(cv, name, d, p, ax, ay), "fall", MONSTER_ACTIONS
-    if name == "bigfoot":
+    if name == "grumblebear":
         return 72, 64, 36, 58, lambda cv, d, p, ax, ay: draw_quad(cv, name, d, p, ax, ay), "fall", MONSTER_ACTIONS
-    if name == "eddga":
+    if name == "scorchstripe":
         return 80, 64, 40, 58, lambda cv, d, p, ax, ay: draw_quad(cv, name, d, p, ax, ay), "fall", MONSTER_ACTIONS
-    if name == "peco_peco":
+    if name == "gallopeck":
         return 56, 64, 28, 60, draw_peco, "fall", MONSTER_ACTIONS
     raise KeyError(name)
 
@@ -1449,14 +1449,14 @@ def contact_sheet(out_dir, kinds):
         rows.append([("swordsman", "attack", 1, i) for i in range(6)] + [("mage", "cast", 0, 0), ("mage", "cast", 0, 3)])
         rows.append([("thief", a, 0, f) for a, f in (("hurt", 0), ("hurt", 1), ("dead", 2), ("dead", 4),
                                                      ("sit", 0), ("pickup", 1), ("standby", 0))])
-    if "poring" in kinds:
-        rows.append([("poring", "walk", 0, i) for i in range(8)])
-        rows.append([("poring", a, 0, f) for a, f in (("attack", 3), ("hurt", 0), ("dead", 4))]
-                    + [("wolf", "walk", 2, i) for i in (0, 2, 4)])
-        rows.append([("orc_warrior", "hurt", 0, i) for i in range(4)]
-                    + [("poring", "hurt", 0, i) for i in range(2)] + [("thief", "hurt", 0, i) for i in range(2)])
-        rows.append([("orc_warrior", "dead", 0, 0), ("poring", "dead", 0, 0), ("thief", "dead", 0, 0)])
-    for mvp in ("golden_thief_bug", "eddga"):
+    if "blobbin" in kinds:
+        rows.append([("blobbin", "walk", 0, i) for i in range(8)])
+        rows.append([("blobbin", a, 0, f) for a, f in (("attack", 3), ("hurt", 0), ("dead", 4))]
+                    + [("snarlfang", "walk", 2, i) for i in (0, 2, 4)])
+        rows.append([("grukk_brute", "hurt", 0, i) for i in range(4)]
+                    + [("blobbin", "hurt", 0, i) for i in range(2)] + [("thief", "hurt", 0, i) for i in range(2)])
+        rows.append([("grukk_brute", "dead", 0, 0), ("blobbin", "dead", 0, 0), ("thief", "dead", 0, 0)])
+    for mvp in ("gildscarab", "scorchstripe"):
         if mvp in kinds:
             rows.append([(mvp, "idle", 0, 0), (mvp, "idle", 2, 0), (mvp, "walk", 2, 2), (mvp, "walk", 0, 2),
                          (mvp, "attack", 2, 3), (mvp, "attack", 0, 3), (mvp, "dead", 2, 4), (mvp, "hurt", 2, 0)])

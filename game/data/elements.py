@@ -25,7 +25,7 @@ ELEM_NAME = ("Neutral", "Water", "Earth", "Fire", "Wind", "Poison", "Holy", "Sha
 
 # Source: rAthena db/pre-re/attr_fix.yml, defender element level 1 (audited by ro-fidelity 2026-11-02; iRO wiki
 # "Element" agrees). Negative entries (Poison/Shadow vs Undead heal 25%) are clamped to 0 (no healing hits).
-# Monsters with element level 2-4 (Lunatic, Thief Bug Neutral 3; Hode Earth 2; Mummy Undead 2; GTB Fire 2) use
+# Monsters with element level 2-4 (Moonbun, Pilferbug Neutral 3; Sandgulper Earth 2; Tombwrap Undead 2; Gildscarab Fire 2) use
 # this level-1 row: a deliberate simplification (docs/ro_fidelity.md).
 # Rows = attack element, columns = defend element.
 #            Neu  Wat  Ear  Fir  Win  Poi  Hol  Sha  Gho  Und

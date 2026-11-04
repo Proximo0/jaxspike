@@ -8,7 +8,7 @@ from game.data import monsters as mon
 from game.data.items import ITEM_NONE
 from game.state import make_empty_world
 
-KIND = mon.KIND_BY_NAME["Eddga"]
+KIND = mon.KIND_BY_NAME["Scorchstripe"]
 assert bool(mon.MVP[KIND])
 SLOT = MAX_MONSTERS - 3
 N_P = MAX_PLAYERS
@@ -200,12 +200,12 @@ def test_mvp_identified_by_table_flag():
     assert flags[SLOT] and flags.sum() == (np.asarray(m["kind"]) == KIND).sum()
     assert list(np.flatnonzero(np.asarray(mon.MVP))) == [18, 19]
     assert ro_mvp.MVP_DROP[0] == (0,) * 4 and len(ro_mvp.MVP_DROP) == mon.N_KINDS
-    w2 = {**w, "monsters": {**m, "kind": m["kind"].at[SLOT].set(2)}}  # Fabre is not an MVP
+    w2 = {**w, "monsters": {**m, "kind": m["kind"].at[SLOT].set(2)}}  # Wrigglet is not an MVP
     assert not bool(ro_mvp.is_mvp(w2)[SLOT])
 
 
 def test_other_mvp_kind_independent_timer():
-    gtb = mon.KIND_BY_NAME["Golden Thief Bug"]
+    gtb = mon.KIND_BY_NAME["Gildscarab"]
     w = mk()
     m = w["monsters"]
     s2 = SLOT - 1

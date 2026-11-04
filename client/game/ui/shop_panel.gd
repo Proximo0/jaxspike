@@ -24,7 +24,7 @@ var shop_name: String = ""
 var rows_buy: Array[Dictionary] = []
 var rows_sell: Array[Dictionary] = []
 var title_label: Label
-var zeny_label: Label
+var ryn_label: Label
 var buy_list: VBoxContainer
 var sell_list: VBoxContainer
 var _synced_version: int = -1
@@ -43,8 +43,8 @@ func _ready() -> void:
 	title_label = Label.new()
 	title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(title_label)
-	zeny_label = Label.new()
-	head.add_child(zeny_label)
+	ryn_label = Label.new()
+	head.add_child(ryn_label)
 	var close_btn := Button.new()
 	close_btn.text = "Close"
 	close_btn.pressed.connect(close)
@@ -101,7 +101,7 @@ func refresh() -> void:
 	if town < 0:
 		dismissed_town = -1
 	visible = town >= 0 and town != dismissed_town
-	zeny_label.text = "Zeny %d" % int(you.get("zeny", 0))
+	ryn_label.text = "Ryn %d" % int(you.get("ryn", 0))
 	if town < 0:
 		return
 	shop_name = shop_title(welcome, town)

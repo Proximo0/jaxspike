@@ -4,9 +4,9 @@ extends TestCase
 const SLOTS_PATH: String = "res://assets/slots.json"
 const PACK_DIRS: Array[String] = ["tiny-dungeon", "tiny-town", "roguelike-rpg-pack", "roguelike-characters",
 	"ui-pack-rpg-expansion", "ui-pack"]
-const MONSTERS: Array[String] = ["rat", "orc", "poring", "drops", "poporing", "lunatic", "fabre", "pupa", "chonchon",
-	"willow", "rocker", "spore", "thief_bug", "condor", "picky", "peco_peco", "wolf", "hode", "orc_warrior", "zombie",
-	"skeleton", "baphomet_jr"]
+const MONSTERS: Array[String] = ["rat", "orc", "blobbin", "emberblob", "vexblob", "moonbun", "wrigglet", "cocoonling", "buzzeye",
+	"bramblet", "fiddlehop", "capling", "pilferbug", "cragwing", "peepit", "gallopeck", "snarlfang", "sandgulper", "grukk_brute", "rotling",
+	"clackbone", "imphorn"]
 const ITEMS: Array[String] = ["gold_coin", "meat", "sword", "potion_red", "potion_blue", "dagger", "bow", "staff",
 	"mace", "axe", "shield", "armor", "hat", "boots", "garment", "ring", "card", "ore", "herb", "fish"]
 const UIS: Array[String] = ["panel", "panel_title", "button", "button_pressed", "button_hover", "slot", "hpbar_bg",

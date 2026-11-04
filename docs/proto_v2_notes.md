@@ -116,7 +116,7 @@ Server behaviour worth knowing:
   characters); a name with an account always needs its password. `GameServer(require_password=True)` /
   `--require-password` turns the compat path off. Known gap: `create` for a name that has an old name-only character
   file lets the creator claim it.
-- Storage ops run before the tick; the town test is the town box, not the kafra tile. Storage holds item ids only, so
+- Storage ops run before the tick; the town test is the town box, not the waybell tile. Storage holds item ids only, so
   gear with refine/cards is refused and a stack moves one unit.
 - Slot reuse: login and logout reset the slot's stats/skills/items/craft/party rows to fresh (one jitted call).
   Parties and cooldowns/buffs do not persist; bots taking a slot over start as fresh Novices.
@@ -125,5 +125,5 @@ Server behaviour worth knowing:
 
 Nodes are in the entity table now (kinds 400..407, see above). `entity_table` uses the derived max_hp for players,
 but `changed_mask` still ignores `max_hp`, so other viewers see a level-up max_hp only when hp or pos changes.
-Also: `kafra.character_storage` validates ids against `NUM_ITEMS` (4); the server uses `char["storage"]` from
+Also: `waybell.character_storage` validates ids against `NUM_ITEMS` (4); the server uses `char["storage"]` from
 `characters.load` instead.

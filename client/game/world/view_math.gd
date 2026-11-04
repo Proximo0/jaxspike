@@ -19,7 +19,7 @@ const NODE_KIND_COUNT: int = 8
 ## Node kinds 0..5 can be gathered; 6 (furnace) and 7 (cooking fire) are crafting stations.
 const NODE_GATHER_COUNT: int = 6
 
-## Flat colour per terrain id 0..11 (grass, road, floor, temple, water, tree, wall, rock, warp, kafra, station, cave).
+## Flat colour per terrain id 0..11 (grass, road, floor, temple, water, tree, wall, rock, warp, waybell, station, cave).
 const TERRAIN_COLORS: Array[Color] = [
 	Color(0.30, 0.55, 0.25),
 	Color(0.62, 0.52, 0.36),

@@ -4,7 +4,7 @@ const WELCOME: Dictionary = {
 	"items": [{}, {"name": "Gold", "kind": 1, "buy": 0, "sell": 0}, {"name": "Red Potion", "kind": 2, "buy": 50, "sell": 25},
 		{"name": "Sword", "kind": 3, "buy": 100, "sell": 50}, {"name": "Cap", "kind": 4, "buy": 1, "sell": 1}],
 	"world": {"shops": [{"tile": [10, 10], "town": 1}]},
-	"shops": [{"town": 0, "name": "Prontera", "items": [2]}, {"town": 1, "name": "Geffen", "items": [0, 2, 3]}],
+	"shops": [{"town": 0, "name": "Solmera", "items": [2]}, {"town": 1, "name": "Lunavell", "items": [0, 2, 3]}],
 	"skills": {"names": ["a", "Discount", "Overcharge"]},
 }
 

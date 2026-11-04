@@ -16,7 +16,7 @@ const SAMPLE: String = """{
 func test_key_builders() -> void:
 	assert_eq(AssetSlots.tile_key(3), "tile.3")
 	assert_eq(AssetSlots.job_key(1, "walk"), "job.1.walk")
-	assert_eq(AssetSlots.monster_key(2), "monster.poring")
+	assert_eq(AssetSlots.monster_key(2), "monster.blobbin")
 	assert_eq(AssetSlots.monster_key(22), "monster.unknown")
 	assert_eq(AssetSlots.monster_key(-1), "monster.unknown")
 	assert_eq(AssetSlots.item_key(2), "item.meat")
@@ -46,7 +46,7 @@ func test_expected_keys_count_and_unique() -> void:
 	assert_eq(seen.size(), keys.size())
 	assert_true(seen.has("tile.10"))
 	assert_true(seen.has("job.6.dead"))
-	assert_true(seen.has("monster.baphomet_jr"))
+	assert_true(seen.has("monster.imphorn"))
 	assert_true(seen.has("ui.icon_close"))
 
 
@@ -109,9 +109,9 @@ func test_region_slot_builds_atlas_texture() -> void:
 	if not FileAccess.file_exists(path):
 		assert_true(true)
 		return
-	var text: String = JSON.stringify({"slots": {"monster.poring": {"path": path, "region": [16, 112, 16, 16]}}})
+	var text: String = JSON.stringify({"slots": {"monster.blobbin": {"path": path, "region": [16, 112, 16, 16]}}})
 	assert_true(reg.parse(text))
-	var tex: Texture2D = reg.texture("monster.poring")
+	var tex: Texture2D = reg.texture("monster.blobbin")
 	if tex is AtlasTexture:
 		var atlas: AtlasTexture = tex
 		assert_eq(atlas.region, Rect2(16, 112, 16, 16))

@@ -41,7 +41,7 @@ func test_painted_frames_have_outline_and_colour() -> void:
 	var feet: Vector2 = PlaceholderClips.ANCHOR
 	var body: Color = img.get_pixel(int(feet.x), int(feet.y) - 10)
 	assert_true(body.a > 0.99, "opaque body above the feet")
-	assert_true(body.r > 0.5, "Poring pink")
+	assert_true(body.r > 0.5, "Blobbin pink")
 	var corner: Color = img.get_pixel(1, 1)
 	assert_true(corner.a < 0.01, "transparent background")
 	var dark: int = 0

@@ -1,5 +1,5 @@
 extends "res://tests/sim/sim_base.gd"
-## Team client-feel over FakeLink: a GameView fed a welcome (128 map with a town, a dungeon box, a warp and a kafra)
+## Team client-feel over FakeLink: a GameView fed a welcome (128 map with a town, a dungeon box, a warp and a waybell)
 ## and snaps, with the feel pieces wired the way the lead's game_view lines will wire them. Checks the basic info
 ## window, the zone banner on entry (town -> dungeon -> field), the minimap texture and markers, the path preview,
 ## the target ring, the smooth zoom, the chat window's System tab and the audio cues; round 3: the stat section under
@@ -37,21 +37,21 @@ static func welcome_dict() -> Dictionary:
 			if x >= 30 and x <= 40 and y >= 90 and y <= 100:
 				t = 4  # a pond
 			terrain[i] = t
-	terrain[TOWN_C.y * MAP_N + TOWN_C.x + 6] = 9  # kafra
+	terrain[TOWN_C.y * MAP_N + TOWN_C.x + 6] = 9  # waybell
 	terrain[25 * MAP_N + 110] = 8  # warp just below the dungeon wall
 	return {"t": "welcome", "slot": 0, "map": MAP_N, "tick_ms": 100, "view_w": 61, "view_h": 33,
 		"terrain": _feel_blob(terrain), "pz": _feel_blob(pz),
 		"job_names": ["Novice", "Swordsman"],
-		"world": {"towns": [{"idx": 0, "name": "Prontera", "role": "capital", "center": [TOWN_C.x, TOWN_C.y],
-				"kafra": [TOWN_C.x + 6, TOWN_C.y], "station": [TOWN_C.x - 6, TOWN_C.y]}],
-			"dungeons": [{"idx": 0, "name": "Prontera Culvert", "box": DUNGEON_BOX}],
+		"world": {"towns": [{"idx": 0, "name": "Solmera", "role": "capital", "center": [TOWN_C.x, TOWN_C.y],
+				"waybell": [TOWN_C.x + 6, TOWN_C.y], "station": [TOWN_C.x - 6, TOWN_C.y]}],
+			"dungeons": [{"idx": 0, "name": "Solmera Culvert", "box": DUNGEON_BOX}],
 			"warps": [{"from": [110, 25], "to": [110, 15]}]}}
 
 
 static func snap_text(tick: int, pos: Vector2i, you_extra: Dictionary, notice: String) -> String:
 	var you: Dictionary = {"pos": [pos.x, pos.y], "hp": 150, "max_hp": 200, "kills": 0, "deaths": 0, "town": 0,
 		"safe": false, "level": 12, "job_level": 7, "job": 1, "sp": 6, "max_sp": 30, "base_exp": 50,
-		"base_exp_next": 200, "job_exp": 10, "job_exp_next": 40, "zeny": 1234, "inv": []}
+		"base_exp_next": 200, "job_exp": 10, "job_exp_next": 40, "ryn": 1234, "inv": []}
 	you.merge(you_extra, true)
 	var ents: Array = [
 		{"id": 0, "kind": 0, "pos": [pos.x, pos.y], "hp": int(you["hp"]), "max_hp": 200, "name": "Odin"},
@@ -92,15 +92,15 @@ func run() -> Array:
 	# ------------------------------------------------------------------
 	var w: Dictionary = welcome_dict()
 	link.push_inbound(Codec.encode(w))
-	link.push_inbound(snap_text(1, TOWN_C, {}, "Welcome to Prontera"))
+	link.push_inbound(snap_text(1, TOWN_C, {}, "Welcome to Solmera"))
 	await _feel_frames(3)
 	var hud: Hud = view.hud
 	rows.append(row("info_window", hud.name_label.text == "Odin" and hud.job_label.text == "Swordsman"
 			and hud.level_label.text == "Base Lv. 12   Job Lv. 7" and hud.hp_label.text == "150 / 200"
-			and hud.base_label.text == "25.0 %" and hud.job_exp_label.text == "25.0 %" and hud.zeny_label.text == "Zeny 1,234"
+			and hud.base_label.text == "25.0 %" and hud.job_exp_label.text == "25.0 %" and hud.ryn_label.text == "Ryn 1,234"
 			and is_equal_approx(hud.hp_bar.value, 0.75),
-			"%s|%s|%s|%s|%s" % [hud.name_label.text, hud.job_label.text, hud.hp_label.text, hud.base_label.text, hud.zeny_label.text]))
-	rows.append(row("banner_town", hud.banner.title.text == "Prontera" and hud.banner.zone["kind"] == "town"
+			"%s|%s|%s|%s|%s" % [hud.name_label.text, hud.job_label.text, hud.hp_label.text, hud.base_label.text, hud.ryn_label.text]))
+	rows.append(row("banner_town", hud.banner.title.text == "Solmera" and hud.banner.zone["kind"] == "town"
 			and hud.banner.age_s >= 0.0, hud.banner.title.text))
 	rows.append(row("minimap_built", hud.minimap.texture != null and hud.minimap.texture.get_width() == MAP_N
 			and hud.minimap.markers.size() == 2, "markers=%d" % hud.minimap.markers.size()))
@@ -139,12 +139,12 @@ func run() -> Array:
 	await _feel_frames(2)
 	link.push_inbound(snap_text(3, Vector2i(110, 10), {"level": 13}, ""))
 	await _feel_frames(3)
-	rows.append(row("banner_dungeon", hud.banner.title.text == "Prontera Culvert" and hud.banner.shown == 2, hud.banner.title.text))
+	rows.append(row("banner_dungeon", hud.banner.title.text == "Solmera Culvert" and hud.banner.shown == 2, hud.banner.title.text))
 	rows.append(row("audio_cues", audio.played.has(AudioCues.WARP) and audio.played.has(AudioCues.LEVEL_UP)
 			and audio.streams.size() == AudioCues.ALL.size(), str(audio.played)))
 	link.push_inbound(snap_text(4, Vector2i(64, 100), {"level": 13}, ""))
 	await _feel_frames(2)
-	rows.append(row("banner_field", hud.banner.title.text == "Prontera Field" and hud.banner.zone["kind"] == "field", hud.banner.title.text))
+	rows.append(row("banner_field", hud.banner.title.text == "Solmera Field" and hud.banner.zone["kind"] == "field", hud.banner.title.text))
 
 	# ---- round 3 (ro3-client) ----
 	# Warp camera snap: the 1-tile step (snap 2) was no warp, the two jumps (snaps 3 and 4) were.
@@ -236,7 +236,7 @@ func run() -> Array:
 
 	var shot: String = OS.get_environment("FEEL_SHOT")
 	if shot != "" and DisplayServer.get_name() != "headless":
-		link.push_inbound(snap_text(5, TOWN_C + Vector2i(-2, 1), {"level": 13}, "Welcome to Prontera"))
+		link.push_inbound(snap_text(5, TOWN_C + Vector2i(-2, 1), {"level": 13}, "Welcome to Solmera"))
 		hud.minimap.toggle_dots()
 		view.player_input.zoom.snap(1.5)
 		await _feel_frames(2)

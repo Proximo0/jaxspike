@@ -29,8 +29,8 @@ MONSTER_RESPAWN_TICKS = 60
 # Monster kinds: index into these tables.
 MONSTER_KIND_RAT = 0
 MONSTER_KIND_ORC = 1
-# Since the RO world merge the kind table is game/data/monsters.py (20 kinds; 0 = Poring keeps the rat slot,
-# 1 = Orc Warrior the orc slot). Kinds per tile come from game/ro_spawns.py by field band and dungeon.
+# Since the RO world merge the kind table is game/data/monsters.py (20 kinds; 0 = Blobbin keeps the rat slot,
+# 1 = Grukk Brute the orc slot). Kinds per tile come from game/ro_spawns.py by field band and dungeon.
 from game.data.monsters import MONSTER_DAMAGE_TUPLE as _RO_DMG, MONSTER_HP_TUPLE as _RO_HP  # noqa: E402
 MONSTER_HP = _RO_HP
 N_MONSTER_KINDS = len(MONSTER_HP)
@@ -66,7 +66,7 @@ T_WATER = 4
 T_TREE = 5
 T_WALL = 6
 T_ROCK = 7
-# 8..11 warp, kafra, station, cave live in game/data/terrain.py; T_SHOP is the NPC shop tile inside a town (ro_shop).
+# 8..11 warp, waybell, station, cave live in game/data/terrain.py; T_SHOP is the NPC shop tile inside a town (ro_shop).
 T_SHOP = 12
 
 # Survival: living players regain REGEN_HP every REGEN_TICKS ticks; eating meat heals MEAT_HEAL.

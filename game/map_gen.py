@@ -5,7 +5,7 @@ import numpy as np
 
 from game.config import (MAP, T_FLOOR, T_GRASS, T_ROAD, T_ROCK, T_TEMPLE, T_TREE, T_WALL,
                          T_WATER)
-from game.data.terrain import T_CAVE, T_KAFRA, T_SHOP, T_STATION, T_WARP
+from game.data.terrain import T_CAVE, T_WAYBELL, T_SHOP, T_STATION, T_WARP
 from game.world_layout import (FOREST_THRESHOLD, NOISE_CELLS, ROAD_HALF_WIDTH, ROADS,
                                TEMPLE_TILES, TREE_DENSITY, WATER_THRESHOLD, town_boxes,
                                town_centers)
@@ -65,7 +65,7 @@ def protection_zone(terrain):
     in_town = jnp.zeros((MAP, MAP), bool)
     for x0, y0, x1, y1 in town_boxes().tolist():
         in_town |= _in_rect(xs, ys, x0, y0, x1, y1)
-    special = (terrain == T_KAFRA) | (terrain == T_STATION) | (terrain == T_SHOP)
+    special = (terrain == T_WAYBELL) | (terrain == T_STATION) | (terrain == T_SHOP)
     return (terrain == T_FLOOR) | (terrain == T_TEMPLE) | (((terrain == T_ROAD) | special) & in_town)
 
 
@@ -147,7 +147,7 @@ def warp_table(terrain=None):
 
 def make_terrain_ro(key):
     """Return int8 [MAP, MAP] terrain of the RO world: make_terrain plus dungeons, zone split lines with
-    portals, town layouts (plaza, streets, decoration, shops), warps, kafras, stations."""
+    portals, town layouts (plaza, streets, decoration, shops), warps, waybells, stations."""
     t = make_terrain(key)
     xs, ys = jnp.meshgrid(jnp.arange(MAP), jnp.arange(MAP), indexing="ij")
     hw = ROAD_HALF_WIDTH
@@ -196,7 +196,7 @@ def make_terrain_ro(key):
         line |= (xs == v) | (ys == v)
     t = jnp.where(line & ~keep, T_ROCK, t)
 
-    # e. town layouts: decoration over floor only, then plaza and streets, then Prontera's fountains
+    # e. town layouts: decoration over floor only, then plaza and streets, then Solmera's fountains
     decor_tid = {"wall": T_WALL, "water": T_WATER, "tree": T_TREE}
     for _, kind, x0, y0, x1, y1, period, size in wl.town_decor():
         m = _in_rect(xs, ys, x0, y0, x1, y1) & ((xs - x0) % period < size) & ((ys - y0) % period < size)
@@ -208,7 +208,7 @@ def make_terrain_ro(key):
 
     # f. special tiles last (warps include the zone portals)
     src, dst = wl.warp_tiles()
-    for arr, tid in ((src, T_WARP), (dst, T_STATION), (wl.kafra_tiles(), T_KAFRA),
+    for arr, tid in ((src, T_WARP), (dst, T_STATION), (wl.waybell_tiles(), T_WAYBELL),
                      (wl.town_station_tiles(), T_STATION), (wl.shop_tiles()[0], T_SHOP)):
         t = t.at[arr[:, 0], arr[:, 1]].set(tid)
     return t.astype(jnp.int8)

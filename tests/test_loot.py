@@ -6,7 +6,7 @@ from game.data import drops as drop_data
 from game.data import items as item_data
 from game.data import monsters as monster_data
 from game.data.drops import DROP_CHANCE, DROP_ITEM
-from game.data.items import ITEM_JELLOPY, ITEM_TIGER_SKIN
+from game.data.items import ITEM_JELLY_BEAD, ITEM_TIGER_SKIN
 from game.loot import loot
 from game.ro_drops import roll_drops
 from game.state import make_empty_world, next_key
@@ -47,9 +47,9 @@ def set_died(w, idxs, positions):
 def _expected_drops(w, m):
     """The drop table rolls for monster m with the loot phase's key: (items in entry order, coin or 0)."""
     sub, _ = next_key(w)
-    items, _, zeny = roll_drops(w, sub)
+    items, _, ryn = roll_drops(w, sub)
     got = [int(i) for i in items[m] if int(i) != ITEM_NONE]
-    return got, (ITEM_GOLD_COIN if int(zeny[m]) > 0 else ITEM_NONE), int(zeny[m])
+    return got, (ITEM_GOLD_COIN if int(ryn[m]) > 0 else ITEM_NONE), int(ryn[m])
 
 
 def set_kind(w, idxs, kind):
@@ -70,7 +70,7 @@ def test_drop_table_covers_every_monster_kind_with_a_card_at_one_per_10000():
         assert row, k
         cards = [i for i in row if int(item_data.KIND[i]) == item_data.KIND_CARD]
         assert len(cards) == 1 and int(DROP_CHANCE[k][row.index(cards[0])]) == 1, k
-        assert 0 < int(drop_data.ZENY_MIN[k]) <= int(drop_data.ZENY_MAX[k])
+        assert 0 < int(drop_data.RYN_MIN[k]) <= int(drop_data.RYN_MAX[k])
     assert ((DROP_CHANCE >= 0) & (DROP_CHANCE <= 10000)).all()
     assert len(drop_data.table_for_client()) == 20
 
@@ -80,7 +80,7 @@ def test_died_monster_creates_table_drops_at_pos():
     for seed in range(12):
         w = set_died(world_with(seed), [5], [[10, 12]])
         items, coin, _ = _expected_drops(w, 5)
-        out = loot(w)  # nobody credited: zeny stays on the ground as a coin drop
+        out = loot(w)  # nobody credited: ryn stays on the ground as a coin drop
         d = out["drops"]
         want = items + ([coin] if coin else [])
         seen.update(want)
@@ -90,16 +90,16 @@ def test_died_monster_creates_table_drops_at_pos():
         assert [int(x) for x in d["item"][:n]] == want
         assert (d["pos"][:n] == jnp.array([10, 12])).all()
         assert (d["ttl"][:n] == DROP_TTL - 1).all()
-    assert ITEM_JELLOPY in seen and ITEM_GOLD_COIN in seen  # kind 0 is the Poring row
+    assert ITEM_JELLY_BEAD in seen and ITEM_GOLD_COIN in seen  # kind 0 is the Blobbin row
 
 
-def test_zeny_goes_to_the_credited_killer_not_the_ground():
+def test_ryn_goes_to_the_credited_killer_not_the_ground():
     w = set_player(set_died(world_with(4), [7], [[30, 30]]), 2, [90, 90])
     w = credit(w, 7, 2)
-    items, _, zeny = _expected_drops(w, 7)
+    items, _, ryn = _expected_drops(w, 7)
     out = loot(w)
-    assert int(out["items"]["zeny"][2]) == zeny > 0
-    assert int(out["items"]["zeny"].sum()) == zeny
+    assert int(out["items"]["ryn"][2]) == ryn > 0
+    assert int(out["items"]["ryn"].sum()) == ryn
     assert int((out["drops"]["item"] == ITEM_GOLD_COIN).sum()) == 0
     assert int(out["drops"]["active"].sum()) == len(items)
 
@@ -107,23 +107,23 @@ def test_zeny_goes_to_the_credited_killer_not_the_ground():
 def test_killer_who_logged_out_gets_nothing_and_coins_drop():
     w = credit(set_died(world_with(4), [7], [[30, 30]]), 7, 2)  # player 2 not active
     out = loot(w)
-    assert int(out["items"]["zeny"].sum()) == 0
+    assert int(out["items"]["ryn"].sum()) == 0
     assert int((out["drops"]["item"] == ITEM_GOLD_COIN).sum()) == 1
 
 
-def test_zeny_from_two_kills_adds_up_and_caps():
+def test_ryn_from_two_kills_adds_up_and_caps():
     w = set_player(set_died(world_with(6), [3, 9], [[5, 5], [6, 6]]), 0, [50, 50])
     w = credit(credit(w, 3, 0), 9, 0)
     _, _, z3 = _expected_drops(w, 3)
     _, _, z9 = _expected_drops(w, 9)
-    assert int(loot(w)["items"]["zeny"][0]) == z3 + z9
+    assert int(loot(w)["items"]["ryn"][0]) == z3 + z9
     it = w["items"]
-    w = {**w, "items": {**it, "zeny": it["zeny"].at[0].set(item_data.MAX_ZENY - 1)}}
-    assert int(loot(w)["items"]["zeny"][0]) == item_data.MAX_ZENY
+    w = {**w, "items": {**it, "ryn": it["ryn"].at[0].set(item_data.MAX_RYN - 1)}}
+    assert int(loot(w)["items"]["ryn"][0]) == item_data.MAX_RYN
 
 
 def test_kind_selects_the_row():
-    # MVP Eddga (kind 19): only its own row's items (or a coin) ever drop, and its tiger skin does.
+    # MVP Scorchstripe (kind 19): only its own row's items (or a coin) ever drop, and its tiger skin does.
     row = {int(i) for i in DROP_ITEM[19]} | {ITEM_GOLD_COIN}
     seen = set()
     for seed in range(8):

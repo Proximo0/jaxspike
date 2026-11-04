@@ -19,7 +19,7 @@ STAT_SCALARS = ("str", "agi", "vit", "int", "dex", "luk", "base_level", "job_lev
 _STAT6 = STAT_SCALARS[:6]
 STATS_KEYS = tuple(f"stats_{k}" for k in STAT_SCALARS)
 SKILLS_KEYS = ("skills_learned", "skills_sp")
-ITEMS_KEYS = ("items_inv_count", "items_inv_refine", "items_inv_cards", "items_equip", "items_zeny")
+ITEMS_KEYS = ("items_inv_count", "items_inv_refine", "items_inv_cards", "items_equip", "items_ryn")
 CRAFT_KEYS = ("craft_level", "craft_exp", "craft_gathers", "craft_crafts")
 RO_KEYS = STATS_KEYS + SKILLS_KEYS + ITEMS_KEYS + CRAFT_KEYS
 LEGACY_FIELDS = ("pos", "spawn", "hp", "inv", "kills", "deaths")
@@ -42,7 +42,7 @@ def _fresh_rows():
         "items": {"items_inv_count": np.asarray(it["inv_count"])[0],
                   "items_inv_refine": np.asarray(it["inv_refine"])[0],
                   "items_inv_cards": np.asarray(it["inv_cards"])[0], "items_equip": np.asarray(it["equip"])[0],
-                  "items_zeny": int(it["zeny"][0])},
+                  "items_ryn": int(it["ryn"][0])},
         "craft": {"craft_level": np.asarray(cr["level"])[0], "craft_exp": np.asarray(cr["exp"])[0],
                   "craft_gathers": int(cr["gathers"][0]), "craft_crafts": int(cr["crafts"][0])},
     }
@@ -85,7 +85,7 @@ def character_fields(world_np, slot, town=None, storage=None) -> dict:
     out["items_inv_refine"] = np.array(it["inv_refine"][s], np.int32)
     out["items_inv_cards"] = np.array(it["inv_cards"][s], np.int32)
     out["items_equip"] = np.array(it["equip"][s], np.int32)
-    out["items_zeny"] = int(it["zeny"][s])
+    out["items_ryn"] = int(it["ryn"][s])
     out["craft_level"] = np.array(cr["level"][s], np.int32)
     out["craft_exp"] = np.array(cr["exp"][s], np.int32)
     out["craft_gathers"] = int(cr["gathers"][s])
@@ -121,7 +121,7 @@ def apply_character(world, slot, fields) -> dict:
         put("stats", k, f"stats_{k}")
     put("skills", "learned", "skills_learned")
     put("skills", "sp", "skills_sp")
-    for k in ("inv_count", "inv_refine", "inv_cards", "equip", "zeny"):
+    for k in ("inv_count", "inv_refine", "inv_cards", "equip", "ryn"):
         put("items", k, f"items_{k}")
     for k in ("level", "exp", "gathers", "crafts"):
         put("craft", k, f"craft_{k}")
@@ -184,8 +184,8 @@ def _items(raw, inv):
     ref = _array(raw["items_inv_refine"], (INV_SLOTS,), 0, item_data.MAX_REFINE)
     cards = _array(raw["items_inv_cards"], (INV_SLOTS, item_data.MAX_CARDS), 0, item_data.N_ITEMS - 1)
     eq = _array(raw["items_equip"], (item_data.N_EQUIP_SLOTS,), -1, INV_SLOTS - 1)
-    zeny = _scalar(raw["items_zeny"], 0, item_data.MAX_ZENY)
-    if any(x is None for x in (cnt, ref, cards, eq, zeny)):
+    ryn = _scalar(raw["items_ryn"], 0, item_data.MAX_RYN)
+    if any(x is None for x in (cnt, ref, cards, eq, ryn)):
         return None
     empty = inv == 0
     cnt = np.where(empty, 0, np.maximum(cnt, 1)).astype(np.int32)
@@ -207,7 +207,7 @@ def _items(raw, inv):
         else:
             seen.add(ptr)
     return {"items_inv_count": cnt, "items_inv_refine": ref, "items_inv_cards": cards, "items_equip": eq,
-            "items_zeny": zeny}
+            "items_ryn": ryn}
 
 
 def _craft(raw):

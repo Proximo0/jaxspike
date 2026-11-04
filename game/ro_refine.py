@@ -1,6 +1,6 @@
 """Refining and card compounding (M3 items). Pure JAX, fixed shapes, no loops over players or slots.
 
-World["items"] holds inv_count, inv_refine, inv_cards, equip, zeny; the item id of a slot is players["inv"].
+World["items"] holds inv_count, inv_refine, inv_cards, equip, ryn; the item id of a slot is players["inv"].
 """
 import jax
 import jax.numpy as jnp
@@ -47,7 +47,7 @@ def refine(world, inputs, key):
     kind = item_data.KIND[iid]
     wl = item_data.WEAPON_LEVEL[iid]
     ore = item_data.REFINE_ORE[wl]
-    cost = item_data.REFINE_ZENY[wl]
+    cost = item_data.REFINE_RYN[wl]
 
     has_ore = (inv == ore[:, None]) & (count > 0) & (ore[:, None] != 0)
     ore_slot = jnp.argmax(has_ore, axis=1).astype(jnp.int32)  # lowest slot holding the ore
@@ -58,7 +58,7 @@ def refine(world, inputs, key):
         & (count[_PIDX, sc] > 0)
         & (r < item_data.MAX_REFINE)
         & has_ore.any(axis=1)
-        & (it["zeny"] >= cost)
+        & (it["ryn"] >= cost)
     )
 
     chance = REFINE_CHANCE[wl, jnp.clip(r, 0, N_REFINE_COLS - 1)]
@@ -66,8 +66,8 @@ def refine(world, inputs, key):
     win = ok & (u * 1000.0 < chance)
     lose = ok & ~win
 
-    # Pay zeny and one ore unit (cleared when it reaches 0).
-    zeny = it["zeny"] - jnp.where(ok, cost, 0)
+    # Pay ryn and one ore unit (cleared when it reaches 0).
+    ryn = it["ryn"] - jnp.where(ok, cost, 0)
     drop_i = INV_SLOTS  # out-of-range index: scatter is dropped
     o_idx = jnp.where(ok, ore_slot, drop_i)
     ore_left = count[_PIDX, ore_slot] - 1
@@ -91,7 +91,7 @@ def refine(world, inputs, key):
     equip = jnp.where(lose[:, None] & (equip == sc[:, None]), -1, equip)
 
     new_it = {**it, "inv_count": count, "inv_refine": inv_refine, "inv_cards": inv_cards,
-              "equip": equip, "zeny": zeny}
+              "equip": equip, "ryn": ryn}
     return {**world, "players": {**players, "inv": inv}, "items": new_it}
 
 

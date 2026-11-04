@@ -1,4 +1,4 @@
-"""RO zones (ro-world2): zone table and zone_of, split lines and edge portals, town layouts, kafra data."""
+"""RO zones (ro-world2): zone table and zone_of, split lines and edge portals, town layouts, waybell data."""
 from collections import deque
 
 import jax
@@ -7,7 +7,7 @@ import numpy as np
 
 from game import map_gen, world_layout as wl
 from game.config import MAP, T_ROAD, T_ROCK, T_TEMPLE, T_WALL, T_WATER
-from game.data.terrain import T_KAFRA, T_SHOP, T_STATION, T_WARP
+from game.data.terrain import T_WAYBELL, T_SHOP, T_STATION, T_WARP
 from game.ro_warps import apply_warps
 from game.state import make_empty_world
 
@@ -57,8 +57,8 @@ def test_zone_table():
     assert kinds.count(wl.ZONE_FIELD) == 9
     for name, kind, ref, (lo, hi), music in wl.ZONES:
         assert lo <= hi and music > 0 and wl.ZONE_KINDS[kind]
-    for name in ("prontera", "prt_fild01", "prt_fild02", "gef_fild00", "pay_fild01", "moc_fild01",
-                 "alb_fild01", "prt_sewb1", "pay_dun00"):
+    for name in ("solmera", "sol_fld01", "sol_fld02", "lun_fld00", "pin_fld01", "kha_fld01",
+                 "tid_fld01", "sol_sew01", "pin_dun00"):
         assert name in wl.ZONE_NAMES
     fr = wl.zone_box_fractions()
     assert (fr >= 0).all() and (fr <= 1).all() and (fr[:, 2:] > fr[:, :2]).all()
@@ -92,7 +92,7 @@ def test_zone_of_matches_reference():
     out = np.asarray(jax.vmap(wl.zone_of)(batch))
     assert (out == np.stack([ZONE.ravel()[:100], ZONE.ravel()[-100:]])).all()
     c = wl.town_centers()[0]
-    assert wl.ZONE_NAMES[int(wl.zone_of(jnp.asarray([c]))[0])] == "prontera"
+    assert wl.ZONE_NAMES[int(wl.zone_of(jnp.asarray([c]))[0])] == "solmera"
 
 
 def test_split_lines_are_rock_outside_towns_and_dungeons():
@@ -119,14 +119,14 @@ def test_portals_pair_up_across_lines():
         assert WARP_TO[tuple(w0)] == tuple(s0) and WARP_TO[tuple(w1)] == tuple(s1)
 
 
-def test_every_zone_reachable_from_prontera_only_through_warps():
+def test_every_zone_reachable_from_solmera_only_through_warps():
     temples = np.asarray(wl.temple_tiles())[:, 0]
     plain = walk([temples[0]], warps=False)
-    assert set(np.unique(ZONE[plain]).tolist()) == {wl.ZONE_NAMES.index("prontera"), wl.ZONE_NAMES.index("prt_fild08")}
+    assert set(np.unique(ZONE[plain]).tolist()) == {wl.ZONE_NAMES.index("solmera"), wl.ZONE_NAMES.index("sol_fld08")}
     seen = walk([temples[0]])
     assert set(np.unique(ZONE[seen]).tolist()) == set(range(wl.N_ZONES))
     assert seen[temples[:, 0], temples[:, 1]].all()
-    for arr in (wl.kafra_tiles(), wl.town_station_tiles(), wl.shop_tiles()[0], SRC, DST):
+    for arr in (wl.waybell_tiles(), wl.town_station_tiles(), wl.shop_tiles()[0], SRC, DST):
         assert seen[arr[:, 0], arr[:, 1]].all()
 
 
@@ -148,8 +148,8 @@ def test_town_layouts():
     shops, town = wl.shop_tiles()
     assert (TER[shops[:, 0], shops[:, 1]] == T_SHOP).all() and PZ[shops[:, 0], shops[:, 1]].all()
     assert np.bincount(town).tolist() == list(wl.SHOP_ROW_TILES)
-    kt = wl.kafra_tiles()
-    assert (TER[kt[:, 0], kt[:, 1]] == T_KAFRA).all()
+    kt = wl.waybell_tiles()
+    assert (TER[kt[:, 0], kt[:, 1]] == T_WAYBELL).all()
     temples = np.asarray(wl.temple_tiles())[:, 0]
     patterns = []
     for t, (box, (cx, cy)) in enumerate(zip(wl.town_boxes().tolist(), wl.town_centers().tolist())):
@@ -157,15 +157,15 @@ def test_town_layouts():
         sh = wl.TOWN_STREET_HALF[t]
         inner = TER[x0 + 1:x1, y0 + 1:y1]
         # cross streets run wall to wall, never blocked
-        assert np.isin(TER[cx - sh:cx + sh + 1, y0 + 1:y1], [T_ROAD, T_TEMPLE, T_KAFRA, T_STATION]).all()
-        assert np.isin(TER[x0 + 1:x1, cy - sh:cy + sh + 1], [T_ROAD, T_TEMPLE, T_KAFRA, T_STATION]).all()
+        assert np.isin(TER[cx - sh:cx + sh + 1, y0 + 1:y1], [T_ROAD, T_TEMPLE, T_WAYBELL, T_STATION]).all()
+        assert np.isin(TER[x0 + 1:x1, cy - sh:cy + sh + 1], [T_ROAD, T_TEMPLE, T_WAYBELL, T_STATION]).all()
         # every walkable tile inside the walls is reachable from the temple without warps
         seen = walk([temples[t]], warps=False)
         box_free = FREE & in_box(box)
         assert seen[box_free].all()
         assert (~FREE[x0 + 1:x1, y0 + 1:y1]).sum() > 0   # each town has decoration
         patterns.append(inner)
-    # Prontera: castle block, four fountain basins, a 5-wide cross
+    # Solmera: castle block, four fountain basins, a 5-wide cross
     assert wl.TOWN_STREET_HALF[0] == 2
     for _, x0, y0, x1, y1 in wl.town_fountains():
         assert (TER[x0:x1 + 1, y0:y1 + 1] == T_WATER).all()
@@ -178,15 +178,15 @@ def test_town_layouts():
             assert small[i].shape != small[j].shape or not np.array_equal(small[i], small[j])
 
 
-def test_kafra_teleport_and_save_points():
-    cost = wl.kafra_teleport_cost()
+def test_waybell_teleport_and_save_points():
+    cost = wl.waybell_teleport_cost()
     nt = len(wl.TOWNS)
     assert cost.shape == (nt, nt) and cost.dtype == np.int32
-    assert (np.diag(cost) == wl.KAFRA_NO_ROUTE).all()
-    assert ((cost == wl.KAFRA_NO_ROUTE) | (cost > 0)).all()
-    assert ((cost > 0).sum(1) >= 2).all()          # every kafra offers at least two towns
+    assert (np.diag(cost) == wl.WAYBELL_NO_ROUTE).all()
+    assert ((cost == wl.WAYBELL_NO_ROUTE) | (cost > 0)).all()
+    assert ((cost > 0).sum(1) >= 2).all()          # every waybell offers at least two towns
     assert (cost[0] > 0).sum() == nt - 1            # the capital reaches every town
-    dest = wl.kafra_teleport_dest()
+    dest = wl.waybell_teleport_dest()
     assert (TER[dest[:, 0], dest[:, 1]] == T_STATION).all() and FREE[dest[:, 0], dest[:, 1]].all()
     sp = wl.save_point_tiles()
     assert (TER[sp[:, 0], sp[:, 1]] == T_TEMPLE).all()

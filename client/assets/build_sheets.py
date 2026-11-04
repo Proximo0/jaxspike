@@ -28,11 +28,11 @@ PACK_FILES = {
     ],
 }
 
-TERRAIN = ["grass", "road", "floor", "temple", "water", "tree", "wall", "rock", "warp", "kafra", "station"]
+TERRAIN = ["grass", "road", "floor", "temple", "water", "tree", "wall", "rock", "warp", "waybell", "station"]
 JOBS = ["novice", "swordsman", "mage", "archer", "acolyte", "thief", "merchant"]
-MONSTERS = ["rat", "orc", "poring", "drops", "poporing", "lunatic", "fabre", "pupa", "chonchon", "willow", "rocker",
-            "spore", "thief_bug", "condor", "picky", "peco_peco", "wolf", "hode", "orc_warrior", "zombie",
-            "skeleton", "baphomet_jr"]
+MONSTERS = ["rat", "orc", "blobbin", "emberblob", "vexblob", "moonbun", "wrigglet", "cocoonling", "buzzeye", "bramblet", "fiddlehop",
+            "capling", "pilferbug", "cragwing", "peepit", "gallopeck", "snarlfang", "sandgulper", "grukk_brute", "rotling",
+            "clackbone", "imphorn"]
 DIRS = ["down", "up", "left", "right"]
 
 TD = "tiny-dungeon"
@@ -45,17 +45,17 @@ JOB_CELLS = [(1, 7), (0, 8), (0, 7), (4, 9), (4, 8), (3, 9), (2, 7)]
 
 # monster -> (source tile col,row in tiny-dungeon, recolour rgb or None)
 MONSTER_CELLS = {
-    "rat": ((4, 10), None), "orc": ((1, 9), (0.55, 0.95, 0.45)), "poring": ((0, 9), (1.0, 0.55, 0.75)),
-    "drops": ((0, 9), (1.0, 0.65, 0.25)), "poporing": ((0, 9), (0.55, 0.95, 0.35)),
-    "lunatic": ((3, 10), (1.0, 1.0, 1.0)), "fabre": ((2, 10), (0.6, 1.0, 0.5)),
-    "pupa": ((0, 9), (0.9, 0.85, 0.5)), "chonchon": ((0, 10), (0.5, 0.7, 1.0)),
-    "willow": ((3, 9), (0.55, 1.0, 0.55)), "rocker": ((3, 10), (0.6, 0.9, 0.45)),
-    "spore": ((0, 9), (0.8, 0.5, 1.0)), "thief_bug": ((2, 10), (0.55, 0.45, 0.65)),
-    "condor": ((0, 10), (0.85, 0.5, 0.45)), "picky": ((4, 10), (1.0, 0.9, 0.4)),
-    "peco_peco": ((3, 10), (1.0, 0.85, 0.35)), "wolf": ((4, 10), (0.55, 0.55, 0.65)),
-    "hode": ((3, 10), (0.6, 0.45, 0.3)), "orc_warrior": ((3, 7), (1.0, 0.5, 0.45)),
-    "zombie": ((1, 10), (0.55, 0.9, 0.6)), "skeleton": ((1, 10), (1.0, 1.0, 0.9)),
-    "baphomet_jr": ((2, 9), (0.55, 0.3, 0.6)),
+    "rat": ((4, 10), None), "orc": ((1, 9), (0.55, 0.95, 0.45)), "blobbin": ((0, 9), (1.0, 0.55, 0.75)),
+    "emberblob": ((0, 9), (1.0, 0.65, 0.25)), "vexblob": ((0, 9), (0.55, 0.95, 0.35)),
+    "moonbun": ((3, 10), (1.0, 1.0, 1.0)), "wrigglet": ((2, 10), (0.6, 1.0, 0.5)),
+    "cocoonling": ((0, 9), (0.9, 0.85, 0.5)), "buzzeye": ((0, 10), (0.5, 0.7, 1.0)),
+    "bramblet": ((3, 9), (0.55, 1.0, 0.55)), "fiddlehop": ((3, 10), (0.6, 0.9, 0.45)),
+    "capling": ((0, 9), (0.8, 0.5, 1.0)), "pilferbug": ((2, 10), (0.55, 0.45, 0.65)),
+    "cragwing": ((0, 10), (0.85, 0.5, 0.45)), "peepit": ((4, 10), (1.0, 0.9, 0.4)),
+    "gallopeck": ((3, 10), (1.0, 0.85, 0.35)), "snarlfang": ((4, 10), (0.55, 0.55, 0.65)),
+    "sandgulper": ((3, 10), (0.6, 0.45, 0.3)), "grukk_brute": ((3, 7), (1.0, 0.5, 0.45)),
+    "rotling": ((1, 10), (0.55, 0.9, 0.6)), "clackbone": ((1, 10), (1.0, 1.0, 0.9)),
+    "imphorn": ((2, 9), (0.55, 0.3, 0.6)),
 }
 
 # item name -> (pack, col, row) straight regions from the 16 px packed sheets

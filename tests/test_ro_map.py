@@ -6,7 +6,7 @@ import numpy as np
 
 from game import world_layout as wl
 from game.config import MAP, T_ROCK, T_TEMPLE, T_WALL
-from game.data.terrain import T_CAVE, T_KAFRA, T_STATION, T_WARP
+from game.data.terrain import T_CAVE, T_WAYBELL, T_STATION, T_WARP
 from game.map_gen import (DIST_UNREACHABLE, blocking, distance_fields, distance_fields_ro,
                           make_terrain, make_terrain_ro, protection_zone)
 
@@ -65,8 +65,8 @@ def test_warp_and_special_tiles():
         assert t.dtype == np.int8
         assert (t[SRC[:, 0], SRC[:, 1]] == T_WARP).all()
         assert (t[DST[:, 0], DST[:, 1]] == T_STATION).all()
-        kt, st = wl.kafra_tiles(), wl.town_station_tiles()
-        assert (t[kt[:, 0], kt[:, 1]] == T_KAFRA).all()
+        kt, st = wl.waybell_tiles(), wl.town_station_tiles()
+        assert (t[kt[:, 0], kt[:, 1]] == T_WAYBELL).all()
         assert (t[st[:, 0], st[:, 1]] == T_STATION).all()
         pz = np.asarray(protection_zone(jnp.asarray(t)))
         assert pz[kt[:, 0], kt[:, 1]].all() and pz[st[:, 0], st[:, 1]].all()

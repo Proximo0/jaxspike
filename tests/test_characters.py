@@ -67,10 +67,10 @@ def test_ro_fields_round_trip(tmp_path):
     c = new_character(1, (5, 6))
     assert set(char_fields.RO_KEYS) <= set(c) and "storage" in c
     c["stats_str"] = 40; c["stats_base_level"] = 12; c["stats_sp"] = 3; c["skills_learned"][4] = 2
-    c["items_zeny"] = 1234; c["craft_exp"][0] = 120
+    c["items_ryn"] = 1234; c["craft_exp"][0] = 120
     save(tmp_path, "ro", c)
     r = load(tmp_path, "ro")
-    assert r["stats_str"] == 40 and r["stats_base_level"] == 12 and r["items_zeny"] == 1234
+    assert r["stats_str"] == 40 and r["stats_base_level"] == 12 and r["items_ryn"] == 1234
     assert r["skills_learned"][4] == 2 and r["craft_level"][0] == 2
     assert r["storage"].shape == (100,)
 
@@ -100,6 +100,6 @@ def test_bad_ro_values_fall_back_or_clamp(tmp_path):
     assert r["items_inv_cards"].shape == (INV_SLOTS, 4) and r["craft_level"].shape == (6,)
     save(tmp_path, "d", {**c, "inv": np.full(INV_SLOTS, 999, np.int32)})
     assert load(tmp_path, "d") is None
-    part = {k: v for k, v in c.items() if k != "items_zeny"}
+    part = {k: v for k, v in c.items() if k != "items_ryn"}
     save(tmp_path, "e", part)
-    assert load(tmp_path, "e")["items_zeny"] == 0
+    assert load(tmp_path, "e")["items_ryn"] == 0

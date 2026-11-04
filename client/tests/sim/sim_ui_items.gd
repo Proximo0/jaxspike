@@ -5,7 +5,7 @@ extends "res://tests/sim/sim_base.gd"
 static func _welcome() -> Dictionary:
 	var items: Array = [{}]
 	var kinds: Array = [0, 1, 2, 3, 4, 5]
-	var names: Array = ["", "Gold", "Red Potion", "Sword", "Cap", "Poring Card"]
+	var names: Array = ["", "Gold", "Red Potion", "Sword", "Cap", "Blobbin Card"]
 	for i: int in range(1, 6):
 		items.append({"id": i, "name": names[i], "kind": kinds[i], "buy": 10 * i, "sell": 5 * i})
 	return {"t": "welcome", "slot": 0, "items": items, "craft_items": {"100": "copper ore", "200": "copper bar"},
@@ -15,7 +15,7 @@ static func _welcome() -> Dictionary:
 			],
 			"craft_skills": {"SKILL_NAMES": ["a"], "LEVEL_EXP": [0, 50, 200, 450]}, "mvp_kinds": [null, null, "Orc Lord"],
 			"world": {"shops": [{"tile": [10, 11], "town": 1}]},
-			"shops": [{"town": 0, "name": "Prontera", "items": [2]}, {"town": 1, "name": "Geffen", "items": [2, 3]}],
+			"shops": [{"town": 0, "name": "Solmera", "items": [2]}, {"town": 1, "name": "Lunavell", "items": [2, 3]}],
 			"skills": {"names": ["Basic", "Discount", "Overcharge"]}}
 
 
@@ -26,7 +26,7 @@ static func _snap(tick: int, extra: Dictionary, ents: Array) -> String:
 	inv[0] = {"item": 2, "count": 4, "refine": 0, "cards": [0, 0, 0, 0]}
 	inv[1] = {"item": 3, "count": 1, "refine": 2, "cards": [0, 0, 0, 0]}
 	inv[2] = {"item": 100, "count": 2, "refine": 0, "cards": [0, 0, 0, 0]}
-	var you: Dictionary = {"pos": [10, 10], "hp": 10, "max_hp": 10, "zeny": 1234, "inv": inv,
+	var you: Dictionary = {"pos": [10, 10], "hp": 10, "max_hp": 10, "ryn": 1234, "inv": inv,
 			"equip": [1, -1, -1, -1, -1, -1, -1, -1], "party": 3, "leader": true}
 	you.merge(extra, true)
 	return Codec.encode({"t": "snap", "tick": tick, "you": you, "ents": ents, "gone": [], "full": true})
@@ -76,8 +76,8 @@ func run() -> Array:
 	await host.get_tree().process_frame
 
 	rows.append(row("inv_populated", inv_panel.rows.size() == 16 and inv_panel.rows[0]["name"] == "Red Potion"
-			and inv_panel.slot_buttons[0].text == "4" and inv_panel.zeny_label.text == "Zeny 1234",
-			"%s %s" % [inv_panel.slot_buttons[0].text, inv_panel.zeny_label.text]))
+			and inv_panel.slot_buttons[0].text == "4" and inv_panel.ryn_label.text == "Ryn 1234",
+			"%s %s" % [inv_panel.slot_buttons[0].text, inv_panel.ryn_label.text]))
 	rows.append(row("inv_equip_marker", inv_panel.slot_buttons[1].text.begins_with("E")
 			and inv_panel.equip_buttons[0].text == "Weapon: Sword" and inv_panel.equip_buttons.size() == 8,
 			inv_panel.equip_buttons[0].text))
@@ -152,7 +152,7 @@ func run() -> Array:
 	rows.append(row("storage_in", _same(_last(link), {"t": "storage", "op": "in", "slot": 0}), ""))
 
 	# Shop panel (no skills learned: base prices).
-	rows.append(row("shop_opens_near_tile", shop.visible and shop.shop_name == "Geffen" and shop.rows_buy.size() == 2,
+	rows.append(row("shop_opens_near_tile", shop.visible and shop.shop_name == "Lunavell" and shop.rows_buy.size() == 2,
 			"%s %s" % [shop.visible, shop.shop_name]))
 	var smsg: Dictionary = shop.buy(2)
 	rows.append(row("shop_buy_sends", _same(_last(link), {"t": "buy", "item": 2}) and _same(smsg, {"item": 2}), ""))
@@ -164,11 +164,11 @@ func run() -> Array:
 			link.sent[link.sent.size() - 1]))
 	rows.append(row("shop_prices", int(shop.rows_buy[0]["price"]) == 20 and int(shop.rows_buy[1]["price"]) == 30
 			and int(shop.rows_sell[0]["price"]) == 10, str(shop.rows_buy)))
-	link.push_inbound(_snap(4, {"zeny": 999}, []))
+	link.push_inbound(_snap(4, {"ryn": 999}, []))
 	session.poll()
 	await host.get_tree().process_frame
 	await host.get_tree().process_frame
-	rows.append(row("shop_zeny_updates", shop.zeny_label.text == "Zeny 999", shop.zeny_label.text))
+	rows.append(row("shop_ryn_updates", shop.ryn_label.text == "Ryn 999", shop.ryn_label.text))
 	link.push_inbound(_snap(5, {"pos": [30, 30]}, []))
 	session.poll()
 	await host.get_tree().process_frame
@@ -181,7 +181,7 @@ func run() -> Array:
 	var reopened: bool = shop.visible
 	shop.close()
 	var hidden: bool = not shop.visible
-	link.push_inbound(_snap(7, {"pos": [10, 10], "zeny": 5}, []))
+	link.push_inbound(_snap(7, {"pos": [10, 10], "ryn": 5}, []))
 	session.poll()
 	await host.get_tree().process_frame
 	await host.get_tree().process_frame

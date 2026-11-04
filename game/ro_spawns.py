@@ -5,10 +5,10 @@ Balance lives here as data (docs/round3_contract.md: never by softening the RO f
   `spawn_tiles` samples the population's tiles with these weights (bots/runner.py's placement line), so a band's
   monster count is its tile count x its weight, normalised over the map. Band 0 (the Novice ring around every town)
   is small: at weight 1 everywhere it held 74 of 1024 monsters per world for 128 bots (2026-11-02 CPU soak), and
-  the bots went looking in band 1, where Poporing, Spore, Rocker and Thief Bug killed level-1 Novices (deaths 4.0
+  the bots went looking in band 1, where Vexblob, Capling, Fiddlehop and Pilferbug killed level-1 Novices (deaths 4.0
   per 1000 bot-ticks there against 0.44 in band 0).
-- SPAWN_MIX: per-band kind weights (the kinds themselves stay world_layout.FIELD_BANDS). Band 1 leans on Willow
-  and Rocker; Poporing (59-72 ATK one-shots a 40 hp Novice) and the aggressive Thief Bug are rarer.
+- SPAWN_MIX: per-band kind weights (the kinds themselves stay world_layout.FIELD_BANDS). Band 1 leans on Bramblet
+  and Fiddlehop; Vexblob (59-72 ATK one-shots a 40 hp Novice) and the aggressive Pilferbug are rarer.
 """
 import jax
 import jax.numpy as jnp
@@ -42,9 +42,9 @@ assert len(BAND_DENSITY) == N_BANDS
 
 # Kind weights per band, by name (every name must be in that band's FIELD_BANDS list; missing names weigh 0).
 SPAWN_MIX = (
-    {"Poring": 30, "Fabre": 25, "Lunatic": 25, "Drops": 20},
-    {"Willow": 35, "Rocker": 30, "Spore": 15, "Thief Bug": 12, "Poporing": 8},
-    {"Wolf": 25, "Peco Peco": 25, "Hode": 20, "Bigfoot": 15, "Orc Warrior": 15},
+    {"Blobbin": 30, "Wrigglet": 25, "Moonbun": 25, "Emberblob": 20},
+    {"Bramblet": 35, "Fiddlehop": 30, "Capling": 15, "Pilferbug": 12, "Vexblob": 8},
+    {"Snarlfang": 25, "Gallopeck": 25, "Sandgulper": 20, "Grumblebear": 15, "Grukk Brute": 15},
 )
 assert len(SPAWN_MIX) == N_BANDS
 

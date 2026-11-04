@@ -5,7 +5,7 @@ which game/monsters.py hands to game/ro_move.py; nothing here writes monsters.po
 
 States (`world["monai"]["state"]`): 0 idle, 1 chase, 2 return home.
 - Idle: random walk. Every WANDER_MIN_MS..WANDER_MAX_MS a goal 1..5 cells away in one of 8 directions, clipped to a
-  WANDER_BOX around the spawn tile, never a wall or protection-zone tile. A looter (Poring) instead walks to the
+  WANDER_BOX around the spawn tile, never a wall or protection-zone tile. A looter (Blobbin) instead walks to the
   nearest active drop within sight and picks it into `held_item` when within one cell (lowest monster index wins a
   drop: scatter-min); it holds one item and drops it where it dies.
 - Chase: entered from idle when the monster is hostile (aggressive kind, hurt, or an assist kind pulled in by a

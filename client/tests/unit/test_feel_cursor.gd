@@ -6,7 +6,7 @@ func test_pick() -> void:
 	assert_eq(CursorState.pick(ViewMath.CAT_MONSTER, 0), CursorState.ATTACK)
 	assert_eq(CursorState.pick(ViewMath.CAT_DROP, 0), CursorState.PICKUP)
 	assert_eq(CursorState.pick(ViewMath.CAT_NODE, 0), CursorState.TALK)
-	assert_eq(CursorState.pick(CursorState.NO_ENTITY, 9), CursorState.TALK, "kafra tile")
+	assert_eq(CursorState.pick(CursorState.NO_ENTITY, 9), CursorState.TALK, "waybell tile")
 	assert_eq(CursorState.pick(CursorState.NO_ENTITY, 6), CursorState.BLOCKED, "wall")
 	assert_eq(CursorState.pick(CursorState.NO_ENTITY, -1), CursorState.BLOCKED, "outside the map")
 	assert_eq(CursorState.pick(CursorState.NO_ENTITY, 1), CursorState.WALK)

@@ -1,19 +1,19 @@
 class_name AssetSlots
 extends RefCounted
-## Registry of art slots: maps game keys (tile.3, job.1.walk, monster.poring, item.meat, ui.panel) to textures.
+## Registry of art slots: maps game keys (tile.3, job.1.walk, monster.blobbin, item.meat, ui.panel) to textures.
 ## Reads `res://assets/slots.json`. A missing slot or file never yields null: a flat fallback texture is returned.
 
 const SLOTS_PATH: String = "res://assets/slots.json"
 const TERRAIN_NAMES: Array[String] = [
-	"grass", "road", "floor", "temple", "water", "tree", "wall", "rock", "warp", "kafra", "station",
+	"grass", "road", "floor", "temple", "water", "tree", "wall", "rock", "warp", "waybell", "station",
 ]
 const JOB_NAMES: Array[String] = ["novice", "swordsman", "mage", "archer", "acolyte", "thief", "merchant"]
 const ANIMS: Array[String] = ["idle", "walk", "attack", "dead"]
 const DIRS: Array[String] = ["down", "up", "left", "right"]
 const MONSTER_NAMES: Array[String] = [
-	"rat", "orc", "poring", "drops", "poporing", "lunatic", "fabre", "pupa", "chonchon", "willow", "rocker",
-	"spore", "thief_bug", "condor", "picky", "peco_peco", "wolf", "hode", "orc_warrior", "zombie", "skeleton",
-	"baphomet_jr",
+	"rat", "orc", "blobbin", "emberblob", "vexblob", "moonbun", "wrigglet", "cocoonling", "buzzeye", "bramblet", "fiddlehop",
+	"capling", "pilferbug", "cragwing", "peepit", "gallopeck", "snarlfang", "sandgulper", "grukk_brute", "rotling", "clackbone",
+	"imphorn",
 ]
 ## Index = engine item id (0 is "none" and has no art).
 const ITEM_NAMES: Array[String] = [
@@ -32,9 +32,9 @@ const ANIM_ACTIONS: Array[String] = [
 const ANIM_MONSTER_ACTIONS: Array[String] = ["idle", "walk", "attack", "hurt", "dead"]
 ## Monster kinds in engine order (`game/data/monsters.py`), unlike the legacy MONSTER_NAMES table.
 const ANIM_MONSTER_KINDS: Array[String] = [
-	"poring", "orc_warrior", "fabre", "lunatic", "drops", "poporing", "willow", "rocker", "spore", "thief_bug",
-	"zombie", "wolf", "skeleton", "peco_peco", "hode", "soldier_skeleton", "bigfoot", "mummy",
-	"golden_thief_bug", "eddga",
+	"blobbin", "grukk_brute", "wrigglet", "moonbun", "emberblob", "vexblob", "bramblet", "fiddlehop", "capling", "pilferbug",
+	"rotling", "snarlfang", "clackbone", "gallopeck", "sandgulper", "clackbone_guard", "grumblebear", "tombwrap",
+	"gildscarab", "scorchstripe",
 ]
 ## Player-only actions a monster sheet lacks, and the monster action drawn instead.
 const ANIM_MONSTER_FALLBACK: Dictionary = {"sit": "idle", "pickup": "idle", "standby": "idle", "cast": "attack"}

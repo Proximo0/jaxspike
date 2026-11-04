@@ -3,15 +3,15 @@ import numpy as np
 from game.data import monsters as M
 from game.world_layout import DUNGEONS, FIELD_BANDS
 
-ORDER = ("Poring", "Orc Warrior", "Fabre", "Lunatic", "Drops", "Poporing", "Willow", "Rocker", "Spore",
-         "Thief Bug", "Zombie", "Wolf", "Skeleton", "Peco Peco", "Hode", "Soldier Skeleton", "Bigfoot",
-         "Mummy", "Golden Thief Bug", "Eddga")
+ORDER = ("Blobbin", "Grukk Brute", "Wrigglet", "Moonbun", "Emberblob", "Vexblob", "Bramblet", "Fiddlehop", "Capling",
+         "Pilferbug", "Rotling", "Snarlfang", "Clackbone", "Gallopeck", "Sandgulper", "Clackbone Guard", "Grumblebear",
+         "Tombwrap", "Gildscarab", "Scorchstripe")
 
 
 def test_table_shape_and_order():
     assert M.N_KINDS == 20 and len(M.MONSTERS) == 20
     assert M.NAMES == ORDER
-    assert M.KIND_BY_NAME["Poring"] == 0 and M.KIND_BY_NAME["Orc Warrior"] == 1
+    assert M.KIND_BY_NAME["Blobbin"] == 0 and M.KIND_BY_NAME["Grukk Brute"] == 1
     for a in (M.HP, M.ATK_MIN, M.ATK_MAX, M.DEF, M.ELEMENT, M.LEVEL, M.BASE_EXP, M.JOB_EXP, M.AGGRO,
               M.MOVE_TICKS, M.SIZE, M.MVP):
         assert a.shape == (20,)
@@ -19,7 +19,7 @@ def test_table_shape_and_order():
 
 
 def test_legacy_slots_and_tuples():
-    assert M.MONSTER_HP_TUPLE[:2] == (50, 1400)  # RO pre-re Poring / Orc Warrior (ro-fidelity)
+    assert M.MONSTER_HP_TUPLE[:2] == (50, 1400)  # RO pre-re Blobbin / Grukk Brute (ro-fidelity)
     assert M.MONSTER_DAMAGE_TUPLE[:2] == (10, 126)
     assert len(M.MONSTER_HP_TUPLE) == len(M.MONSTER_DAMAGE_TUPLE) == 20
 
@@ -28,10 +28,10 @@ def test_values_sane():
     assert (np.asarray(M.ATK_MIN) <= np.asarray(M.ATK_MAX)).all()
     assert (np.asarray(M.MOVE_TICKS) >= 1).all() and (np.asarray(M.ELEMENT) < len(M.ELEMENTS)).all()
     assert (np.asarray(M.SIZE) <= 2).all()
-    lv = np.asarray(M.LEVEL)  # RO levels (ro-fidelity): rows are not sorted by level (Poporing 14 before Willow 4)
+    lv = np.asarray(M.LEVEL)  # RO levels (ro-fidelity): rows are not sorted by level (Vexblob 14 before Bramblet 4)
     assert (lv >= 1).all() and lv[-1] > lv[0]
     mvp = [M.NAMES[i] for i in np.flatnonzero(np.asarray(M.MVP))]
-    assert mvp == ["Golden Thief Bug", "Eddga"]
+    assert mvp == ["Gildscarab", "Scorchstripe"]
     for i in (18, 19):
         assert M.MONSTER_HP_TUPLE[i] >= 100_000 and M.MONSTER_DAMAGE_TUPLE[i] >= 1000  # RO pre-re MVPs
 

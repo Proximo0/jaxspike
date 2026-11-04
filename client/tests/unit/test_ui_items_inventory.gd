@@ -2,7 +2,7 @@ extends TestCase
 
 const ITEMS: Array = [
 	{}, {"name": "Gold", "kind": 1}, {"name": "Red Potion", "kind": 2}, {"name": "Sword", "kind": 3},
-	{"name": "Cap", "kind": 4}, {"name": "Poring Card", "kind": 5},
+	{"name": "Cap", "kind": 4}, {"name": "Blobbin Card", "kind": 5},
 ]
 const WELCOME: Dictionary = {"items": ITEMS, "craft_items": {"100": "copper ore"}}
 
@@ -15,7 +15,7 @@ func _you() -> Dictionary:
 	inv[1] = {"item": 3, "count": 1, "refine": 4, "cards": [5.0, 0, 0, 0]}
 	inv[2] = {"item": 100, "count": 3, "refine": 0, "cards": [0, 0, 0, 0]}
 	var eq: Array = [1, -1, -1, -1, -1, -1, -1, -1]
-	return {"inv": inv, "equip": eq, "zeny": 77}
+	return {"inv": inv, "equip": eq, "ryn": 77}
 
 
 func test_rows_always_16_and_fields() -> void:
@@ -29,7 +29,7 @@ func test_rows_always_16_and_fields() -> void:
 	assert_true(rows[5]["empty"])
 	assert_eq(rows[2]["name"], "Copper Ore")
 	assert_true(String(rows[1]["tooltip"]).contains("+4 Sword"))
-	assert_true(String(rows[1]["tooltip"]).contains("Poring Card"))
+	assert_true(String(rows[1]["tooltip"]).contains("Blobbin Card"))
 	assert_eq(InventoryPanel.slot_rows({}, ITEMS).size(), 16)
 	assert_eq(InventoryPanel.slot_rows({"inv": [3, 2]}, ITEMS)[0]["item"], 3, "legacy flat list")
 

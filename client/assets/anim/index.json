@@ -10,26 +10,30 @@
   "merchant"
  ],
  "monsters": [
-  "poring",
-  "orc_warrior",
-  "fabre",
-  "lunatic",
-  "drops",
-  "poporing",
-  "willow",
-  "rocker",
-  "spore",
-  "thief_bug",
-  "zombie",
-  "wolf",
-  "skeleton",
-  "peco_peco",
-  "hode",
-  "soldier_skeleton",
-  "bigfoot",
-  "mummy",
-  "golden_thief_bug",
-  "eddga"
+  "blobbin",
+  "grukk_brute",
+  "wrigglet",
+  "moonbun",
+  "emberblob",
+  "vexblob",
+  "bramblet",
+  "fiddlehop",
+  "capling",
+  "pilferbug",
+  "rotling",
+  "snarlfang",
+  "clackbone",
+  "gallopeck",
+  "sandgulper",
+  "clackbone_guard",
+  "grumblebear",
+  "tombwrap",
+  "gildscarab",
+  "scorchstripe"
+ ],
+ "npcs": [
+  "npc_shop",
+  "npc_waybell"
  ],
  "player_actions": [
   "idle",
@@ -48,5 +52,10 @@
   "attack",
   "hurt",
   "dead"
- ]
+ ],
+ "npc_actions": [
+  "idle",
+  "talk"
+ ],
+ "note": "monster folders carry the original names of docs/naming.md (engine order); rendered by client/tools/art"
 }

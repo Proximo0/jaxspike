@@ -230,7 +230,7 @@
     16
    ]
   },
-  "monster.poring": {
+  "monster.blobbin": {
    "path": "res://assets/sheets/monsters.png",
    "region": [
     32,
@@ -239,7 +239,7 @@
     16
    ]
   },
-  "monster.drops": {
+  "monster.emberblob": {
    "path": "res://assets/sheets/monsters.png",
    "region": [
     48,
@@ -248,7 +248,7 @@
     16
    ]
   },
-  "monster.poporing": {
+  "monster.vexblob": {
    "path": "res://assets/sheets/monsters.png",
    "region": [
     64,
@@ -257,7 +257,7 @@
     16
    ]
   },
-  "monster.lunatic": {
+  "monster.moonbun": {
    "path": "res://assets/sheets/monsters.png",
    "region": [
     80,
@@ -266,7 +266,7 @@
     16
    ]
   },
-  "monster.fabre": {
+  "monster.wrigglet": {
    "path": "res://assets/sheets/monsters.png",
    "region": [
     96,
@@ -275,7 +275,7 @@
     16
    ]
   },
-  "monster.pupa": {
+  "monster.cocoonling": {
    "path": "res://assets/sheets/monsters.png",
    "region": [
     112,
@@ -284,7 +284,7 @@
     16
    ]
   },
-  "monster.chonchon": {
+  "monster.buzzeye": {
    "path": "res://assets/sheets/monsters.png",
    "region": [
     128,
@@ -293,7 +293,7 @@
     16
    ]
   },
-  "monster.willow": {
+  "monster.bramblet": {
    "path": "res://assets/sheets/monsters.png",
    "region": [
     144,
@@ -302,7 +302,7 @@
     16
    ]
   },
-  "monster.rocker": {
+  "monster.fiddlehop": {
    "path": "res://assets/sheets/monsters.png",
    "region": [
     160,
@@ -311,7 +311,7 @@
     16
    ]
   },
-  "monster.spore": {
+  "monster.capling": {
    "path": "res://assets/sheets/monsters.png",
    "region": [
     176,
@@ -320,7 +320,7 @@
     16
    ]
   },
-  "monster.thief_bug": {
+  "monster.pilferbug": {
    "path": "res://assets/sheets/monsters.png",
    "region": [
     192,
@@ -329,7 +329,7 @@
     16
    ]
   },
-  "monster.condor": {
+  "monster.cragwing": {
    "path": "res://assets/sheets/monsters.png",
    "region": [
     208,
@@ -338,7 +338,7 @@
     16
    ]
   },
-  "monster.picky": {
+  "monster.peepit": {
    "path": "res://assets/sheets/monsters.png",
    "region": [
     224,
@@ -347,7 +347,7 @@
     16
    ]
   },
-  "monster.peco_peco": {
+  "monster.gallopeck": {
    "path": "res://assets/sheets/monsters.png",
    "region": [
     240,
@@ -356,7 +356,7 @@
     16
    ]
   },
-  "monster.wolf": {
+  "monster.snarlfang": {
    "path": "res://assets/sheets/monsters.png",
    "region": [
     256,
@@ -365,7 +365,7 @@
     16
    ]
   },
-  "monster.hode": {
+  "monster.sandgulper": {
    "path": "res://assets/sheets/monsters.png",
    "region": [
     272,
@@ -374,7 +374,7 @@
     16
    ]
   },
-  "monster.orc_warrior": {
+  "monster.grukk_brute": {
    "path": "res://assets/sheets/monsters.png",
    "region": [
     288,
@@ -383,7 +383,7 @@
     16
    ]
   },
-  "monster.zombie": {
+  "monster.rotling": {
    "path": "res://assets/sheets/monsters.png",
    "region": [
     304,
@@ -392,7 +392,7 @@
     16
    ]
   },
-  "monster.skeleton": {
+  "monster.clackbone": {
    "path": "res://assets/sheets/monsters.png",
    "region": [
     320,
@@ -401,7 +401,7 @@
     16
    ]
   },
-  "monster.baphomet_jr": {
+  "monster.imphorn": {
    "path": "res://assets/sheets/monsters.png",
    "region": [
     336,
@@ -968,505 +968,525 @@
    "anim": "cast",
    "path": "res://assets/anim/merchant/cast.png"
   },
-  "anim.poring.idle": {
-   "sheet": "res://assets/anim/poring/act.json",
+  "anim.blobbin.idle": {
+   "sheet": "res://assets/anim/blobbin/act.json",
    "anim": "idle",
-   "path": "res://assets/anim/poring/idle.png"
+   "path": "res://assets/anim/blobbin/idle.png"
   },
-  "anim.poring.walk": {
-   "sheet": "res://assets/anim/poring/act.json",
+  "anim.blobbin.walk": {
+   "sheet": "res://assets/anim/blobbin/act.json",
    "anim": "walk",
-   "path": "res://assets/anim/poring/walk.png"
+   "path": "res://assets/anim/blobbin/walk.png"
   },
-  "anim.poring.attack": {
-   "sheet": "res://assets/anim/poring/act.json",
+  "anim.blobbin.attack": {
+   "sheet": "res://assets/anim/blobbin/act.json",
    "anim": "attack",
-   "path": "res://assets/anim/poring/attack.png"
+   "path": "res://assets/anim/blobbin/attack.png"
   },
-  "anim.poring.hurt": {
-   "sheet": "res://assets/anim/poring/act.json",
+  "anim.blobbin.hurt": {
+   "sheet": "res://assets/anim/blobbin/act.json",
    "anim": "hurt",
-   "path": "res://assets/anim/poring/hurt.png"
+   "path": "res://assets/anim/blobbin/hurt.png"
   },
-  "anim.poring.dead": {
-   "sheet": "res://assets/anim/poring/act.json",
+  "anim.blobbin.dead": {
+   "sheet": "res://assets/anim/blobbin/act.json",
    "anim": "dead",
-   "path": "res://assets/anim/poring/dead.png"
+   "path": "res://assets/anim/blobbin/dead.png"
   },
-  "anim.orc_warrior.idle": {
-   "sheet": "res://assets/anim/orc_warrior/act.json",
+  "anim.grukk_brute.idle": {
+   "sheet": "res://assets/anim/grukk_brute/act.json",
    "anim": "idle",
-   "path": "res://assets/anim/orc_warrior/idle.png"
+   "path": "res://assets/anim/grukk_brute/idle.png"
   },
-  "anim.orc_warrior.walk": {
-   "sheet": "res://assets/anim/orc_warrior/act.json",
+  "anim.grukk_brute.walk": {
+   "sheet": "res://assets/anim/grukk_brute/act.json",
    "anim": "walk",
-   "path": "res://assets/anim/orc_warrior/walk.png"
+   "path": "res://assets/anim/grukk_brute/walk.png"
   },
-  "anim.orc_warrior.attack": {
-   "sheet": "res://assets/anim/orc_warrior/act.json",
+  "anim.grukk_brute.attack": {
+   "sheet": "res://assets/anim/grukk_brute/act.json",
    "anim": "attack",
-   "path": "res://assets/anim/orc_warrior/attack.png"
+   "path": "res://assets/anim/grukk_brute/attack.png"
   },
-  "anim.orc_warrior.hurt": {
-   "sheet": "res://assets/anim/orc_warrior/act.json",
+  "anim.grukk_brute.hurt": {
+   "sheet": "res://assets/anim/grukk_brute/act.json",
    "anim": "hurt",
-   "path": "res://assets/anim/orc_warrior/hurt.png"
+   "path": "res://assets/anim/grukk_brute/hurt.png"
   },
-  "anim.orc_warrior.dead": {
-   "sheet": "res://assets/anim/orc_warrior/act.json",
+  "anim.grukk_brute.dead": {
+   "sheet": "res://assets/anim/grukk_brute/act.json",
    "anim": "dead",
-   "path": "res://assets/anim/orc_warrior/dead.png"
+   "path": "res://assets/anim/grukk_brute/dead.png"
   },
-  "anim.fabre.idle": {
-   "sheet": "res://assets/anim/fabre/act.json",
+  "anim.wrigglet.idle": {
+   "sheet": "res://assets/anim/wrigglet/act.json",
    "anim": "idle",
-   "path": "res://assets/anim/fabre/idle.png"
+   "path": "res://assets/anim/wrigglet/idle.png"
   },
-  "anim.fabre.walk": {
-   "sheet": "res://assets/anim/fabre/act.json",
+  "anim.wrigglet.walk": {
+   "sheet": "res://assets/anim/wrigglet/act.json",
    "anim": "walk",
-   "path": "res://assets/anim/fabre/walk.png"
+   "path": "res://assets/anim/wrigglet/walk.png"
   },
-  "anim.fabre.attack": {
-   "sheet": "res://assets/anim/fabre/act.json",
+  "anim.wrigglet.attack": {
+   "sheet": "res://assets/anim/wrigglet/act.json",
    "anim": "attack",
-   "path": "res://assets/anim/fabre/attack.png"
+   "path": "res://assets/anim/wrigglet/attack.png"
   },
-  "anim.fabre.hurt": {
-   "sheet": "res://assets/anim/fabre/act.json",
+  "anim.wrigglet.hurt": {
+   "sheet": "res://assets/anim/wrigglet/act.json",
    "anim": "hurt",
-   "path": "res://assets/anim/fabre/hurt.png"
+   "path": "res://assets/anim/wrigglet/hurt.png"
   },
-  "anim.fabre.dead": {
-   "sheet": "res://assets/anim/fabre/act.json",
+  "anim.wrigglet.dead": {
+   "sheet": "res://assets/anim/wrigglet/act.json",
    "anim": "dead",
-   "path": "res://assets/anim/fabre/dead.png"
+   "path": "res://assets/anim/wrigglet/dead.png"
   },
-  "anim.lunatic.idle": {
-   "sheet": "res://assets/anim/lunatic/act.json",
+  "anim.moonbun.idle": {
+   "sheet": "res://assets/anim/moonbun/act.json",
    "anim": "idle",
-   "path": "res://assets/anim/lunatic/idle.png"
+   "path": "res://assets/anim/moonbun/idle.png"
   },
-  "anim.lunatic.walk": {
-   "sheet": "res://assets/anim/lunatic/act.json",
+  "anim.moonbun.walk": {
+   "sheet": "res://assets/anim/moonbun/act.json",
    "anim": "walk",
-   "path": "res://assets/anim/lunatic/walk.png"
+   "path": "res://assets/anim/moonbun/walk.png"
   },
-  "anim.lunatic.attack": {
-   "sheet": "res://assets/anim/lunatic/act.json",
+  "anim.moonbun.attack": {
+   "sheet": "res://assets/anim/moonbun/act.json",
    "anim": "attack",
-   "path": "res://assets/anim/lunatic/attack.png"
+   "path": "res://assets/anim/moonbun/attack.png"
   },
-  "anim.lunatic.hurt": {
-   "sheet": "res://assets/anim/lunatic/act.json",
+  "anim.moonbun.hurt": {
+   "sheet": "res://assets/anim/moonbun/act.json",
    "anim": "hurt",
-   "path": "res://assets/anim/lunatic/hurt.png"
+   "path": "res://assets/anim/moonbun/hurt.png"
   },
-  "anim.lunatic.dead": {
-   "sheet": "res://assets/anim/lunatic/act.json",
+  "anim.moonbun.dead": {
+   "sheet": "res://assets/anim/moonbun/act.json",
    "anim": "dead",
-   "path": "res://assets/anim/lunatic/dead.png"
+   "path": "res://assets/anim/moonbun/dead.png"
   },
-  "anim.drops.idle": {
-   "sheet": "res://assets/anim/drops/act.json",
+  "anim.emberblob.idle": {
+   "sheet": "res://assets/anim/emberblob/act.json",
    "anim": "idle",
-   "path": "res://assets/anim/drops/idle.png"
+   "path": "res://assets/anim/emberblob/idle.png"
   },
-  "anim.drops.walk": {
-   "sheet": "res://assets/anim/drops/act.json",
+  "anim.emberblob.walk": {
+   "sheet": "res://assets/anim/emberblob/act.json",
    "anim": "walk",
-   "path": "res://assets/anim/drops/walk.png"
+   "path": "res://assets/anim/emberblob/walk.png"
   },
-  "anim.drops.attack": {
-   "sheet": "res://assets/anim/drops/act.json",
+  "anim.emberblob.attack": {
+   "sheet": "res://assets/anim/emberblob/act.json",
    "anim": "attack",
-   "path": "res://assets/anim/drops/attack.png"
+   "path": "res://assets/anim/emberblob/attack.png"
   },
-  "anim.drops.hurt": {
-   "sheet": "res://assets/anim/drops/act.json",
+  "anim.emberblob.hurt": {
+   "sheet": "res://assets/anim/emberblob/act.json",
    "anim": "hurt",
-   "path": "res://assets/anim/drops/hurt.png"
+   "path": "res://assets/anim/emberblob/hurt.png"
   },
-  "anim.drops.dead": {
-   "sheet": "res://assets/anim/drops/act.json",
+  "anim.emberblob.dead": {
+   "sheet": "res://assets/anim/emberblob/act.json",
    "anim": "dead",
-   "path": "res://assets/anim/drops/dead.png"
+   "path": "res://assets/anim/emberblob/dead.png"
   },
-  "anim.poporing.idle": {
-   "sheet": "res://assets/anim/poporing/act.json",
+  "anim.vexblob.idle": {
+   "sheet": "res://assets/anim/vexblob/act.json",
    "anim": "idle",
-   "path": "res://assets/anim/poporing/idle.png"
+   "path": "res://assets/anim/vexblob/idle.png"
   },
-  "anim.poporing.walk": {
-   "sheet": "res://assets/anim/poporing/act.json",
+  "anim.vexblob.walk": {
+   "sheet": "res://assets/anim/vexblob/act.json",
    "anim": "walk",
-   "path": "res://assets/anim/poporing/walk.png"
+   "path": "res://assets/anim/vexblob/walk.png"
   },
-  "anim.poporing.attack": {
-   "sheet": "res://assets/anim/poporing/act.json",
+  "anim.vexblob.attack": {
+   "sheet": "res://assets/anim/vexblob/act.json",
    "anim": "attack",
-   "path": "res://assets/anim/poporing/attack.png"
+   "path": "res://assets/anim/vexblob/attack.png"
   },
-  "anim.poporing.hurt": {
-   "sheet": "res://assets/anim/poporing/act.json",
+  "anim.vexblob.hurt": {
+   "sheet": "res://assets/anim/vexblob/act.json",
    "anim": "hurt",
-   "path": "res://assets/anim/poporing/hurt.png"
+   "path": "res://assets/anim/vexblob/hurt.png"
   },
-  "anim.poporing.dead": {
-   "sheet": "res://assets/anim/poporing/act.json",
+  "anim.vexblob.dead": {
+   "sheet": "res://assets/anim/vexblob/act.json",
    "anim": "dead",
-   "path": "res://assets/anim/poporing/dead.png"
+   "path": "res://assets/anim/vexblob/dead.png"
   },
-  "anim.willow.idle": {
-   "sheet": "res://assets/anim/willow/act.json",
+  "anim.bramblet.idle": {
+   "sheet": "res://assets/anim/bramblet/act.json",
    "anim": "idle",
-   "path": "res://assets/anim/willow/idle.png"
+   "path": "res://assets/anim/bramblet/idle.png"
   },
-  "anim.willow.walk": {
-   "sheet": "res://assets/anim/willow/act.json",
+  "anim.bramblet.walk": {
+   "sheet": "res://assets/anim/bramblet/act.json",
    "anim": "walk",
-   "path": "res://assets/anim/willow/walk.png"
+   "path": "res://assets/anim/bramblet/walk.png"
   },
-  "anim.willow.attack": {
-   "sheet": "res://assets/anim/willow/act.json",
+  "anim.bramblet.attack": {
+   "sheet": "res://assets/anim/bramblet/act.json",
    "anim": "attack",
-   "path": "res://assets/anim/willow/attack.png"
+   "path": "res://assets/anim/bramblet/attack.png"
   },
-  "anim.willow.hurt": {
-   "sheet": "res://assets/anim/willow/act.json",
+  "anim.bramblet.hurt": {
+   "sheet": "res://assets/anim/bramblet/act.json",
    "anim": "hurt",
-   "path": "res://assets/anim/willow/hurt.png"
+   "path": "res://assets/anim/bramblet/hurt.png"
   },
-  "anim.willow.dead": {
-   "sheet": "res://assets/anim/willow/act.json",
+  "anim.bramblet.dead": {
+   "sheet": "res://assets/anim/bramblet/act.json",
    "anim": "dead",
-   "path": "res://assets/anim/willow/dead.png"
+   "path": "res://assets/anim/bramblet/dead.png"
   },
-  "anim.rocker.idle": {
-   "sheet": "res://assets/anim/rocker/act.json",
+  "anim.fiddlehop.idle": {
+   "sheet": "res://assets/anim/fiddlehop/act.json",
    "anim": "idle",
-   "path": "res://assets/anim/rocker/idle.png"
+   "path": "res://assets/anim/fiddlehop/idle.png"
   },
-  "anim.rocker.walk": {
-   "sheet": "res://assets/anim/rocker/act.json",
+  "anim.fiddlehop.walk": {
+   "sheet": "res://assets/anim/fiddlehop/act.json",
    "anim": "walk",
-   "path": "res://assets/anim/rocker/walk.png"
+   "path": "res://assets/anim/fiddlehop/walk.png"
   },
-  "anim.rocker.attack": {
-   "sheet": "res://assets/anim/rocker/act.json",
+  "anim.fiddlehop.attack": {
+   "sheet": "res://assets/anim/fiddlehop/act.json",
    "anim": "attack",
-   "path": "res://assets/anim/rocker/attack.png"
+   "path": "res://assets/anim/fiddlehop/attack.png"
   },
-  "anim.rocker.hurt": {
-   "sheet": "res://assets/anim/rocker/act.json",
+  "anim.fiddlehop.hurt": {
+   "sheet": "res://assets/anim/fiddlehop/act.json",
    "anim": "hurt",
-   "path": "res://assets/anim/rocker/hurt.png"
+   "path": "res://assets/anim/fiddlehop/hurt.png"
   },
-  "anim.rocker.dead": {
-   "sheet": "res://assets/anim/rocker/act.json",
+  "anim.fiddlehop.dead": {
+   "sheet": "res://assets/anim/fiddlehop/act.json",
    "anim": "dead",
-   "path": "res://assets/anim/rocker/dead.png"
+   "path": "res://assets/anim/fiddlehop/dead.png"
   },
-  "anim.spore.idle": {
-   "sheet": "res://assets/anim/spore/act.json",
+  "anim.capling.idle": {
+   "sheet": "res://assets/anim/capling/act.json",
    "anim": "idle",
-   "path": "res://assets/anim/spore/idle.png"
+   "path": "res://assets/anim/capling/idle.png"
   },
-  "anim.spore.walk": {
-   "sheet": "res://assets/anim/spore/act.json",
+  "anim.capling.walk": {
+   "sheet": "res://assets/anim/capling/act.json",
    "anim": "walk",
-   "path": "res://assets/anim/spore/walk.png"
+   "path": "res://assets/anim/capling/walk.png"
   },
-  "anim.spore.attack": {
-   "sheet": "res://assets/anim/spore/act.json",
+  "anim.capling.attack": {
+   "sheet": "res://assets/anim/capling/act.json",
    "anim": "attack",
-   "path": "res://assets/anim/spore/attack.png"
+   "path": "res://assets/anim/capling/attack.png"
   },
-  "anim.spore.hurt": {
-   "sheet": "res://assets/anim/spore/act.json",
+  "anim.capling.hurt": {
+   "sheet": "res://assets/anim/capling/act.json",
    "anim": "hurt",
-   "path": "res://assets/anim/spore/hurt.png"
+   "path": "res://assets/anim/capling/hurt.png"
   },
-  "anim.spore.dead": {
-   "sheet": "res://assets/anim/spore/act.json",
+  "anim.capling.dead": {
+   "sheet": "res://assets/anim/capling/act.json",
    "anim": "dead",
-   "path": "res://assets/anim/spore/dead.png"
+   "path": "res://assets/anim/capling/dead.png"
   },
-  "anim.thief_bug.idle": {
-   "sheet": "res://assets/anim/thief_bug/act.json",
+  "anim.pilferbug.idle": {
+   "sheet": "res://assets/anim/pilferbug/act.json",
    "anim": "idle",
-   "path": "res://assets/anim/thief_bug/idle.png"
+   "path": "res://assets/anim/pilferbug/idle.png"
   },
-  "anim.thief_bug.walk": {
-   "sheet": "res://assets/anim/thief_bug/act.json",
+  "anim.pilferbug.walk": {
+   "sheet": "res://assets/anim/pilferbug/act.json",
    "anim": "walk",
-   "path": "res://assets/anim/thief_bug/walk.png"
+   "path": "res://assets/anim/pilferbug/walk.png"
   },
-  "anim.thief_bug.attack": {
-   "sheet": "res://assets/anim/thief_bug/act.json",
+  "anim.pilferbug.attack": {
+   "sheet": "res://assets/anim/pilferbug/act.json",
    "anim": "attack",
-   "path": "res://assets/anim/thief_bug/attack.png"
+   "path": "res://assets/anim/pilferbug/attack.png"
   },
-  "anim.thief_bug.hurt": {
-   "sheet": "res://assets/anim/thief_bug/act.json",
+  "anim.pilferbug.hurt": {
+   "sheet": "res://assets/anim/pilferbug/act.json",
    "anim": "hurt",
-   "path": "res://assets/anim/thief_bug/hurt.png"
+   "path": "res://assets/anim/pilferbug/hurt.png"
   },
-  "anim.thief_bug.dead": {
-   "sheet": "res://assets/anim/thief_bug/act.json",
+  "anim.pilferbug.dead": {
+   "sheet": "res://assets/anim/pilferbug/act.json",
    "anim": "dead",
-   "path": "res://assets/anim/thief_bug/dead.png"
+   "path": "res://assets/anim/pilferbug/dead.png"
   },
-  "anim.zombie.idle": {
-   "sheet": "res://assets/anim/zombie/act.json",
+  "anim.rotling.idle": {
+   "sheet": "res://assets/anim/rotling/act.json",
    "anim": "idle",
-   "path": "res://assets/anim/zombie/idle.png"
+   "path": "res://assets/anim/rotling/idle.png"
   },
-  "anim.zombie.walk": {
-   "sheet": "res://assets/anim/zombie/act.json",
+  "anim.rotling.walk": {
+   "sheet": "res://assets/anim/rotling/act.json",
    "anim": "walk",
-   "path": "res://assets/anim/zombie/walk.png"
+   "path": "res://assets/anim/rotling/walk.png"
   },
-  "anim.zombie.attack": {
-   "sheet": "res://assets/anim/zombie/act.json",
+  "anim.rotling.attack": {
+   "sheet": "res://assets/anim/rotling/act.json",
    "anim": "attack",
-   "path": "res://assets/anim/zombie/attack.png"
+   "path": "res://assets/anim/rotling/attack.png"
   },
-  "anim.zombie.hurt": {
-   "sheet": "res://assets/anim/zombie/act.json",
+  "anim.rotling.hurt": {
+   "sheet": "res://assets/anim/rotling/act.json",
    "anim": "hurt",
-   "path": "res://assets/anim/zombie/hurt.png"
+   "path": "res://assets/anim/rotling/hurt.png"
   },
-  "anim.zombie.dead": {
-   "sheet": "res://assets/anim/zombie/act.json",
+  "anim.rotling.dead": {
+   "sheet": "res://assets/anim/rotling/act.json",
    "anim": "dead",
-   "path": "res://assets/anim/zombie/dead.png"
+   "path": "res://assets/anim/rotling/dead.png"
   },
-  "anim.wolf.idle": {
-   "sheet": "res://assets/anim/wolf/act.json",
+  "anim.snarlfang.idle": {
+   "sheet": "res://assets/anim/snarlfang/act.json",
    "anim": "idle",
-   "path": "res://assets/anim/wolf/idle.png"
+   "path": "res://assets/anim/snarlfang/idle.png"
   },
-  "anim.wolf.walk": {
-   "sheet": "res://assets/anim/wolf/act.json",
+  "anim.snarlfang.walk": {
+   "sheet": "res://assets/anim/snarlfang/act.json",
    "anim": "walk",
-   "path": "res://assets/anim/wolf/walk.png"
+   "path": "res://assets/anim/snarlfang/walk.png"
   },
-  "anim.wolf.attack": {
-   "sheet": "res://assets/anim/wolf/act.json",
+  "anim.snarlfang.attack": {
+   "sheet": "res://assets/anim/snarlfang/act.json",
    "anim": "attack",
-   "path": "res://assets/anim/wolf/attack.png"
+   "path": "res://assets/anim/snarlfang/attack.png"
   },
-  "anim.wolf.hurt": {
-   "sheet": "res://assets/anim/wolf/act.json",
+  "anim.snarlfang.hurt": {
+   "sheet": "res://assets/anim/snarlfang/act.json",
    "anim": "hurt",
-   "path": "res://assets/anim/wolf/hurt.png"
+   "path": "res://assets/anim/snarlfang/hurt.png"
   },
-  "anim.wolf.dead": {
-   "sheet": "res://assets/anim/wolf/act.json",
+  "anim.snarlfang.dead": {
+   "sheet": "res://assets/anim/snarlfang/act.json",
    "anim": "dead",
-   "path": "res://assets/anim/wolf/dead.png"
+   "path": "res://assets/anim/snarlfang/dead.png"
   },
-  "anim.skeleton.idle": {
-   "sheet": "res://assets/anim/skeleton/act.json",
+  "anim.clackbone.idle": {
+   "sheet": "res://assets/anim/clackbone/act.json",
    "anim": "idle",
-   "path": "res://assets/anim/skeleton/idle.png"
+   "path": "res://assets/anim/clackbone/idle.png"
   },
-  "anim.skeleton.walk": {
-   "sheet": "res://assets/anim/skeleton/act.json",
+  "anim.clackbone.walk": {
+   "sheet": "res://assets/anim/clackbone/act.json",
    "anim": "walk",
-   "path": "res://assets/anim/skeleton/walk.png"
+   "path": "res://assets/anim/clackbone/walk.png"
   },
-  "anim.skeleton.attack": {
-   "sheet": "res://assets/anim/skeleton/act.json",
+  "anim.clackbone.attack": {
+   "sheet": "res://assets/anim/clackbone/act.json",
    "anim": "attack",
-   "path": "res://assets/anim/skeleton/attack.png"
+   "path": "res://assets/anim/clackbone/attack.png"
   },
-  "anim.skeleton.hurt": {
-   "sheet": "res://assets/anim/skeleton/act.json",
+  "anim.clackbone.hurt": {
+   "sheet": "res://assets/anim/clackbone/act.json",
    "anim": "hurt",
-   "path": "res://assets/anim/skeleton/hurt.png"
+   "path": "res://assets/anim/clackbone/hurt.png"
   },
-  "anim.skeleton.dead": {
-   "sheet": "res://assets/anim/skeleton/act.json",
+  "anim.clackbone.dead": {
+   "sheet": "res://assets/anim/clackbone/act.json",
    "anim": "dead",
-   "path": "res://assets/anim/skeleton/dead.png"
+   "path": "res://assets/anim/clackbone/dead.png"
   },
-  "anim.peco_peco.idle": {
-   "sheet": "res://assets/anim/peco_peco/act.json",
+  "anim.gallopeck.idle": {
+   "sheet": "res://assets/anim/gallopeck/act.json",
    "anim": "idle",
-   "path": "res://assets/anim/peco_peco/idle.png"
+   "path": "res://assets/anim/gallopeck/idle.png"
   },
-  "anim.peco_peco.walk": {
-   "sheet": "res://assets/anim/peco_peco/act.json",
+  "anim.gallopeck.walk": {
+   "sheet": "res://assets/anim/gallopeck/act.json",
    "anim": "walk",
-   "path": "res://assets/anim/peco_peco/walk.png"
+   "path": "res://assets/anim/gallopeck/walk.png"
   },
-  "anim.peco_peco.attack": {
-   "sheet": "res://assets/anim/peco_peco/act.json",
+  "anim.gallopeck.attack": {
+   "sheet": "res://assets/anim/gallopeck/act.json",
    "anim": "attack",
-   "path": "res://assets/anim/peco_peco/attack.png"
+   "path": "res://assets/anim/gallopeck/attack.png"
   },
-  "anim.peco_peco.hurt": {
-   "sheet": "res://assets/anim/peco_peco/act.json",
+  "anim.gallopeck.hurt": {
+   "sheet": "res://assets/anim/gallopeck/act.json",
    "anim": "hurt",
-   "path": "res://assets/anim/peco_peco/hurt.png"
+   "path": "res://assets/anim/gallopeck/hurt.png"
   },
-  "anim.peco_peco.dead": {
-   "sheet": "res://assets/anim/peco_peco/act.json",
+  "anim.gallopeck.dead": {
+   "sheet": "res://assets/anim/gallopeck/act.json",
    "anim": "dead",
-   "path": "res://assets/anim/peco_peco/dead.png"
+   "path": "res://assets/anim/gallopeck/dead.png"
   },
-  "anim.hode.idle": {
-   "sheet": "res://assets/anim/hode/act.json",
+  "anim.sandgulper.idle": {
+   "sheet": "res://assets/anim/sandgulper/act.json",
    "anim": "idle",
-   "path": "res://assets/anim/hode/idle.png"
+   "path": "res://assets/anim/sandgulper/idle.png"
   },
-  "anim.hode.walk": {
-   "sheet": "res://assets/anim/hode/act.json",
+  "anim.sandgulper.walk": {
+   "sheet": "res://assets/anim/sandgulper/act.json",
    "anim": "walk",
-   "path": "res://assets/anim/hode/walk.png"
+   "path": "res://assets/anim/sandgulper/walk.png"
   },
-  "anim.hode.attack": {
-   "sheet": "res://assets/anim/hode/act.json",
+  "anim.sandgulper.attack": {
+   "sheet": "res://assets/anim/sandgulper/act.json",
    "anim": "attack",
-   "path": "res://assets/anim/hode/attack.png"
+   "path": "res://assets/anim/sandgulper/attack.png"
   },
-  "anim.hode.hurt": {
-   "sheet": "res://assets/anim/hode/act.json",
+  "anim.sandgulper.hurt": {
+   "sheet": "res://assets/anim/sandgulper/act.json",
    "anim": "hurt",
-   "path": "res://assets/anim/hode/hurt.png"
+   "path": "res://assets/anim/sandgulper/hurt.png"
   },
-  "anim.hode.dead": {
-   "sheet": "res://assets/anim/hode/act.json",
+  "anim.sandgulper.dead": {
+   "sheet": "res://assets/anim/sandgulper/act.json",
    "anim": "dead",
-   "path": "res://assets/anim/hode/dead.png"
+   "path": "res://assets/anim/sandgulper/dead.png"
   },
-  "anim.soldier_skeleton.idle": {
-   "sheet": "res://assets/anim/soldier_skeleton/act.json",
+  "anim.clackbone_guard.idle": {
+   "sheet": "res://assets/anim/clackbone_guard/act.json",
    "anim": "idle",
-   "path": "res://assets/anim/soldier_skeleton/idle.png"
+   "path": "res://assets/anim/clackbone_guard/idle.png"
   },
-  "anim.soldier_skeleton.walk": {
-   "sheet": "res://assets/anim/soldier_skeleton/act.json",
+  "anim.clackbone_guard.walk": {
+   "sheet": "res://assets/anim/clackbone_guard/act.json",
    "anim": "walk",
-   "path": "res://assets/anim/soldier_skeleton/walk.png"
+   "path": "res://assets/anim/clackbone_guard/walk.png"
   },
-  "anim.soldier_skeleton.attack": {
-   "sheet": "res://assets/anim/soldier_skeleton/act.json",
+  "anim.clackbone_guard.attack": {
+   "sheet": "res://assets/anim/clackbone_guard/act.json",
    "anim": "attack",
-   "path": "res://assets/anim/soldier_skeleton/attack.png"
+   "path": "res://assets/anim/clackbone_guard/attack.png"
   },
-  "anim.soldier_skeleton.hurt": {
-   "sheet": "res://assets/anim/soldier_skeleton/act.json",
+  "anim.clackbone_guard.hurt": {
+   "sheet": "res://assets/anim/clackbone_guard/act.json",
    "anim": "hurt",
-   "path": "res://assets/anim/soldier_skeleton/hurt.png"
+   "path": "res://assets/anim/clackbone_guard/hurt.png"
   },
-  "anim.soldier_skeleton.dead": {
-   "sheet": "res://assets/anim/soldier_skeleton/act.json",
+  "anim.clackbone_guard.dead": {
+   "sheet": "res://assets/anim/clackbone_guard/act.json",
    "anim": "dead",
-   "path": "res://assets/anim/soldier_skeleton/dead.png"
+   "path": "res://assets/anim/clackbone_guard/dead.png"
   },
-  "anim.bigfoot.idle": {
-   "sheet": "res://assets/anim/bigfoot/act.json",
+  "anim.grumblebear.idle": {
+   "sheet": "res://assets/anim/grumblebear/act.json",
    "anim": "idle",
-   "path": "res://assets/anim/bigfoot/idle.png"
+   "path": "res://assets/anim/grumblebear/idle.png"
   },
-  "anim.bigfoot.walk": {
-   "sheet": "res://assets/anim/bigfoot/act.json",
+  "anim.grumblebear.walk": {
+   "sheet": "res://assets/anim/grumblebear/act.json",
    "anim": "walk",
-   "path": "res://assets/anim/bigfoot/walk.png"
+   "path": "res://assets/anim/grumblebear/walk.png"
   },
-  "anim.bigfoot.attack": {
-   "sheet": "res://assets/anim/bigfoot/act.json",
+  "anim.grumblebear.attack": {
+   "sheet": "res://assets/anim/grumblebear/act.json",
    "anim": "attack",
-   "path": "res://assets/anim/bigfoot/attack.png"
+   "path": "res://assets/anim/grumblebear/attack.png"
   },
-  "anim.bigfoot.hurt": {
-   "sheet": "res://assets/anim/bigfoot/act.json",
+  "anim.grumblebear.hurt": {
+   "sheet": "res://assets/anim/grumblebear/act.json",
    "anim": "hurt",
-   "path": "res://assets/anim/bigfoot/hurt.png"
+   "path": "res://assets/anim/grumblebear/hurt.png"
   },
-  "anim.bigfoot.dead": {
-   "sheet": "res://assets/anim/bigfoot/act.json",
+  "anim.grumblebear.dead": {
+   "sheet": "res://assets/anim/grumblebear/act.json",
    "anim": "dead",
-   "path": "res://assets/anim/bigfoot/dead.png"
+   "path": "res://assets/anim/grumblebear/dead.png"
   },
-  "anim.mummy.idle": {
-   "sheet": "res://assets/anim/mummy/act.json",
+  "anim.tombwrap.idle": {
+   "sheet": "res://assets/anim/tombwrap/act.json",
    "anim": "idle",
-   "path": "res://assets/anim/mummy/idle.png"
+   "path": "res://assets/anim/tombwrap/idle.png"
   },
-  "anim.mummy.walk": {
-   "sheet": "res://assets/anim/mummy/act.json",
+  "anim.tombwrap.walk": {
+   "sheet": "res://assets/anim/tombwrap/act.json",
    "anim": "walk",
-   "path": "res://assets/anim/mummy/walk.png"
+   "path": "res://assets/anim/tombwrap/walk.png"
   },
-  "anim.mummy.attack": {
-   "sheet": "res://assets/anim/mummy/act.json",
+  "anim.tombwrap.attack": {
+   "sheet": "res://assets/anim/tombwrap/act.json",
    "anim": "attack",
-   "path": "res://assets/anim/mummy/attack.png"
+   "path": "res://assets/anim/tombwrap/attack.png"
   },
-  "anim.mummy.hurt": {
-   "sheet": "res://assets/anim/mummy/act.json",
+  "anim.tombwrap.hurt": {
+   "sheet": "res://assets/anim/tombwrap/act.json",
    "anim": "hurt",
-   "path": "res://assets/anim/mummy/hurt.png"
+   "path": "res://assets/anim/tombwrap/hurt.png"
   },
-  "anim.mummy.dead": {
-   "sheet": "res://assets/anim/mummy/act.json",
+  "anim.tombwrap.dead": {
+   "sheet": "res://assets/anim/tombwrap/act.json",
    "anim": "dead",
-   "path": "res://assets/anim/mummy/dead.png"
+   "path": "res://assets/anim/tombwrap/dead.png"
   },
-  "anim.golden_thief_bug.idle": {
-   "sheet": "res://assets/anim/golden_thief_bug/act.json",
+  "anim.gildscarab.idle": {
+   "sheet": "res://assets/anim/gildscarab/act.json",
    "anim": "idle",
-   "path": "res://assets/anim/golden_thief_bug/idle.png"
+   "path": "res://assets/anim/gildscarab/idle.png"
   },
-  "anim.golden_thief_bug.walk": {
-   "sheet": "res://assets/anim/golden_thief_bug/act.json",
+  "anim.gildscarab.walk": {
+   "sheet": "res://assets/anim/gildscarab/act.json",
    "anim": "walk",
-   "path": "res://assets/anim/golden_thief_bug/walk.png"
+   "path": "res://assets/anim/gildscarab/walk.png"
   },
-  "anim.golden_thief_bug.attack": {
-   "sheet": "res://assets/anim/golden_thief_bug/act.json",
+  "anim.gildscarab.attack": {
+   "sheet": "res://assets/anim/gildscarab/act.json",
    "anim": "attack",
-   "path": "res://assets/anim/golden_thief_bug/attack.png"
+   "path": "res://assets/anim/gildscarab/attack.png"
   },
-  "anim.golden_thief_bug.hurt": {
-   "sheet": "res://assets/anim/golden_thief_bug/act.json",
+  "anim.gildscarab.hurt": {
+   "sheet": "res://assets/anim/gildscarab/act.json",
    "anim": "hurt",
-   "path": "res://assets/anim/golden_thief_bug/hurt.png"
+   "path": "res://assets/anim/gildscarab/hurt.png"
   },
-  "anim.golden_thief_bug.dead": {
-   "sheet": "res://assets/anim/golden_thief_bug/act.json",
+  "anim.gildscarab.dead": {
+   "sheet": "res://assets/anim/gildscarab/act.json",
    "anim": "dead",
-   "path": "res://assets/anim/golden_thief_bug/dead.png"
+   "path": "res://assets/anim/gildscarab/dead.png"
   },
-  "anim.eddga.idle": {
-   "sheet": "res://assets/anim/eddga/act.json",
+  "anim.scorchstripe.idle": {
+   "sheet": "res://assets/anim/scorchstripe/act.json",
    "anim": "idle",
-   "path": "res://assets/anim/eddga/idle.png"
+   "path": "res://assets/anim/scorchstripe/idle.png"
   },
-  "anim.eddga.walk": {
-   "sheet": "res://assets/anim/eddga/act.json",
+  "anim.scorchstripe.walk": {
+   "sheet": "res://assets/anim/scorchstripe/act.json",
    "anim": "walk",
-   "path": "res://assets/anim/eddga/walk.png"
+   "path": "res://assets/anim/scorchstripe/walk.png"
   },
-  "anim.eddga.attack": {
-   "sheet": "res://assets/anim/eddga/act.json",
+  "anim.scorchstripe.attack": {
+   "sheet": "res://assets/anim/scorchstripe/act.json",
    "anim": "attack",
-   "path": "res://assets/anim/eddga/attack.png"
+   "path": "res://assets/anim/scorchstripe/attack.png"
   },
-  "anim.eddga.hurt": {
-   "sheet": "res://assets/anim/eddga/act.json",
+  "anim.scorchstripe.hurt": {
+   "sheet": "res://assets/anim/scorchstripe/act.json",
    "anim": "hurt",
-   "path": "res://assets/anim/eddga/hurt.png"
+   "path": "res://assets/anim/scorchstripe/hurt.png"
   },
-  "anim.eddga.dead": {
-   "sheet": "res://assets/anim/eddga/act.json",
+  "anim.scorchstripe.dead": {
+   "sheet": "res://assets/anim/scorchstripe/act.json",
    "anim": "dead",
-   "path": "res://assets/anim/eddga/dead.png"
+   "path": "res://assets/anim/scorchstripe/dead.png"
+  },
+  "anim.npc_shop.idle": {
+   "sheet": "res://assets/anim/npc_shop/act.json",
+   "anim": "idle",
+   "path": "res://assets/anim/npc_shop/idle.png"
+  },
+  "anim.npc_shop.talk": {
+   "sheet": "res://assets/anim/npc_shop/act.json",
+   "anim": "talk",
+   "path": "res://assets/anim/npc_shop/talk.png"
+  },
+  "anim.npc_waybell.idle": {
+   "sheet": "res://assets/anim/npc_waybell/act.json",
+   "anim": "idle",
+   "path": "res://assets/anim/npc_waybell/idle.png"
+  },
+  "anim.npc_waybell.talk": {
+   "sheet": "res://assets/anim/npc_waybell/act.json",
+   "anim": "talk",
+   "path": "res://assets/anim/npc_waybell/talk.png"
   },
   "anim.job.0": {
    "sheet": "res://assets/anim/novice/act.json",
@@ -1497,83 +1517,83 @@
    "anim": "idle"
   },
   "anim.monster.0": {
-   "sheet": "res://assets/anim/poring/act.json",
+   "sheet": "res://assets/anim/blobbin/act.json",
    "anim": "idle"
   },
   "anim.monster.1": {
-   "sheet": "res://assets/anim/orc_warrior/act.json",
+   "sheet": "res://assets/anim/grukk_brute/act.json",
    "anim": "idle"
   },
   "anim.monster.2": {
-   "sheet": "res://assets/anim/fabre/act.json",
+   "sheet": "res://assets/anim/wrigglet/act.json",
    "anim": "idle"
   },
   "anim.monster.3": {
-   "sheet": "res://assets/anim/lunatic/act.json",
+   "sheet": "res://assets/anim/moonbun/act.json",
    "anim": "idle"
   },
   "anim.monster.4": {
-   "sheet": "res://assets/anim/drops/act.json",
+   "sheet": "res://assets/anim/emberblob/act.json",
    "anim": "idle"
   },
   "anim.monster.5": {
-   "sheet": "res://assets/anim/poporing/act.json",
+   "sheet": "res://assets/anim/vexblob/act.json",
    "anim": "idle"
   },
   "anim.monster.6": {
-   "sheet": "res://assets/anim/willow/act.json",
+   "sheet": "res://assets/anim/bramblet/act.json",
    "anim": "idle"
   },
   "anim.monster.7": {
-   "sheet": "res://assets/anim/rocker/act.json",
+   "sheet": "res://assets/anim/fiddlehop/act.json",
    "anim": "idle"
   },
   "anim.monster.8": {
-   "sheet": "res://assets/anim/spore/act.json",
+   "sheet": "res://assets/anim/capling/act.json",
    "anim": "idle"
   },
   "anim.monster.9": {
-   "sheet": "res://assets/anim/thief_bug/act.json",
+   "sheet": "res://assets/anim/pilferbug/act.json",
    "anim": "idle"
   },
   "anim.monster.10": {
-   "sheet": "res://assets/anim/zombie/act.json",
+   "sheet": "res://assets/anim/rotling/act.json",
    "anim": "idle"
   },
   "anim.monster.11": {
-   "sheet": "res://assets/anim/wolf/act.json",
+   "sheet": "res://assets/anim/snarlfang/act.json",
    "anim": "idle"
   },
   "anim.monster.12": {
-   "sheet": "res://assets/anim/skeleton/act.json",
+   "sheet": "res://assets/anim/clackbone/act.json",
    "anim": "idle"
   },
   "anim.monster.13": {
-   "sheet": "res://assets/anim/peco_peco/act.json",
+   "sheet": "res://assets/anim/gallopeck/act.json",
    "anim": "idle"
   },
   "anim.monster.14": {
-   "sheet": "res://assets/anim/hode/act.json",
+   "sheet": "res://assets/anim/sandgulper/act.json",
    "anim": "idle"
   },
   "anim.monster.15": {
-   "sheet": "res://assets/anim/soldier_skeleton/act.json",
+   "sheet": "res://assets/anim/clackbone_guard/act.json",
    "anim": "idle"
   },
   "anim.monster.16": {
-   "sheet": "res://assets/anim/bigfoot/act.json",
+   "sheet": "res://assets/anim/grumblebear/act.json",
    "anim": "idle"
   },
   "anim.monster.17": {
-   "sheet": "res://assets/anim/mummy/act.json",
+   "sheet": "res://assets/anim/tombwrap/act.json",
    "anim": "idle"
   },
   "anim.monster.18": {
-   "sheet": "res://assets/anim/golden_thief_bug/act.json",
+   "sheet": "res://assets/anim/gildscarab/act.json",
    "anim": "idle"
   },
   "anim.monster.19": {
-   "sheet": "res://assets/anim/eddga/act.json",
+   "sheet": "res://assets/anim/scorchstripe/act.json",
    "anim": "idle"
   }
  }

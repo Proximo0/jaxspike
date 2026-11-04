@@ -24,13 +24,13 @@ func test_image_bytes() -> void:
 	var markers: Array[Dictionary] = Minimap.scan_markers(m)
 	assert_eq(markers.size(), 2)
 	assert_eq(markers[0]["pos"], Vector2i(3, 0))
-	assert_eq(markers[1]["kind"], "kafra")
+	assert_eq(markers[1]["kind"], "waybell")
 
 
 func test_world_markers() -> void:
-	var w: Dictionary = {"warps": [{"from": [256, 77], "to": [256, 71]}], "towns": [{"name": "Prontera", "kafra": [264, 256]}]}
+	var w: Dictionary = {"warps": [{"from": [256, 77], "to": [256, 71]}], "towns": [{"name": "Solmera", "waybell": [264, 256]}]}
 	var mk: Array[Dictionary] = Minimap.world_markers(w)
 	assert_eq(mk.size(), 2)
 	assert_eq(mk[0], {"pos": Vector2i(256, 77), "kind": "warp"})
-	assert_eq(mk[1], {"pos": Vector2i(264, 256), "kind": "kafra"})
+	assert_eq(mk[1], {"pos": Vector2i(264, 256), "kind": "waybell"})
 	assert_true(Minimap.world_markers({}).is_empty())

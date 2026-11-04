@@ -55,7 +55,7 @@ from game.world_layout import TOWNS, temple_tiles, town_boxes  # noqa: E402
 from net import characters  # noqa: E402
 from net.accounts import AccountStore  # noqa: E402
 from net.chat import ChatRouter  # noqa: E402
-from net.kafra import new_storage, transfer  # noqa: E402
+from net.waybell import new_storage, transfer  # noqa: E402
 from net.pathing import find_path  # noqa: E402
 from net.protocol import (build_snaps, build_welcome_static, decode, encode, encode_map,  # noqa: E402
                           validate_client, welcome_message, you_delta, you_full)
@@ -75,7 +75,7 @@ _STATS_PULL = ("str", "agi", "vit", "int", "dex", "luk", "base_level", "job_leve
                "stat_points", "skill_points", "sp", "max_sp", "was_dead")
 _SKILLS_PULL = ("learned", "sp", "cooldown", "buffs", "buff_level", "casting", "cast_left", "cast_target",
                 "after_delay")
-_ITEMS_PULL = ("inv_count", "inv_refine", "inv_cards", "equip", "zeny")
+_ITEMS_PULL = ("inv_count", "inv_refine", "inv_cards", "equip", "ryn")
 _CRAFT_PULL = ("level", "exp", "gathers", "crafts")
 _PARTY_PULL = ("party_id", "leader")
 # Per-slot rows reset when a slot changes hands (login, logout): block -> keys (None = every key of the block).
@@ -110,7 +110,7 @@ def _tick_fn(world, hmask, hmove, hattack, heat, hro, prev_tab, known, viewer_sl
                    "eat": jnp.where(hmask, heat, bots["eat"])})
     z = jnp.zeros((MAX_PLAYERS,), jnp.bool_)
     inputs["sit"] = jnp.where(hmask, hro.get("sit", z), bots.get("sit", z))
-    m1 = jnp.full((MAX_PLAYERS,), -1, jnp.int32)  # ro3-world3: kafra teleport destination town (-1 = none)
+    m1 = jnp.full((MAX_PLAYERS,), -1, jnp.int32)  # ro3-world3: waybell teleport destination town (-1 = none)
     inputs["teleport"] = jnp.where(hmask, hro.get("teleport", m1), bots.get("teleport", m1))
     pos_before = world["players"]["pos"]
     world = step(world, inputs)
@@ -162,7 +162,7 @@ def _login_rows_fn(world, fresh, slot, f):
         world = put(world, "stats", k, f[f"stats_{k}"])
     world = put(world, "skills", "learned", f["skills_learned"])
     world = put(world, "skills", "sp", f["skills_sp"])
-    for k in ("inv_count", "inv_refine", "inv_cards", "equip", "zeny"):
+    for k in ("inv_count", "inv_refine", "inv_cards", "equip", "ryn"):
         world = put(world, "items", k, f[f"items_{k}"])
     for k in ("level", "exp", "gathers", "crafts"):
         world = put(world, "craft", k, f[f"craft_{k}"])
@@ -173,7 +173,7 @@ _login_rows = jax.jit(_login_rows_fn) if RO_KEYS is not None else None
 _NONE_INPUTS = {k: np.asarray(v) for k, v in empty_inputs().items()}
 if "sit" not in _NONE_INPUTS:  # ro3-wire: until game/state.py carries the key
     _NONE_INPUTS["sit"] = np.zeros(MAX_PLAYERS, bool)
-if "teleport" not in _NONE_INPUTS:  # ro3-world3's kafra teleport input, same deal
+if "teleport" not in _NONE_INPUTS:  # ro3-world3's waybell teleport input, same deal
     _NONE_INPUTS["teleport"] = np.full(MAX_PLAYERS, -1, np.int32)
 _RO_INPUT_KEYS = tuple(_RO_INPUT_KEYS) + tuple(k for k in ("sit", "teleport") if k not in _RO_INPUT_KEYS)
 _TOWN_BOXES = np.asarray(town_boxes())
@@ -256,7 +256,7 @@ class GameServer:
         self.chat_msgs: list[dict] = []
         self.router = ChatRouter()
         self.storage_ops: list[tuple] = []
-        self.storage: dict[int, np.ndarray] = {}  # slot -> kafra storage item ids
+        self.storage: dict[int, np.ndarray] = {}  # slot -> waybell storage item ids
         self.last_members: dict[int, list] = {}
         self.last_storage: dict[int, bytes] = {}
         self.last_event_head = 0
@@ -638,13 +638,13 @@ class GameServer:
         return bool(((b[:, 0] <= x) & (x <= b[:, 2]) & (b[:, 1] <= y) & (y <= b[:, 3])).any())
 
     def _process_storage(self) -> None:
-        """Run the queued kafra storage moves (town check, then net.kafra.transfer) before the tick."""
+        """Run the queued waybell storage moves (town check, then net.waybell.transfer) before the tick."""
         ops, self.storage_ops = self.storage_ops, []
         for slot, op, idx in ops:
             if slot not in self.storage or self.owner[slot] in (None, "bot"):
                 continue
             if not self._in_town(self.pos_host[slot]):
-                self.notice[slot] = "no kafra here"
+                self.notice[slot] = "no waybell here"
                 continue
             try:
                 self._storage_move(slot, op, idx)
@@ -999,7 +999,7 @@ class GameServer:
             pend["save"][slot] = True
         elif t == "sit":
             pend["sit"][slot] = True
-        elif t == "teleport":  # docs/world_wire.md: kafra teleport to a town index
+        elif t == "teleport":  # docs/world_wire.md: waybell teleport to a town index
             pend["teleport"][slot] = msg["town"]
 
 

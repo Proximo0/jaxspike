@@ -39,7 +39,7 @@ func _ready() -> void:
 			focused_button = b
 	var list := ItemList.new()
 	list.custom_minimum_size = Vector2(0.0, 130.0)
-	var rows: Array[String] = ["Red Potion x5", "Blue Potion x2", "Knife", "Cotton Shirt", "Poring Card"]
+	var rows: Array[String] = ["Red Potion x5", "Blue Potion x2", "Knife", "Cotton Shirt", "Blobbin Card"]
 	for r: String in rows:
 		list.add_item(r)
 	list.select(1)

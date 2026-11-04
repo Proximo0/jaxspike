@@ -136,7 +136,7 @@ def test_kind_mix_weights():
     total = sum(mix.values())
     for name, w in mix.items():
         assert abs(count[K[name]] / len(pos) - w / total) < 0.04, (name, count[K[name]] / len(pos), w / total)
-    assert count[K["Willow"]] > 2 * count[K["Poporing"]]
+    assert count[K["Bramblet"]] > 2 * count[K["Vexblob"]]
 
 
 def test_repopulate_sets_the_first_n_slots():

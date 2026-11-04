@@ -49,10 +49,10 @@ func test_load_act_missing_file_is_null() -> void:
 
 func test_loads_art_anim_layout_when_present() -> void:
 	# art-anim's sheets: res://assets/anim/<kind>/act.json with absolute res:// images per action
-	if not FileAccess.file_exists("res://assets/anim/poring/act.json"):
+	if not FileAccess.file_exists("res://assets/anim/blobbin/act.json"):
 		return
-	var s: ActSheet = ActSheet.load_act("res://assets/anim/poring/act.json")
-	assert_true(s != null, "poring act loads")
+	var s: ActSheet = ActSheet.load_act("res://assets/anim/blobbin/act.json")
+	assert_true(s != null, "blobbin act loads")
 	assert_true(s.has_action("walk"))
 	assert_eq(int(s.actions["walk"]["rows"]), 5)
 	assert_true(s.frame_texture(s.resolve(ClipSelect.WALK, 6, false)["anim"], 0) != null)

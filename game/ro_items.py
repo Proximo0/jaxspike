@@ -1,4 +1,4 @@
-"""RO items phase: inventory counts, stack merge, zeny, use, equip, refine hook, drop, equipment totals.
+"""RO items phase: inventory counts, stack merge, ryn, use, equip, refine hook, drop, equipment totals.
 
 Owned by INV (M3). All work is fixed-shape array ops: no Python `if` on traced values, no loops over players or
 slots. `world["items"]` holds the per-slot data that the lead's `players["inv"]` (item ids) cannot:
@@ -7,7 +7,7 @@ slots. `world["items"]` holds the per-slot data that the lead's `players["inv"]`
   inv_refine int32 [MAX_PLAYERS, INV_SLOTS]      0..MAX_REFINE
   inv_cards  int32 [MAX_PLAYERS, INV_SLOTS, 4]   card item ids per socket, 0 = empty
   equip      int32 [MAX_PLAYERS, 8]              inventory slot index worn in each equip slot, -1 = none
-  zeny       int32 [MAX_PLAYERS]
+  ryn       int32 [MAX_PLAYERS]
 
 Item ids stay in `world["players"]["inv"]` (loot.py writes pickups there, survival.py clears eaten MEAT).
 `_normalize` repairs the parallel arrays after any such outside change.
@@ -34,13 +34,13 @@ _SIDX = jnp.arange(INV_SLOTS, dtype=jnp.int32)
 
 
 def make_state():
-    """Fresh `world["items"]` block: empty counts, no refine, no cards, nothing worn (-1), no zeny."""
+    """Fresh `world["items"]` block: empty counts, no refine, no cards, nothing worn (-1), no ryn."""
     return {
         "inv_count": jnp.zeros((MAX_PLAYERS, INV_SLOTS), jnp.int32),
         "inv_refine": jnp.zeros((MAX_PLAYERS, INV_SLOTS), jnp.int32),
         "inv_cards": jnp.zeros((MAX_PLAYERS, INV_SLOTS, item_data.MAX_CARDS), jnp.int32),
         "equip": jnp.full((MAX_PLAYERS, N_EQ), -1, jnp.int32),
-        "zeny": jnp.zeros((MAX_PLAYERS,), jnp.int32),
+        "ryn": jnp.zeros((MAX_PLAYERS,), jnp.int32),
     }
 
 
@@ -92,10 +92,10 @@ def _normalize(world):
     """Make the parallel item arrays consistent with `players["inv"]`.
 
     Owns: (1) fresh pickups (id set, count 0) get count 1, empty slots get count/refine/cards 0; (2) GOLD_COIN
-    slots become `count * ZENY_PER_COIN` zeny (clamped to MAX_ZENY) and are cleared; (3) stackable slots with the
+    slots become `count * RYN_PER_COIN` ryn (clamped to MAX_RYN) and are cleared; (3) stackable slots with the
     same id merge into the lowest such slot (clamped to MAX_STACK, overflow lost); (4) equip pointers to emptied or
     non-gear slots become -1 and a slot worn twice keeps only its lowest equip slot.
-    Invariants after: inv == 0 <=> count == 0; zeny <= MAX_ZENY; one entry per stackable id per player.
+    Invariants after: inv == 0 <=> count == 0; ryn <= MAX_RYN; one entry per stackable id per player.
     """
     players, it = world["players"], world["items"]
     inv = players["inv"]
@@ -104,11 +104,11 @@ def _normalize(world):
     cards = jnp.where((inv == ITEM_NONE)[..., None], 0, it["inv_cards"])
     world = {**world, "items": {**it, "inv_count": cnt, "inv_refine": refine, "inv_cards": cards}}
 
-    # Coins -> zeny.
+    # Coins -> ryn.
     coin = inv == ITEM_GOLD_COIN
-    gain = jnp.sum(jnp.where(coin, cnt, 0), axis=1) * item_data.ZENY_PER_COIN
-    zeny = jnp.minimum(world["items"]["zeny"] + gain, item_data.MAX_ZENY)
-    world = {**world, "items": {**world["items"], "zeny": zeny}}
+    gain = jnp.sum(jnp.where(coin, cnt, 0), axis=1) * item_data.RYN_PER_COIN
+    ryn = jnp.minimum(world["items"]["ryn"] + gain, item_data.MAX_RYN)
+    world = {**world, "items": {**world["items"], "ryn": ryn}}
     world = clear_slots(world, coin)
 
     # Merge stackables into the lowest slot with the same id.

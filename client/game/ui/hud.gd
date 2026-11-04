@@ -1,7 +1,7 @@
 class_name Hud
 extends CanvasLayer
 ## RO basic info window (top left: name, job, base/job level, HP/SP bars with numbers, base/job exp bars with
-## percent, zeny, weight), the zone name banner, the minimap (top right) and the notice line, read from the
+## percent, ryn, weight), the zone name banner, the minimap (top right) and the notice line, read from the
 ## session's store. Feed set_welcome(msg) / on_message(msg) like the panels (the lead adds the Hud to the list).
 
 const TOGGLE_KEY: Key = KEY_C
@@ -25,7 +25,7 @@ var base_bar: ProgressBar
 var base_label: Label
 var job_bar: ProgressBar
 var job_exp_label: Label
-var zeny_label: Label
+var ryn_label: Label
 var weight_label: Label
 var safe_badge: Label
 var stats: StatSection
@@ -81,9 +81,9 @@ func _ready() -> void:
 	weight_label = Label.new()
 	weight_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	foot.add_child(weight_label)
-	zeny_label = Label.new()
-	zeny_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	foot.add_child(zeny_label)
+	ryn_label = Label.new()
+	ryn_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	foot.add_child(ryn_label)
 	stats = StatSection.new()
 	stats.name = "StatSection"
 	stats.visible = false
@@ -188,7 +188,7 @@ func refresh(delta: float = 0.0) -> void:
 	_hud_fill(sp_bar, sp_label, r["sp"], r["sp_text"])
 	_hud_fill(base_bar, base_label, r["base"], r["base_text"])
 	_hud_fill(job_bar, job_exp_label, r["job_exp"], r["job_text"])
-	zeny_label.text = r["zeny"]
+	ryn_label.text = r["ryn"]
 	weight_label.text = r["weight"]
 	safe_badge.visible = bool(you.get("safe", false))
 	_notice.observe(session.store.snaps, session.store.notice)
@@ -232,7 +232,7 @@ static func info_rows(you: Dictionary, own: Dictionary, welcome_msg: Dictionary)
 		"sp": ViewMath.hp_fraction(sp, max_sp), "sp_text": "%d / %d" % [sp, max_sp],
 		"base": UiStatsCalc.exp_fraction(be, bn), "base_text": exp_percent(be, bn),
 		"job_exp": UiStatsCalc.exp_fraction(je, jn), "job_text": exp_percent(je, jn),
-		"zeny": "Zeny %s" % zeny_text(int(you.get("zeny", 0))),
+		"ryn": "Ryn %s" % ryn_text(int(you.get("ryn", 0))),
 		"weight": weight_text(you),
 	}
 
@@ -245,7 +245,7 @@ static func exp_percent(cur: int, next: int) -> String:
 
 
 ## 1234567 -> "1,234,567".
-static func zeny_text(z: int) -> String:
+static func ryn_text(z: int) -> String:
 	var s: String = str(absi(z))
 	var out: String = ""
 	while s.length() > 3:

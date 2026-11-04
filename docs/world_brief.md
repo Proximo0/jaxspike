@@ -8,13 +8,13 @@ Read both before anything else. Nobody edits `game/config.py`, `game/state.py`, 
 ## Shared facts
 - Python: `C:\Users\crp27\jaxspike\venv\Scripts\python.exe` (absolute path; this worktree has no venv).
   Run from the worktree root. Tests: `-m pytest tests/<your file> -q`; every test file under 30 s on CPU.
-- Terrain ids 0..7 in `game/config.py`; 8 `T_WARP`, 9 `T_KAFRA`, 10 `T_STATION`, 11 `T_CAVE` in
+- Terrain ids 0..7 in `game/config.py`; 8 `T_WARP`, 9 `T_WAYBELL`, 10 `T_STATION`, 11 `T_CAVE` in
   `game/data/terrain.py`. None of 8..11 blocks (`map_gen.blocking` is unchanged). Only `T_WARP` teleports;
   every warp destination is a `T_STATION` tile, which never teleports.
 - Layout API (`game/world_layout.py`): `TOWN_NAMES`, `TOWN_ROLES`, `FIELD_BANDS` (lo, hi fraction of MAP of
   walking gate distance, kind names), `DUNGEONS`, `DUNGEON_ROADS`, `dungeon_boxes() -> int32 [ND, 4]`,
   `dungeon_centers()`, `dungeon_pads() -> int32 [ND, 4, 2]` (entrance warp, inside station, exit warp,
-  outside station), `WARPS`, `warp_tiles()`, `kafra_tiles() -> [NT, 2]`, `town_station_tiles() -> [NT, 2]`,
+  outside station), `WARPS`, `warp_tiles()`, `waybell_tiles() -> [NT, 2]`, `town_station_tiles() -> [NT, 2]`,
   `dungeon_index(pos) -> int32 [N]` (-1 outside), tile constants `DUNGEON_WALL_TILES`, `DUNGEON_PILLAR_*`,
   `WARP_PAD_TILES`, `WARP_GAP_TILES`, `N_WARPS = 16`.
 - `map_gen.warp_table(terrain=None) -> (src int32 [N_WARPS, 2], dst int32 [N_WARPS, 2])`, padded with -1 rows.
@@ -39,21 +39,21 @@ below), `tests/test_ro_map.py`. May adjust the numeric values of `DUNGEON_PILLAR
       `T_ROCK` (overwrites everything, roads included: the only way in is the warp); rock pillars inside,
       `DUNGEON_PILLAR_SIZE` square every `DUNGEON_PILLAR_PERIOD` tiles at phase `DUNGEON_PILLAR_PHASE`
       from the centre, never on the inside pad tiles (inside station, exit warp, and their 4-neighbours);
-   d. special tiles last: `T_WARP` on each warp src, `T_STATION` on each warp dst, `T_KAFRA` on
-      `kafra_tiles()`, `T_STATION` on `town_station_tiles()`.
+   d. special tiles last: `T_WARP` on each warp src, `T_STATION` on each warp dst, `T_WAYBELL` on
+      `waybell_tiles()`, `T_STATION` on `town_station_tiles()`.
    Towns, temples and the rock border stay exactly as in `make_terrain`.
-2. `protection_zone(terrain)`: add `T_KAFRA` and `T_STATION` tiles **inside a town box** to the pz set
+2. `protection_zone(terrain)`: add `T_WAYBELL` and `T_STATION` tiles **inside a town box** to the pz set
    (dungeon-side stations and warps stay outside pz). Old terrains have no such tiles, so old tests hold.
 3. `distance_fields_ro(terrain) -> int16 [NT, MAP, MAP]`: like `distance_fields`, but the relaxation also
    relaxes across warps: for each real warp row `d[src] = min(d[src], d[dst] + 1)` (a fixed gather over
    `N_WARPS`, with -1 rows masked by `jnp.where`, then `.at[].min`). This makes dungeon tiles reachable
    (through the exit warp) so bots can walk home. `distance_fields` itself is unchanged.
 4. `tests/test_ro_map.py` (seeds 0..2 where cheap): every warp src is `T_WARP` and every dst is
-   `T_STATION`; kafra and town stations are the right ids and pz; dungeon ring all `T_ROCK`, interior
+   `T_STATION`; waybell and town stations are the right ids and pz; dungeon ring all `T_ROCK`, interior
    only `T_CAVE`/`T_ROCK`/`T_STATION`/`T_WARP`; interior connected by BFS from the inside station
    (including the exit warp tile); no walkable path from outside the ring to inside without warps
    (BFS from a temple never reaches a `T_CAVE` tile); every dungeon pad tile is walkable; town tiles equal
-   between `make_terrain` and `make_terrain_ro` except the kafra, station and the new gates (compare
+   between `make_terrain` and `make_terrain_ro` except the waybell, station and the new gates (compare
    inside town boxes after masking those); town 0 has at least 4 gates; `distance_fields_ro` equals
    `distance_fields` outside the dungeons' reach and is finite on every `T_CAVE` tile; the inside station
    has distance `d[outside station] + WARP_GAP_TILES + 1` (walk to the exit warp, warp, land); jit + vmap
@@ -87,16 +87,16 @@ Report: pytest summary line and the `step.py` line.
 
 ## Worker D: monster kinds and spawn bands (`game/data/monsters.py`, `game/ro_spawns.py`, tests)
 Owns `game/data/monsters.py`, `game/ro_spawns.py`, `tests/test_ro_monsters.py`, `tests/test_ro_spawns.py`.
-- `game/data/monsters.py`: plain tuples, one row per kind, 20 kinds, **ids fixed**: 0 Poring, 1 Orc Warrior
+- `game/data/monsters.py`: plain tuples, one row per kind, 20 kinds, **ids fixed**: 0 Blobbin, 1 Grukk Brute
   (these two keep the legacy rat/orc slots so `MONSTER_KIND_RAT`/`MONSTER_KIND_ORC` worlds still work),
-  then in rising level: Fabre, Lunatic, Drops, Poporing, Willow, Rocker, Spore, Thief Bug, Zombie, Wolf,
-  Skeleton, Peco Peco, Hode, Soldier Skeleton, Bigfoot, Mummy, Golden Thief Bug (MVP), Eddga (MVP).
+  then in rising level: Wrigglet, Moonbun, Emberblob, Vexblob, Bramblet, Fiddlehop, Capling, Pilferbug, Rotling, Snarlfang,
+  Clackbone, Gallopeck, Sandgulper, Clackbone Guard, Grumblebear, Tombwrap, Gildscarab (MVP), Scorchstripe (MVP).
   Columns (parallel tuples plus a `MONSTERS` tuple of namedtuples): `name`, `hp`, `atk_min`, `atk_max`,
   `def_`, `element` (index into `ELEMENTS = ("Neutral","Water","Earth","Fire","Wind","Poison","Holy",
   "Shadow","Ghost","Undead")`), `level`, `base_exp`, `job_exp`, `aggro` (bool), `move_ticks` (ticks per
   step, 1 = every tick), `size` (0 small, 1 medium, 2 large), `mvp` (bool). Classic pre-renewal flavour
-  scaled to this game: Poring hp 40 atk 1-3 (= today's rat), Orc Warrior hp 120 atk 6-9 (= today's orc);
-  Eddga and GTB around hp 3000-5000, atk 60-120. Export `KIND_BY_NAME: dict`, `N_KINDS = 20`,
+  scaled to this game: Blobbin hp 40 atk 1-3 (= today's rat), Grukk Brute hp 120 atk 6-9 (= today's orc);
+  Scorchstripe and Gildscarab around hp 3000-5000, atk 60-120. Export `KIND_BY_NAME: dict`, `N_KINDS = 20`,
   `MONSTER_HP_TUPLE`, `MONSTER_DAMAGE_TUPLE` (atk_max per kind) as drop-in replacements for config's
   `MONSTER_HP`/`MONSTER_DAMAGE`, and jnp arrays `HP`, `ATK_MIN`, `ATK_MAX`, `DEF`, `ELEMENT`, `LEVEL`,
   `BASE_EXP`, `JOB_EXP`, `AGGRO`, `MOVE_TICKS`, `SIZE`, `MVP` (all `[N_KINDS]`, int32 / bool).
@@ -112,7 +112,7 @@ Owns `game/data/monsters.py`, `game/ro_spawns.py`, `tests/test_ro_monsters.py`, 
   - `choose_kinds(world, key, n) -> int32 [n]`: `kinds_for(world, world["monsters"]["pos"][:n], key)`.
   - `spawn_plan(terrain, dist_town) -> int32 [MAP, MAP]`: the band id per tile (field bands 0..2,
     then 3 + dungeon index for dungeon tiles, -1 on blocked or pz tiles); a debug/minimap helper, jit-able.
-- Tests: table shape and id order; `KIND_BY_NAME["Poring"] == 0`; every `FIELD_BANDS` and `DUNGEONS`
+- Tests: table shape and id order; `KIND_BY_NAME["Blobbin"] == 0`; every `FIELD_BANDS` and `DUNGEONS`
   kind name exists; on a world built from `map_gen.make_terrain_ro` + `map_gen.distance_fields_ro`
   (one world, seed 0; build it once at module level) positions near a gate get band-0 kinds, far ones
   band 2, every `T_CAVE` position gets that dungeon's kinds, exactly one MVP per dungeon with positions

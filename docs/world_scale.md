@@ -152,7 +152,7 @@ and `nvidia-smi` peak. Do **not** run `--census` at 2048 until the int32 claim-k
 
 ## Round 3 (ro3-world3, 2026-11-02): the 2048 tick unblocked
 - **Claim keys.** The overflow was `tile * MAX_PLAYERS + slot` in `ro_warps.apply_warps` (2048^2 x 512 = 2^31). It is
-  gone: `ro_warps.claim_moves` (shared by the warps and the new kafra teleport) sorts plain tile keys
+  gone: `ro_warps.claim_moves` (shared by the warps and the new waybell teleport) sorts plain tile keys
   (`x * MAP + y < MAP^2`) with `ro_move._occupied` / `ro_move._first_claims`; the stable sort gives the lowest slot
   the win, so no second-level key is needed. `ro_move`'s own keys never overflowed: it sorts `2 * tile + 1`, which
   fits int32 up to MAP 32767 (a static assert in `ro_move.py` says so). No int64 anywhere: nothing to measure there.

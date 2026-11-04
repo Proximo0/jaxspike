@@ -53,8 +53,8 @@ def wear(w, p, eq_slot, inv_slot):
     return {**w, "items": it}
 
 
-def set_zeny(w, p, z):
-    return {**w, "items": {**w["items"], "zeny": w["items"]["zeny"].at[p].set(z)}}
+def set_ryn(w, p, z):
+    return {**w, "items": {**w["items"], "ryn": w["items"]["ryn"].at[p].set(z)}}
 
 
 def inputs_for(**kw):
@@ -96,31 +96,31 @@ def test_table_ids_and_shape():
     assert I.KIND[I.ITEM_GOLD_COIN] == I.KIND_ETC and bool(I.STACKABLE[I.ITEM_GOLD_COIN])
     assert I.KIND[I.ITEM_MEAT] == I.KIND_CONSUMABLE and not bool(I.STACKABLE[I.ITEM_MEAT])
     assert I.KIND[I.ITEM_SWORD] == I.KIND_WEAPON and int(I.ATK[I.ITEM_SWORD]) == 25 and int(I.SLOTS[I.ITEM_SWORD]) == 3
-    assert I.KIND[I.ITEM_PORING_CARD] == I.KIND_CARD
-    assert I.REFINE_ORE.shape == (5,) and I.REFINE_ZENY.shape == (5,)
+    assert I.KIND[I.ITEM_BLOBBIN_CARD] == I.KIND_CARD
+    assert I.REFINE_ORE.shape == (5,) and I.REFINE_RYN.shape == (5,)
     assert len(I.table_for_client()) == I.N_ITEMS
 
 
 # --- normalize -------------------------------------------------------------------------------------
 
 def test_fresh_pickup_gets_count_one():
-    w = put(add_player(make_world(), 0), 0, 4, I.ITEM_JELLOPY)
+    w = put(add_player(make_world(), 0), 0, 4, I.ITEM_JELLY_BEAD)
     out = run(w)
-    assert count(out)[4] == 1 and inv(out)[4] == I.ITEM_JELLOPY
+    assert count(out)[4] == 1 and inv(out)[4] == I.ITEM_JELLY_BEAD
 
 
-def test_coin_becomes_zeny_and_slot_clears():
+def test_coin_becomes_ryn_and_slot_clears():
     w = put(add_player(make_world(), 0), 0, 2, ITEM_GOLD_COIN)
     out = run(w)
-    assert int(out["items"]["zeny"][0]) == I.ZENY_PER_COIN
+    assert int(out["items"]["ryn"][0]) == I.RYN_PER_COIN
     assert inv(out)[2] == 0 and count(out)[2] == 0
     out = run(put(w, 0, 5, ITEM_GOLD_COIN, count=7))
-    assert int(out["items"]["zeny"][0]) == 8 * I.ZENY_PER_COIN
+    assert int(out["items"]["ryn"][0]) == 8 * I.RYN_PER_COIN
 
 
-def test_zeny_clamped_to_max():
-    w = set_zeny(put(add_player(make_world(), 0), 0, 0, ITEM_GOLD_COIN, count=5), 0, I.MAX_ZENY - 3)
-    assert int(run(w)["items"]["zeny"][0]) == I.MAX_ZENY
+def test_ryn_clamped_to_max():
+    w = set_ryn(put(add_player(make_world(), 0), 0, 0, ITEM_GOLD_COIN, count=5), 0, I.MAX_RYN - 3)
+    assert int(run(w)["items"]["ryn"][0]) == I.MAX_RYN
 
 
 def test_stacks_merge_into_lowest_slot():
@@ -135,7 +135,7 @@ def test_stacks_merge_into_lowest_slot():
 
 def test_stack_overflow_is_capped():
     w = add_player(make_world(), 0)
-    w = put(put(w, 0, 0, I.ITEM_JELLOPY, count=I.MAX_STACK), 0, 1, I.ITEM_JELLOPY, count=50)
+    w = put(put(w, 0, 0, I.ITEM_JELLY_BEAD, count=I.MAX_STACK), 0, 1, I.ITEM_JELLY_BEAD, count=50)
     out = run(w)
     assert count(out)[0] == I.MAX_STACK and inv(out)[1] == 0
 
@@ -270,10 +270,10 @@ def test_equipped_armor_def_with_refine_and_item_bonus():
 
 def test_equipped_card_bonus_by_id_and_sockets_beyond_slots_ignored():
     w = add_player(make_world(), 0)
-    cards = [I.ITEM_HORNET_CARD, I.ITEM_ANDRE_CARD, I.ITEM_ANDRE_CARD, I.ITEM_ANDRE_CARD]  # sword has 3 sockets
+    cards = [I.ITEM_NEEDLEBUZZ_CARD, I.ITEM_ANTLET_CARD, I.ITEM_ANTLET_CARD, I.ITEM_ANTLET_CARD]  # sword has 3 sockets
     w = wear(put(w, 0, 0, ITEM_SWORD, count=1, cards=cards), 0, I.EQ_WEAPON, 0)
     bonus = np.asarray(ro_items.equipped(w)["card_bonus"][0])
-    assert bonus[I.BONUS_ATK] == int(I.CARD_VALUE[I.ITEM_HORNET_CARD]) + 2 * int(I.CARD_VALUE[I.ITEM_ANDRE_CARD])
+    assert bonus[I.BONUS_ATK] == int(I.CARD_VALUE[I.ITEM_NEEDLEBUZZ_CARD]) + 2 * int(I.CARD_VALUE[I.ITEM_ANTLET_CARD])
     assert bonus.sum() == bonus[I.BONUS_ATK]
     # a card in an item that is not worn contributes nothing
     unworn = put(add_player(make_world(), 0), 0, 0, ITEM_SWORD, count=1, cards=cards)
@@ -282,12 +282,12 @@ def test_equipped_card_bonus_by_id_and_sockets_beyond_slots_ignored():
 
 # --- refine ----------------------------------------------------------------------------------------
 
-def refine_world(level=0, ore_count=2, zeny=100, item=ITEM_SWORD):
+def refine_world(level=0, ore_count=2, ryn=100, item=ITEM_SWORD):
     w = add_player(make_world(), 0)
     w = put(w, 0, 0, item, count=1, refine=level)
     if ore_count:
-        w = put(w, 0, 4, I.ITEM_PHRACON, count=ore_count)
-    return wear(set_zeny(w, 0, zeny), 0, I.EQ_WEAPON, 0)
+        w = put(w, 0, 4, I.ITEM_TIN_LODE, count=ore_count)
+    return wear(set_ryn(w, 0, ryn), 0, I.EQ_WEAPON, 0)
 
 
 def test_refine_chance_table():
@@ -302,7 +302,7 @@ def test_safe_refine_always_succeeds_and_pays():
         w = {**refine_world(), "rng": make_world(seed)["rng"]}
         out = run(w, refine=0)
         assert int(out["items"]["inv_refine"][0, 0]) == 1
-        assert int(out["items"]["zeny"][0]) == 100 - int(I.REFINE_ZENY[1])
+        assert int(out["items"]["ryn"][0]) == 100 - int(I.REFINE_RYN[1])
         assert count(out)[4] == 1
         assert equip(out)[I.EQ_WEAPON] == 0
 
@@ -312,11 +312,11 @@ def test_refine_consumes_last_ore_slot():
     assert inv(out)[4] == 0 and count(out)[4] == 0 and int(out["items"]["inv_refine"][0, 0]) == 1
 
 
-def test_refine_needs_ore_zeny_and_headroom():
-    for w in (refine_world(ore_count=0), refine_world(zeny=int(I.REFINE_ZENY[1]) - 1), refine_world(level=10)):
+def test_refine_needs_ore_ryn_and_headroom():
+    for w in (refine_world(ore_count=0), refine_world(ryn=int(I.REFINE_RYN[1]) - 1), refine_world(level=10)):
         out = run(w, refine=0)
         assert int(out["items"]["inv_refine"][0, 0]) == int(w["items"]["inv_refine"][0, 0])
-        assert int(out["items"]["zeny"][0]) == int(w["items"]["zeny"][0])
+        assert int(out["items"]["ryn"][0]) == int(w["items"]["ryn"][0])
         assert inv(out)[0] == ITEM_SWORD
     out = run(refine_world(), refine=4)  # an ore slot is not equipment
     assert count(out)[4] == 2
@@ -336,12 +336,12 @@ def test_failed_refine_destroys_item_and_clears_equip():
     assert count(hit)[0] == 0 and int(hit["items"]["inv_refine"][0, 0]) == 0
     assert cards_of(hit, 0) == [0, 0, 0, 0]
     assert equip(hit)[I.EQ_WEAPON] == -1
-    assert int(hit["items"]["zeny"][0]) == 100 - int(I.REFINE_ZENY[1]) and count(hit)[4] == 1
+    assert int(hit["items"]["ryn"][0]) == 100 - int(I.REFINE_RYN[1]) and count(hit)[4] == 1
 
 
 # --- compound_card ---------------------------------------------------------------------------------
 
-def card_world(cards_in=2, card=I.ITEM_HORNET_CARD, weapon=ITEM_SWORD):
+def card_world(cards_in=2, card=I.ITEM_NEEDLEBUZZ_CARD, weapon=ITEM_SWORD):
     w = add_player(make_world(), 0)
     w = put(w, 0, 0, weapon, count=1)
     w = put(w, 0, 1, card, count=cards_in)
@@ -350,10 +350,10 @@ def card_world(cards_in=2, card=I.ITEM_HORNET_CARD, weapon=ITEM_SWORD):
 
 def test_compound_fills_lowest_free_socket():
     out = run(card_world(), use_item=1)
-    assert cards_of(out, 0) == [I.ITEM_HORNET_CARD, 0, 0, 0]
+    assert cards_of(out, 0) == [I.ITEM_NEEDLEBUZZ_CARD, 0, 0, 0]
     assert count(out)[1] == 1
     out = run(out, use_item=1)
-    assert cards_of(out, 0) == [I.ITEM_HORNET_CARD] * 2 + [0, 0]
+    assert cards_of(out, 0) == [I.ITEM_NEEDLEBUZZ_CARD] * 2 + [0, 0]
     assert inv(out)[1] == 0 and count(out)[1] == 0  # last card consumed
 
 
@@ -361,15 +361,15 @@ def test_compound_refuses_when_full():
     out = card_world(cards_in=5)
     for _ in range(4):  # the sword has 3 sockets, the fourth use must be refused
         out = run(out, use_item=1)
-    assert cards_of(out, 0) == [I.ITEM_HORNET_CARD] * 3 + [0]
+    assert cards_of(out, 0) == [I.ITEM_NEEDLEBUZZ_CARD] * 3 + [0]
     assert count(out)[1] == 2
-    full = put(card_world(cards_in=2), 0, 0, ITEM_SWORD, count=1, cards=[I.ITEM_HORNET_CARD] * 3 + [0])
+    full = put(card_world(cards_in=2), 0, 0, ITEM_SWORD, count=1, cards=[I.ITEM_NEEDLEBUZZ_CARD] * 3 + [0])
     out = run(full, use_item=1)
-    assert count(out)[1] == 2 and cards_of(out, 0) == [I.ITEM_HORNET_CARD] * 3 + [0]
+    assert count(out)[1] == 2 and cards_of(out, 0) == [I.ITEM_NEEDLEBUZZ_CARD] * 3 + [0]
 
 
 def test_compound_refuses_wrong_target_or_nothing_worn():
-    out = run(card_world(card=I.ITEM_PORING_CARD), use_item=1)  # body card, only a weapon worn
+    out = run(card_world(card=I.ITEM_BLOBBIN_CARD), use_item=1)  # body card, only a weapon worn
     assert count(out)[1] == 2 and cards_of(out, 0) == [0, 0, 0, 0]
     base = card_world()
     unworn = {**base, "items": {**base["items"], "equip": jnp.full((MAX_PLAYERS, 8), -1, jnp.int32)}}
@@ -384,7 +384,7 @@ def test_compound_card_direct_done_flags():
     ok = jnp.zeros((MAX_PLAYERS,), jnp.bool_).at[0].set(True)
     out, done = ro_refine.compound_card(w, slot, ok)
     assert bool(done[0]) and int(done.sum()) == 1
-    assert int(out["items"]["inv_cards"][0, 0, 0]) == I.ITEM_HORNET_CARD
+    assert int(out["items"]["inv_cards"][0, 0, 0]) == I.ITEM_NEEDLEBUZZ_CARD
     out2, done2 = ro_refine.compound_card(w, slot, jnp.zeros((MAX_PLAYERS,), jnp.bool_))
     assert int(done2.sum()) == 0 and int(jnp.abs(out2["items"]["inv_cards"]).sum()) == 0
 
@@ -448,10 +448,10 @@ def _roll_kind(kind, n_keys=5):
 
 def test_roll_drops_chances_within_three_sigma():
     for kind in range(D.N_DROP_KINDS):
-        items, counts, zeny = _roll_kind(kind)
+        items, counts, ryn = _roll_kind(kind)
         n = items.shape[0]
         assert n >= 20000
-        assert items.shape[1] == D.DROPS_PER_KIND and zeny.shape == (n,)
+        assert items.shape[1] == D.DROPS_PER_KIND and ryn.shape == (n,)
         for j in range(D.DROPS_PER_KIND):
             want = int(D.DROP_ITEM[kind, j])
             if want == 0:
@@ -462,7 +462,7 @@ def test_roll_drops_chances_within_three_sigma():
             assert abs(hits - p * n) <= 3 * np.sqrt(n * p * (1 - p)) + 1, (kind, j, hits, p * n)
             assert (counts[:, j][items[:, j] == want] == int(D.DROP_COUNT[kind, j])).all()
             assert (counts[:, j][items[:, j] == 0] == 0).all()
-        assert zeny.min() >= int(D.ZENY_MIN[kind]) and zeny.max() <= int(D.ZENY_MAX[kind])
+        assert ryn.min() >= int(D.RYN_MIN[kind]) and ryn.max() <= int(D.RYN_MAX[kind])
 
 
 def _died_world(idx, pos, occupied=0):
@@ -481,15 +481,15 @@ def test_place_drops_ranks_free_slots_like_loot():
     w = _died_world([3, 7, 9], [[1, 2], [3, 4], [5, 6]], occupied=2)
     items = jnp.zeros((MAX_MONSTERS, D.DROPS_PER_KIND), jnp.int32)
     counts = jnp.zeros_like(items)
-    items = items.at[3, 0].set(I.ITEM_JELLOPY).at[7, 1].set(I.ITEM_APPLE)
+    items = items.at[3, 0].set(I.ITEM_JELLY_BEAD).at[7, 1].set(I.ITEM_APPLE)
     counts = counts.at[3, 0].set(1).at[7, 1].set(1)
-    zeny = jnp.zeros((MAX_MONSTERS,), jnp.int32).at[9].set(25).at[4].set(99)  # monster 4 did not die
-    out = jax.jit(ro_drops.place_drops)(w, items, counts, zeny)
+    ryn = jnp.zeros((MAX_MONSTERS,), jnp.int32).at[9].set(25).at[4].set(99)  # monster 4 did not die
+    out = jax.jit(ro_drops.place_drops)(w, items, counts, ryn)
     d = jax.device_get(out["drops"])
     assert d["active"][:2].all() and d["item"][:2].tolist() == [I.ITEM_FEATHER] * 2  # occupied slots untouched
     assert d["active"].sum() == 5 and d["active"][2:5].all()  # the three new drops take the lowest free slots
     got = {(tuple(int(v) for v in d["pos"][i]), int(d["item"][i])) for i in range(2, 5)}
-    assert got == {((1, 2), I.ITEM_JELLOPY), ((3, 4), I.ITEM_APPLE), ((5, 6), ITEM_GOLD_COIN)}
+    assert got == {((1, 2), I.ITEM_JELLY_BEAD), ((3, 4), I.ITEM_APPLE), ((5, 6), ITEM_GOLD_COIN)}
     assert (d["ttl"][2:5] == DROP_TTL).all()
 
 
@@ -498,13 +498,13 @@ def test_place_drops_discards_beyond_free_slots_and_ignores_living():
     d0 = dict(w["drops"])
     d0["active"] = jnp.ones((MAX_DROPS,), jnp.bool_).at[11].set(False).at[40].set(False)
     w = {**w, "drops": d0}
-    items = jnp.zeros((MAX_MONSTERS, D.DROPS_PER_KIND), jnp.int32).at[0, 0].set(I.ITEM_JELLOPY).at[1, 0].set(I.ITEM_APPLE)
+    items = jnp.zeros((MAX_MONSTERS, D.DROPS_PER_KIND), jnp.int32).at[0, 0].set(I.ITEM_JELLY_BEAD).at[1, 0].set(I.ITEM_APPLE)
     items = items.at[2, 0].set(I.ITEM_CLOVER).at[500, 0].set(I.ITEM_FLUFF)  # 500 is alive: no drop
     counts = (items > 0).astype(jnp.int32)
     out = ro_drops.place_drops(w, items, counts, jnp.zeros((MAX_MONSTERS,), jnp.int32))
     d = jax.device_get(out["drops"])
     assert d["active"].all()  # the two free slots filled, the third drop discarded
-    assert int(d["item"][11]) == I.ITEM_JELLOPY and int(d["item"][40]) == I.ITEM_APPLE
+    assert int(d["item"][11]) == I.ITEM_JELLY_BEAD and int(d["item"][40]) == I.ITEM_APPLE
     assert I.ITEM_FLUFF not in d["item"].tolist() and I.ITEM_CLOVER not in d["item"].tolist()
 
 
@@ -515,7 +515,7 @@ def test_vmap_batch_matches_per_world():
     a = put(a, 0, 3, I.ITEM_RED_POTION, count=1)
     a = put(a, 0, 5, ITEM_GOLD_COIN, count=4)
     b = wear(put(add_player(make_world(2), 0), 0, 0, ITEM_SWORD, count=1, refine=2), 0, I.EQ_WEAPON, 0)
-    b = set_zeny(put(b, 0, 4, I.ITEM_PHRACON, count=3), 0, 500)
+    b = set_ryn(put(b, 0, 4, I.ITEM_TIN_LODE, count=3), 0, 500)
     ia = inputs_for(use_item=1)
     ib = inputs_for(refine=0)
 
@@ -570,13 +570,13 @@ def test_policy_refines_below_safe_limit_only():
     assert policy(refine_world(level=safe_top))["refine"] == -1
     assert policy(refine_world(level=safe_top - 1))["refine"] == 0
     assert policy(refine_world(ore_count=0))["refine"] == -1
-    assert policy(refine_world(zeny=0))["refine"] == -1
+    assert policy(refine_world(ryn=0))["refine"] == -1
 
 
 def test_policy_compounds_only_when_a_socket_fits():
     assert policy(card_world())["use_item"] == 1
-    assert policy(card_world(card=I.ITEM_PORING_CARD))["use_item"] == -1
-    full = put(card_world(), 0, 0, ITEM_SWORD, count=1, cards=[I.ITEM_HORNET_CARD] * 3 + [0])
+    assert policy(card_world(card=I.ITEM_BLOBBIN_CARD))["use_item"] == -1
+    full = put(card_world(), 0, 0, ITEM_SWORD, count=1, cards=[I.ITEM_NEEDLEBUZZ_CARD] * 3 + [0])
     assert policy(full)["use_item"] == -1
 
 
@@ -621,7 +621,7 @@ def test_equip_jobs_table_follows_classic_classes():
     assert bool(J[I.ITEM_BOW, JOB_ARCHER]) and bool(J[I.ITEM_BOW, JOB_THIEF]) and not bool(J[I.ITEM_BOW, JOB_NOVICE])
     assert bool(J[I.ITEM_ROD, JOB_MAGE]) and not bool(J[I.ITEM_SWORD, JOB_MAGE])
     assert bool(J[I.ITEM_KNIFE, JOB_MAGE]) and not bool(J[I.ITEM_KNIFE, 4])  # Acolyte: no daggers
-    assert bool(J[I.ITEM_HAT].all()) and bool(J[I.ITEM_JELLOPY].all())  # all-job armor, non-gear
+    assert bool(J[I.ITEM_HAT].all()) and bool(J[I.ITEM_JELLY_BEAD].all())  # all-job armor, non-gear
     assert not bool(J[I.ITEM_BOOTS, JOB_NOVICE]) and bool(J[I.ITEM_BOOTS, JOB_SWORDSMAN])
     assert I.table_for_client()[I.ITEM_BOW]["jobs"] == [JOB_ARCHER, JOB_THIEF]
 

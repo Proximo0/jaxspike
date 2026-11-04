@@ -12,7 +12,7 @@ Item ids are the `game/data/items.py` ids (`N_ITEMS = 300`, the full id space; 0
           {id, name, kind, cls, atk, def, matk, element, slots, weight, buy, sell, heal_hp, heal_sp,
            weapon_level, stackable, bonus, bonus_value, card_bonus, card_value}
 "drops":  game.data.drops.table_for_client()     list per monster kind:
-          {kind, drops: [{item, chance, count}], zeny_min, zeny_max}      chance is per 10000 (round 3; was per mille)
+          {kind, drops: [{item, chance, count}], ryn_min, ryn_max}      chance is per 10000 (round 3; was per mille)
 ```
 Both are static, built once per server (like the maps) and sent only in `welcome`. `kind` is the item kind id
 (0 none, 1 etc, 2 consumable, 3 weapon, 4 armor, 5 card); `cls` is the weapon class for weapons and the slot type for
@@ -21,14 +21,14 @@ armor and cards (see `items_brief.md`); `bonus`/`card_bonus` are `BONUS_*` ids 0
 ## `snap.you` additions
 
 ```
-"zeny":  int                                      0..2_000_000_000
+"ryn":  int                                      0..2_000_000_000
 "inv":   [{"item": int, "count": int, "refine": int, "cards": [int, int, int, int]} x INV_SLOTS]
 "equip": [int x 8]                                inventory slot index worn in EQ_WEAPON, HEAD, BODY, SHIELD,
                                                   GARMENT, SHOES, ACC1, ACC2; -1 = nothing
 ```
 `inv` replaces the old flat list of ids; always exactly `INV_SLOTS` rows, an empty slot is
 `{"item":0,"count":0,"refine":0,"cards":[0,0,0,0]}`. Source arrays: `players.inv` (item), and `world["items"]`
-`inv_count`, `inv_refine`, `inv_cards`, `equip`, `zeny`. They join the tick's single host pull for the viewer rows
+`inv_count`, `inv_refine`, `inv_cards`, `equip`, `ryn`. They join the tick's single host pull for the viewer rows
 (one numpy transfer, no per-client device reads). Only the viewer's own row is sent; other players' gear is not
 on the wire in M3. Ground drops keep `{kind:"d", item, pos}` on the wire; the engine-side drop fields (count, refine, cards) are
 round 3 (below) and are not sent.
@@ -39,7 +39,7 @@ round 3 (below) and are not sent.
 |---|---|---|
 | `use_item` | `slot` | drink/eat a consumable, or compound a card into the worn item it fits |
 | `equip` | `slot` | toggle: wear the item (replacing the occupant of its equip slot) or take it off |
-| `refine` | `slot` | upgrade the worn-or-carried weapon/armor in `slot` (pays zeny and one ore; may destroy it) |
+| `refine` | `slot` | upgrade the worn-or-carried weapon/armor in `slot` (pays ryn and one ore; may destroy it) |
 | `drop` | `slot` | put one unit (whole item for gear) on the ground at the player's tile |
 
 `validate_client` accepts them when `slot` is an int (not bool); any int is passed through, because the engine
@@ -59,16 +59,16 @@ Human `use_item` etc. do not cancel a `walk_to` path (they are not movement).
 Order inside the tick is fixed by `ro_items.phase`: normalize, use_item, equip, refine, drop, normalize. So a client
 that sends `equip` and `refine` for the same slot in one tick sees the equip happen first. Failure feedback is
 implicit in the next `snap` (item gone after a failed refine, same counts when refused); a `notice` string may be
-added later by the server by diffing `inv`/`zeny`.
+added later by the server by diffing `inv`/`ryn`.
 
 ## Round 2 (ro-items2) additions
 
 ### Item id space
 `game/data/items.py`: ids `0..N_BASE_ITEMS-1` are RO items (93 today: the M3 73, 17 drop-table etc items and cards,
-ro-fidelity's Cutter, Fly Wing, Butterfly Wing), ids `100..299` are craft materials and products with craft's own
+ro-fidelity's Cutter, Flit Feather, Homing Feather), ids `100..299` are craft materials and products with craft's own
 ids (`game/data/craft.py`, 100..105 and 200..208 today), every other id is a reserved row (`name ""`, `kind 0`).
 `N_ITEMS == config.ITEM_ID_LIMIT == 300`; every column is indexed over the whole space, so a craft id in an inventory
-reads its own row (before, it clamped onto the Willow Card row and stacked). Craft rows are NOT stackable (ro_craft
+reads its own row (before, it clamped onto the Bramblet Card row and stacked). Craft rows are NOT stackable (ro_craft
 counts slots per recipe input). `welcome.craft_items` stays for older clients; `welcome.items[id]` now names them too.
 
 `welcome.items[id]` gains:
@@ -81,11 +81,11 @@ counts slots per recipe input). `welcome.craft_items` stays for older clients; `
 `welcome.drops`: 20 rows (one per monster kind of `game/data/monsters.py`), up to 8 entries each, unused entries
 left out; the last entry of every row is the kind's card at 1 per mille.
 
-### Drops and zeny (engine, already in the tick through `loot.loot`)
-A kill rolls the kind's row (independent per-mille rolls). Zeny (`2*level..5*level`, MVPs `100*level..200*level`)
-goes straight to the killer's `items.zeny` (killer = `world["mvp"]["top_damager"]`, if logged in); a kill nobody is
+### Drops and ryn (engine, already in the tick through `loot.loot`)
+A kill rolls the kind's row (independent per-mille rolls). Ryn (`2*level..5*level`, MVPs `100*level..200*level`)
+goes straight to the killer's `items.ryn` (killer = `world["mvp"]["top_damager"]`, if logged in); a kill nobody is
 credited with (skill-only kills today: ro_skills_effects does not call `record_damage`) leaves a gold coin on the
-ground as before. Clients see zeny rise in `snap.you.zeny` without a coin drop.
+ground as before. Clients see ryn rise in `snap.you.ryn` without a coin drop.
 
 ### Job equip restrictions
 `items.EQUIP_JOBS bool [N_ITEMS, N_JOBS]` (classic pre-renewal classes: daggers all but Acolyte, swords
@@ -101,7 +101,7 @@ Suggested `snap.you` field: `"range": int`.
 
 ### NPC shops (`game/ro_shop.py`, `phase(world, inputs)`, not yet in `step.py`)
 A living player trades when it stands on or next to a `T_SHOP` tile (terrain id 12, ro-world2's shop rows; the
-kafra tile and its neighbours if the terrain module has no T_SHOP) inside a town box. Stock is per town
+waybell tile and its neighbours if the terrain module has no T_SHOP) inside a town box. Stock is per town
 (`ro_shop.SHOP_STOCK [5, 16]`, `ro_shop.stock_for_client()`).
 
 `welcome` addition:
@@ -118,8 +118,8 @@ Client messages (C->S), one-shot like `use_item`:
 `validate_client`: int, not bool, like `slot`. Same pending-array pattern as the M3 messages (latest per tick wins,
 reset to none after one step). Order inside the phase: sell, then buy. Prices: buy `BUY * (100 - discount) // 100`
 (at least 1), sell `SELL * (100 + overcharge) // 100` per unit, with discount/overcharge `min(5 + 2*level, 24)` %
-from learned Discount / Overcharge. A buy needs the zeny and a stack of the same stackable id below MAX_STACK or a
-free slot. Refusals are silent; the server may diff `zeny`/`inv` for a notice ("not enough zeny", "inventory full",
+from learned Discount / Overcharge. A buy needs the ryn and a stack of the same stackable id below MAX_STACK or a
+free slot. Refusals are silent; the server may diff `ryn`/`inv` for a notice ("not enough ryn", "inventory full",
 "no shop here").
 
 ## Round 3 (ro3-items3) additions
@@ -132,7 +132,7 @@ free slot. Refusals are silent; the server may diff `zeny`/`inv` for a notice ("
 ### Ground drops keep count, refine and cards
 The drops block grows three fields (lead lines for `game/state.py`, fresh arrays from `ro_drops.drop_fields()`):
 ```
-"count":  int32 [MAX_DROPS]               units in the pile (a gold coin pile's count is its zeny)
+"count":  int32 [MAX_DROPS]               units in the pile (a gold coin pile's count is its ryn)
 "refine": int32 [MAX_DROPS]               refine level of a dropped weapon/armor
 "cards":  int32 [MAX_DROPS, MAX_CARDS]    compounded card ids, 0 = empty socket
 ```
@@ -144,10 +144,10 @@ on the ground; `ro_drops.pickup(world) -> (world, picked)` replaces `loot._picku
 `picked` is bool [MAX_PLAYERS] for the pickup clip. A looter monster that picks a pile up and spills it on death
 keeps one unit (ro3-perf's `_place` sets count 1): defect, see the hand-back.
 
-### Coins carry the rolled zeny
-`items.ZENY_PER_COIN = 1`: a gold coin stack's count IS its zeny. A kill nobody is credited with leaves one coin pile
-with `count = rolled zeny` (2..5 x level; MVPs 100..200 x level); `ro_items._normalize` turns a picked-up pile into
-exactly that zeny (no flat 10 any more). Credited kills still pay `items.zeny` directly (loot.py, ro3-exp).
+### Coins carry the rolled ryn
+`items.RYN_PER_COIN = 1`: a gold coin stack's count IS its ryn. A kill nobody is credited with leaves one coin pile
+with `count = rolled ryn` (2..5 x level; MVPs 100..200 x level); `ro_items._normalize` turns a picked-up pile into
+exactly that ryn (no flat 10 any more). Credited kills still pay `items.ryn` directly (loot.py, ro3-exp).
 
 ### Client shop panel (`client/game/ui/shop_panel.gd/.tscn`)
 No key: it opens when `you.pos` is on or next to (Chebyshev distance 1, the engine's `_NEAR`) a tile of
@@ -155,7 +155,7 @@ No key: it opens when `you.pos` is on or next to (Chebyshev distance 1, the engi
 `max(BUY * (100 - d) // 100, 1)`, sell `SELL * (100 + o) // 100` with `d`/`o` = `min(5 + 2 * level, 24)` from the
 player's learned Discount / Overcharge (`you.learned` pairs, skill ids looked up by name in
 `welcome.skills.names`). Buy sends `{"t": "buy", "item": id}`, Sell (non-empty, not-worn slots) sends
-`{"t": "sell", "slot": slot}`; zeny and the sell list refresh from `snap.you`. Close dismisses the panel until the
+`{"t": "sell", "slot": slot}`; ryn and the sell list refresh from `snap.you`. Close dismisses the panel until the
 player leaves the shop's range. Lead lines in `client/game/world/game_view.gd`: `PANEL_SCENES` gets
 `"res://game/ui/shop_panel.tscn",` and `PANEL_POS` gets `"ShopPanel": Vector2(1300, 250),`.
 

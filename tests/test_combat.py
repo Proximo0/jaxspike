@@ -7,7 +7,7 @@ from game.config import PLAYER_MAX_HP, MONSTER_ATTACK_COOLDOWN, MONSTER_HP, MONS
 from game.data import monsters as mdata
 from game.state import empty_inputs, make_empty_world
 
-ORC = 1  # Orc Warrior: aggro, atk 6..9, def 5, level 14
+ORC = 1  # Grukk Brute: aggro, atk 6..9, def 5, level 14
 
 
 def _world(player_pos=(20, 20), monster_pos=(21, 20), kind=0):
@@ -75,9 +75,9 @@ def test_player_hit_in_damage_range_and_sets_aspd_cooldown(monkeypatch):
     atk = _fresh()["atk"] + 100
     dmgs = _dmg_to_monster(w)
     hits = [d for d in dmgs if d > 0]
-    assert len(hits) >= 18  # 80% hit chance vs a level 1 Poring (RO: 80 + hit - level - agi)
+    assert len(hits) >= 18  # 80% hit chance vs a level 1 Blobbin (RO: 80 + hit - level - agi)
     for d in hits:
-        assert atk * 90 // 100 - int(mdata.VIT[0]) <= d <= atk * 110 // 100 * 2  # roll minus Poring VIT, doubled on a crit
+        assert atk * 90 // 100 - int(mdata.VIT[0]) <= d <= atk * 110 // 100 * 2  # roll minus Blobbin VIT, doubled on a crit
     o = combat(_seed(w, 0), _attack())
     assert int(o["players"]["attack_cd"][0]) == _fresh()["aspd_ticks"] - 1
 
@@ -134,8 +134,8 @@ def test_cooldown_blocks_second_attack(monkeypatch):
 
 
 def test_element_multiplier_applies(monkeypatch):
-    # Poring is Water; a Wind weapon deals 175%, a Neutral one 100%. Same seed = same hit, crit and roll.
-    assert int(mdata.ELEMENT[mdata.KIND_BY_NAME["Poring"]]) == 1
+    # Blobbin is Water; a Wind weapon deals 175%, a Neutral one 100%. Same seed = same hit, crit and roll.
+    assert int(mdata.ELEMENT[mdata.KIND_BY_NAME["Blobbin"]]) == 1
     _fake_equipped(monkeypatch, weapon_atk=1000, weapon_elem=4)
     wind = _dmg_to_monster(_world())
     monkeypatch.undo()
@@ -163,13 +163,13 @@ def test_hit_chance_falls_with_monster_level():
     from game.combat import hit_percent_player
     hit = _fresh()["hit"]
     low = int(hit_percent_player(hit, mdata.LEVEL[0], mdata.AGI[0]))
-    high = int(hit_percent_player(hit, mdata.LEVEL[mdata.KIND_BY_NAME["Golden Thief Bug"]], mdata.AGI[mdata.KIND_BY_NAME["Golden Thief Bug"]]))
-    assert low == 80 + hit - 2 and high == 5  # RO: 80 + hit - (level + agi); Poring level 1 agi 1
+    high = int(hit_percent_player(hit, mdata.LEVEL[mdata.KIND_BY_NAME["Gildscarab"]], mdata.AGI[mdata.KIND_BY_NAME["Gildscarab"]]))
+    assert low == 80 + hit - 2 and high == 5  # RO: 80 + hit - (level + agi); Blobbin level 1 agi 1
     assert int(hit_percent_player(hit + 100, 35)) > high
 
 
 def test_player_misses_and_a_miss_costs_the_cooldown():
-    w = _world(kind=mdata.KIND_BY_NAME["Golden Thief Bug"])  # level 35: 5% hit chance for a Novice
+    w = _world(kind=mdata.KIND_BY_NAME["Gildscarab"])  # level 35: 5% hit chance for a Novice
     outs = [combat(_seed(w, s), _attack()) for s in range(20)]
     assert sum(int(o["monsters"]["hp"][0]) < int(w["monsters"]["hp"][0]) for o in outs) <= 6
     assert all(int(o["players"]["attack_cd"][0]) == _fresh()["aspd_ticks"] - 1 for o in outs)
@@ -182,7 +182,7 @@ def test_not_adjacent_no_attack():
 
 def test_monster_hits_adjacent_player_in_atk_range():
     # A fresh Novice has 40 hp (classic RO), so pick the hardest aggressive hitter that cannot one-shot it
-    # (Thief Bug, 18..24): an Orc Warrior's 104..126 would read as 40 every time, and passive kinds never swing.
+    # (Pilferbug, 18..24): an Grukk Brute's 104..126 would read as 40 every time, and passive kinds never swing.
     kind = max((k for k in range(len(mdata.MONSTERS)) if bool(mdata.AGGRO[k]) and int(mdata.ATK_MAX[k]) < PLAYER_MAX_HP),
                key=lambda k: int(mdata.ATK_MAX[k]))
     w = _world(kind=kind)
@@ -211,16 +211,16 @@ def test_monster_flee_miss():
     from game.combat import hit_percent_monster
     assert int(hit_percent_monster(14, 2)) == 92  # RO: 80 + level - flee
     assert int(hit_percent_monster(1, 300)) == 5
-    w = _stat(_world(kind=mdata.KIND_BY_NAME["Lunatic"]), agi=200)  # flee 300
+    w = _stat(_world(kind=mdata.KIND_BY_NAME["Moonbun"]), agi=200)  # flee 300
     w = {**w, "monsters": {**w["monsters"], "hp": w["monsters"]["hp"].at[0].set(1)}}
     assert sum(1 for d in _dmg_to_player(w) if d) <= 6
 
 
 def test_passive_monster_only_fights_back():
-    poring = _world(kind=0)
+    blobbin = _world(kind=0)
     assert not bool(mdata.AGGRO[0])
-    assert all(d == 0 for d in _dmg_to_player(poring))  # full hp: never starts a fight
-    hurt = {**poring, "monsters": {**poring["monsters"], "hp": poring["monsters"]["hp"].at[0].set(10)}}
+    assert all(d == 0 for d in _dmg_to_player(blobbin))  # full hp: never starts a fight
+    hurt = {**blobbin, "monsters": {**blobbin["monsters"], "hp": blobbin["monsters"]["hp"].at[0].set(10)}}
     assert any(d > 0 for d in _dmg_to_player(hurt))
     assert any(d > 0 for d in _dmg_to_player(_world(kind=ORC)))
 
@@ -314,9 +314,9 @@ def test_monster_hits_reachable_player_not_pz_neighbour():
     raise AssertionError("monster never hit the reachable player")
 
 
-def test_monster_stat_columns_poring():
-    poring = mdata.KIND_BY_NAME["Poring"]
-    assert (int(mdata.AGI[poring]), int(mdata.VIT[poring]), int(mdata.DEX[poring])) == (1, 1, 6)
+def test_monster_stat_columns_blobbin():
+    blobbin = mdata.KIND_BY_NAME["Blobbin"]
+    assert (int(mdata.AGI[blobbin]), int(mdata.VIT[blobbin]), int(mdata.DEX[blobbin])) == (1, 1, 6)
     assert mdata.AGI.shape == mdata.VIT.shape == mdata.DEX.shape == mdata.LEVEL.shape
 
 
@@ -330,16 +330,16 @@ def test_hit_percent_uses_monster_agi_and_dex():
 
 
 def test_monster_vit_is_flat_def_on_non_crits(monkeypatch):
-    # Poring (def 0): VIT subtracts exactly VIT from every non-crit hit, never below 1.
+    # Blobbin (def 0): VIT subtracts exactly VIT from every non-crit hit, never below 1.
     _fake_equipped(monkeypatch, weapon_atk=1000)
     w = _world()
     base = _dmg_to_monster(w)
     vit0 = int(mdata.VIT[0])
-    monkeypatch.setattr(mdata, "VIT", mdata.VIT.at[0].set(31))  # +30 over Poring VIT 1
+    monkeypatch.setattr(mdata, "VIT", mdata.VIT.at[0].set(31))  # +30 over Blobbin VIT 1
     with_vit = _dmg_to_monster(w)
     pairs = [(a, b) for a, b in zip(base, with_vit) if a and b]
     assert len(pairs) >= 20
-    flat = [(a, b) for a, b in pairs if a - b == 31 - vit0]  # Poring VIT 1 is already in base
+    flat = [(a, b) for a, b in pairs if a - b == 31 - vit0]  # Blobbin VIT 1 is already in base
     crits = [(a, b) for a, b in pairs if a == b]  # crits ignore VIT
     assert len(flat) + len(crits) == len(pairs) and len(flat) >= 10
 
@@ -352,17 +352,17 @@ def test_monster_vit_floor_is_one(monkeypatch):
 
 
 def test_player_armor_def_is_percent_and_derived_def_is_flat(monkeypatch):
-    lunatic = mdata.KIND_BY_NAME["Lunatic"]  # atk 9..12
-    w = _world(kind=lunatic)
+    moonbun = mdata.KIND_BY_NAME["Moonbun"]  # atk 9..12
+    w = _world(kind=moonbun)
     w = {**w, "monsters": {**w["monsters"], "hp": w["monsters"]["hp"].at[0].set(1)}}
     plain = [d for d in _dmg_to_player(w) if d]
     # derived def (VIT) is flat: hit = raw - def
     vit = _stat(w, vit=5)
     dd = int(ro_stats.derived(vit)["def"][0])
     flat = [d for d in _dmg_to_player(vit) if d]
-    assert flat and min(flat) == max(1, int(mdata.ATK_MIN[lunatic]) - dd)
-    assert max(flat) == max(1, int(mdata.ATK_MAX[lunatic]) - dd)
+    assert flat and min(flat) == max(1, int(mdata.ATK_MIN[moonbun]) - dd)
+    assert max(flat) == max(1, int(mdata.ATK_MAX[moonbun]) - dd)
     # armor_def is a percent of the raw hit
     _fake_equipped(monkeypatch, armor_def=50)
     pct = [d for d in _dmg_to_player(w) if d]
-    assert pct and max(pct) <= int(mdata.ATK_MAX[lunatic]) * 50 // 100 and plain
+    assert pct and max(pct) <= int(mdata.ATK_MAX[moonbun]) * 50 // 100 and plain

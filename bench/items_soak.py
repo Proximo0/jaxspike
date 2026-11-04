@@ -10,11 +10,11 @@ predates the item table) plus
 - inv ids in [0, N_ITEMS); inv_count >= 1 iff inv != 0; inv_count <= MAX_STACK; refine in 0..MAX_REFINE
 - cards are 0 or a card item with socket index < SLOTS of the item holding them (and 0 in empty slots)
 - equip in -1..INV_SLOTS-1, pointing at a weapon/armor of the right slot type; no slot equipped twice
-- zeny in 0..MAX_ZENY
+- ryn in 0..MAX_RYN
 
 "Items picked" is the running total of drops taken from the ground (drops deactivated by loot._pickup), by kind of
 the item taken. Ground drops carry one unit each until the lead adds drops["count"], so this equals units that
-entered inventories. Coins are listed separately (they become zeny the same tick). Rates are per bot per 1000 ticks.
+entered inventories. Coins are listed separately (they become ryn the same tick). Rates are per bot per 1000 ticks.
 Exit 0 with "soak: clean", else exit 1 with the violation list.
 """
 import functools
@@ -48,8 +48,8 @@ def harness_tick(world, inputs):
     world = monsters.monster_ai(world)
     world = combat.combat(world, inputs)
     sub, world = next_key(world)
-    drop_items, drop_counts, zeny = ro_drops.roll_drops(world, sub)
-    world = ro_drops.place_drops(world, drop_items, drop_counts, zeny)
+    drop_items, drop_counts, ryn = ro_drops.roll_drops(world, sub)
+    world = ro_drops.place_drops(world, drop_items, drop_counts, ryn)
 
     before = world["drops"]
     world = loot._pickup(world)
@@ -106,7 +106,7 @@ def check_item_invariants(worlds):
     ref = np.asarray(w["items"]["inv_refine"])
     cards = np.asarray(w["items"]["inv_cards"])
     eq = np.asarray(w["items"]["equip"])
-    zeny = np.asarray(w["items"]["zeny"])
+    ryn = np.asarray(w["items"]["ryn"])
     kind, cls, nsock = np.asarray(I.KIND), np.asarray(I.CLASS), np.asarray(I.SLOTS)
     problems = []
 
@@ -144,7 +144,7 @@ def check_item_invariants(worlds):
     for i in range(eq.shape[2]):
         for j in range(i + 1, eq.shape[2]):
             flag((eq[:, :, i] >= 0) & (eq[:, :, i] == eq[:, :, j]), f"inventory slot equipped twice ({i},{j})")
-    flag((zeny < 0) | (zeny > I.MAX_ZENY), "zeny out of range")
+    flag((ryn < 0) | (ryn > I.MAX_RYN), "ryn out of range")
     return problems
 
 
@@ -184,8 +184,8 @@ def main(batch=4, chunks=5, ticks_per_chunk=100, seed=0):
     print(f"  kills {per(int(p['kills'].sum())):.2f}  deaths {per(int(p['deaths'].sum())):.2f}")
     print("  picked: " + "  ".join(f"{n} {per(tot[k]):.2f}" for n, k in zip(KIND_NAMES, _KIND_IDS))
           + f"  (coins {per(tot[6]):.2f}, not counted in etc)")
-    zeny = np.asarray(it["zeny"])[act]
-    print(f"  zeny per bot at end: mean {zeny.mean():.1f} max {int(zeny.max())}")
+    ryn = np.asarray(it["ryn"])[act]
+    print(f"  ryn per bot at end: mean {ryn.mean():.1f} max {int(ryn.max())}")
     wearing = (np.asarray(it["equip"])[act] >= 0)
     print(f"  equips {per(tot[7]):.2f}; bots wearing a weapon at end {int(wearing[:, I.EQ_WEAPON].sum())}/{n_bots}, "
           f"any armor {int(wearing[:, 1:].any(axis=1).sum())}/{n_bots}")

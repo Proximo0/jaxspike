@@ -154,7 +154,7 @@ def resolve(world, mask, derived):
     )
     dmg = jnp.where(idx < MAX_MONSTERS, dmg, 0)
     monsters, kills = damage_monsters(m, p["kills"], idx, dmg)
-    if "mvp" in world:  # ro3-exp: skill hits feed the cumulative damage credit (exp and zeny to the killer)
+    if "mvp" in world:  # ro3-exp: skill hits feed the cumulative damage credit (exp and ryn to the killer)
         world = ro_mvp.record_damage(world, jnp.broadcast_to(pidx[:, None], idx.shape), idx, dmg)
 
     # Heals.

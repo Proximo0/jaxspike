@@ -3,7 +3,7 @@
 Pure JAX, fixed shapes: a [MAX_PLAYERS, N_WARPS] match against the padded warp table, then the
 sort-based occupancy and tile claims of game/ro_move.py (no MAP x MAP table). Owns players.pos only.
 
-`claim_moves` is the shared "jump a player to a tile" rule (warps here, the kafra teleport in game/ro_kafra.py):
+`claim_moves` is the shared "jump a player to a tile" rule (warps here, the waybell teleport in game/ro_waybell.py):
 the tile must be free of living players and active monsters at the start of the phase, and the lowest slot wins a
 tile two players want. Keys are plain tile indices (x * MAP + y < MAP * MAP), never `tile * MAX_PLAYERS + slot`:
 that product reached 2^31 at MAP 2048 (docs/world_scale.md); the slot order comes from the stable sort instead.

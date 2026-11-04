@@ -10,8 +10,8 @@ from game.data.drops import (
     DROP_ITEM,
     DROPS_PER_KIND,
     N_DROP_KINDS,
-    ZENY_MAX,
-    ZENY_MIN,
+    RYN_MAX,
+    RYN_MIN,
 )
 
 
@@ -19,18 +19,18 @@ def roll_drops(world, key):
     """Roll every drop entry for every monster slot (the caller masks by died).
 
     Returns (items, counts) int32 [MAX_MONSTERS, DROPS_PER_KIND] (0 where the roll failed or the entry is
-    unused) and zeny int32 [MAX_MONSTERS], uniform inclusive in the kind's range. Chances are per 10000.
+    unused) and ryn int32 [MAX_MONSTERS], uniform inclusive in the kind's range. Chances are per 10000.
     """
-    k_drop, k_zeny = jax.random.split(key)
+    k_drop, k_ryn = jax.random.split(key)
     kind = jnp.clip(world["monsters"]["kind"], 0, N_DROP_KINDS - 1)
     u = jax.random.uniform(k_drop, (MAX_MONSTERS, DROPS_PER_KIND))
     item = DROP_ITEM[kind]
     hit = (u * 10000.0 < DROP_CHANCE[kind]) & (item != 0)
     items = jnp.where(hit, item, 0).astype(jnp.int32)
     counts = jnp.where(hit, DROP_COUNT[kind], 0).astype(jnp.int32)
-    lo, hi = ZENY_MIN[kind], ZENY_MAX[kind]
-    zeny = jax.random.randint(k_zeny, (MAX_MONSTERS,), lo, hi + 1, jnp.int32)
-    return items, counts, zeny
+    lo, hi = RYN_MIN[kind], RYN_MAX[kind]
+    ryn = jax.random.randint(k_ryn, (MAX_MONSTERS,), lo, hi + 1, jnp.int32)
+    return items, counts, ryn
 
 
 def drop_fields():
@@ -42,18 +42,18 @@ def drop_fields():
     }
 
 
-def place_drops(world, items, counts, zeny):
+def place_drops(world, items, counts, ryn):
     """Create ground drops for monsters with died set, in free drop slots.
 
-    One drop per rolled entry plus one GOLD_COIN drop per monster with zeny > 0. Candidates are ranked by
+    One drop per rolled entry plus one GOLD_COIN drop per monster with ryn > 0. Candidates are ranked by
     cumsum and assigned to free slots like loot._spawn_drops; ranks beyond the free count are discarded. When
-    the drops block has "count" the slot stores the rolled count (the coin: the full zeny, ZENY_PER_COIN = 1) and
+    the drops block has "count" the slot stores the rolled count (the coin: the full ryn, RYN_PER_COIN = 1) and
     refine/cards 0; without the fields every drop is one unit.
     """
     mons, drops = world["monsters"], world["drops"]
     per = DROPS_PER_KIND + 1
-    coin_count = jnp.maximum(1, zeny // item_data.ZENY_PER_COIN).astype(jnp.int32)
-    coin_item = jnp.where(zeny > 0, item_data.ITEM_GOLD_COIN, 0).astype(jnp.int32)
+    coin_count = jnp.maximum(1, ryn // item_data.RYN_PER_COIN).astype(jnp.int32)
+    coin_item = jnp.where(ryn > 0, item_data.ITEM_GOLD_COIN, 0).astype(jnp.int32)
     all_items = jnp.concatenate([items, coin_item[:, None]], axis=1)  # [M, per]
     all_counts = jnp.concatenate([counts, coin_count[:, None]], axis=1)  # [M, per]
     n = MAX_MONSTERS * per

@@ -1,4 +1,4 @@
-# M5 contract brief: parties, MVP bosses, kafra storage, chat
+# M5 contract brief: parties, MVP bosses, waybell storage, chat
 
 Sub-orchestrator-owned (2026-11-02). Workers code against this file plus `docs/ro_contract.md` and `docs/brief.md`.
 Branch `ro/party`. Nothing here edits `game/config.py`, `game/state.py`, `game/step.py`, `game/combat.py`,
@@ -23,7 +23,7 @@ if the key exists in the world, else treat everyone as level 1 (`_base_level(wor
 |---|---|---|---|
 | `party` | int32 | `[MAX_PLAYERS]` | 0 none, 1 create, 2 leave, 3 invite `target`, 4 accept pending invite |
 | `target` | int32 | `[MAX_PLAYERS]` | player slot for party invite, -1 none (shared with other systems) |
-| `save` | bool | `[MAX_PLAYERS]` | kafra save: set spawn to the temple of the town the player stands in |
+| `save` | bool | `[MAX_PLAYERS]` | waybell save: set spawn to the temple of the town the player stands in |
 
 ## game/ro_party.py (worker: party)
 ```
@@ -118,20 +118,20 @@ Tests `tests/test_ro_mvp.py`: record_damage ledger and tie by lowest slot, event
 right killer and tick, drops land in the killer's inventory, non-MVP death writes no event, respawn after the timer
 on the fixed tile, ring wraps after 8 events, jit + vmap.
 
-## game/ro_kafra.py (worker: kafra, JAX half)
+## game/ro_waybell.py (worker: waybell, JAX half)
 ```
 make_state() -> {}  # no state block; stateless phase
 town_of_tile(pos: int32 [N, 2]) -> int32 [N]   # town index whose box (world_layout.town_boxes) holds pos, -1 outside
 phase(world, inputs) -> world
 ```
-`phase`: for living active players with `inputs["save"]` standing inside a town box (any tile of the town: the kafra
-is "anywhere in town" in v1; the kafra tile rule can narrow this later), set `players.spawn` to that town's
+`phase`: for living active players with `inputs["save"]` standing inside a town box (any tile of the town: the waybell
+is "anywhere in town" in v1; the waybell tile rule can narrow this later), set `players.spawn` to that town's
 **temple centre tile** (`world_layout.town_centers()[town]`, which is a `T_TEMPLE` tile since the temple square
 is centred on the town centre: assert this in the test with `map_gen.make_terrain`). Pure JAX, fixed shape.
-Tests `tests/test_ro_kafra.py`: save in town moves spawn, save outside town does nothing, dead player ignored,
+Tests `tests/test_ro_waybell.py`: save in town moves spawn, save outside town does nothing, dead player ignored,
 spawn tile is `T_TEMPLE` on a generated terrain, jit + vmap.
 
-## net/kafra.py (worker: kafra, Python half; numpy only)
+## net/waybell.py (worker: waybell, Python half; numpy only)
 ```
 STORAGE_SLOTS = 100
 new_storage() -> np.ndarray int32 [STORAGE_SLOTS] of ITEM_NONE
@@ -142,7 +142,7 @@ transfer(inv: np.ndarray [INV_SLOTS], storage: np.ndarray [STORAGE_SLOTS], slot:
 character_storage(char: dict) -> np.ndarray   # char.get("storage") or new_storage(); validates shape/dtype, resets if bad
 ```
 `net/characters.py` is lead-owned: report the lines (`storage` as an optional key in `_KEYS` handling in `load`:
-missing storage => `new_storage()`; `new_character` adds `"storage": new_storage()`). Tests `tests/test_kafra.py`:
+missing storage => `new_storage()`; `new_character` adds `"storage": new_storage()`). Tests `tests/test_waybell.py`:
 in/out round trip, full destination refuses, empty slot refuses, out-of-range refuses, purity, saving a character
 dict with `storage` through `characters.save`/`load` round-trips the array (load keeps unknown keys: verify).
 
@@ -178,7 +178,7 @@ Lists `snap.you` additions (`party`: id or -1, `leader`, `members`: names), clie
 `storage` (`{"t":"storage","op":"in|out","slot"}`), server broadcasts `chat` and `mvp`
 (`{"t":"mvp","kind","killer":name,"tick"}`) and the storage view in `snap.you.storage` (100 ids, sent on change).
 Plus the exact lines for `empty_inputs`, `state.py`, `step.py` (phase order: ... survival -> craft -> party -> mvp ->
-kafra -> tick), `combat.py` (`ro_mvp.record_damage(world, pidx, tgt_w, dmg)` after the player hit scatter),
+waybell -> tick), `combat.py` (`ro_mvp.record_damage(world, pidx, tgt_w, dmg)` after the player hit scatter),
 `characters.py` (storage key) and `server.py` (`inputs["party"]`/`target`/`save` from messages, `ChatRouter` per
 tick, `mvp.event` ring read each tick and broadcast new rows).
 

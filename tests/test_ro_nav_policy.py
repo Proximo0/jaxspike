@@ -228,9 +228,9 @@ def test_dive_picks_the_nearest_dungeon_the_bot_is_high_enough_for():
     x1, y1 = ENT[1]
     assert nav.DUNGEON_DIVE_LEVEL[1] > nav.DUNGEON_DIVE_LEVEL[0] == nav.DUNGEON_MIN_LEVEL
     move, _ = run(world((x1 - 40, y1 + 40), level=nav.DUNGEON_DIVE_LEVEL[1]), base=W)
-    assert int(move[0]) == NE  # Payon Cave is next door and allowed
+    assert int(move[0]) == NE  # Pinehollow Cave is next door and allowed
     move, _ = run(world((x1 - 40, y1 + 40), level=nav.DUNGEON_DIVE_LEVEL[0]), base=W)
-    assert int(move[0]) != NE  # too low for Payon Cave: walks toward the Culvert instead
+    assert int(move[0]) != NE  # too low for Pinehollow Cave: walks toward the Culvert instead
 
 
 def test_ring_by_level_sends_higher_bots_further_out():

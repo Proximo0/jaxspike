@@ -535,7 +535,7 @@ def test_snap_you_has_the_ro_fields(tmp_path):
         assert you["stat_points"] > 0 and you["skill_points"] == 0 and you["max_sp"] > 0 and you["sp"] > 0
         assert you["max_hp"] > 0 and you["base_exp_next"] > 0 and you["job_exp_next"] > 0
         assert you["buffs"] == [] and you["cooldowns"] == [] and you["learned"] == []
-        assert you["casting"] == 0 and you["zeny"] == 0 and len(you["equip"]) == 8
+        assert you["casting"] == 0 and you["ryn"] == 0 and len(you["equip"]) == 8
         assert len(you["inv"]) == 16 and set(you["inv"][0]) == {"item", "count", "refine", "cards"} and len(you["inv"][0]["cards"]) == 4
         assert len(you["craft"]["level"]) == 6 and len(you["craft"]["exp"]) == 6
         assert you["party"] == -1 and you["leader"] is False
@@ -669,11 +669,11 @@ def test_slow_client_keeps_chat_in_its_outbox(tmp_path):
         assert s.conn[a].outbox == [] and texts.index("chat") < len(texts) - 1 and texts[-1] == "snap"
     run(body())
 
-def test_storage_in_out_and_no_kafra_outside_town(tmp_path):
+def test_storage_in_out_and_no_waybell_outside_town(tmp_path):
     async def body():
         s = _ro_server(tmp_path)
         a, ws = _human(s, "boxer")
-        stack_id = 4  # red potion: stackable (id 1 is the gold coin, which the items phase turns into zeny)
+        stack_id = 4  # red potion: stackable (id 1 is the gold coin, which the items phase turns into ryn)
         p, it = s.world["players"], s.world["items"]
         s.world["players"] = {**p, "inv": p["inv"].at[a, 0].set(stack_id).at[a, 1].set(2)}
         s.world["items"] = {**it, "inv_count": it["inv_count"].at[a, 0].set(5).at[a, 1].set(1)}
@@ -705,7 +705,7 @@ def test_storage_in_out_and_no_kafra_outside_town(tmp_path):
         s.pos_host[a] = [5, 5]
         s._on_ro_message(a, {"t": "storage", "op": "in", "slot": 0})
         await tk(s); await _flush()
-        assert _snaps(ws)[-1]["notice"] == "no kafra here" and _you(_snaps(ws))["inv"][0]["count"] == 4
+        assert _snaps(ws)[-1]["notice"] == "no waybell here" and _you(_snaps(ws))["inv"][0]["count"] == 4
     run(body())
 
 def test_save_message_sets_the_respawn_point(tmp_path):
@@ -727,10 +727,10 @@ def test_logout_gives_the_slot_back_as_a_fresh_bot_row(tmp_path):
         a, _ = _human(s, "leaver")
         st, it = s.world["stats"], s.world["items"]
         s.world["stats"] = {**st, "base_level": st["base_level"].at[a].set(9), "str": st["str"].at[a].set(30)}
-        s.world["items"] = {**it, "zeny": it["zeny"].at[a].set(777)}
+        s.world["items"] = {**it, "ryn": it["ryn"].at[a].set(777)}
         s.logout(a)
         assert int(s.world["stats"]["base_level"][a]) == 1 and int(s.world["stats"]["str"][a]) == 1
-        assert int(s.world["items"]["zeny"][a]) == 0 and int(s.world["party"]["party_id"][a]) == -1
+        assert int(s.world["items"]["ryn"][a]) == 0 and int(s.world["party"]["party_id"][a]) == -1
         assert a not in s.storage and _pend_is_none(s)
     run(body())
 
@@ -740,13 +740,13 @@ def test_ro_state_round_trips_through_the_character_file(tmp_path):
         a, _ = _human(s, "persistx")
         st, it = s.world["stats"], s.world["items"]
         s.world["stats"] = {**st, "str": st["str"].at[a].set(12), "stat_points": st["stat_points"].at[a].set(5)}
-        s.world["items"] = {**it, "zeny": it["zeny"].at[a].set(4321)}
+        s.world["items"] = {**it, "ryn": it["ryn"].at[a].set(4321)}
         s.storage[a][3] = 2
         s.logout(a)
         b, err = s.login("persistx")
         assert err is None
         assert int(s.world["stats"]["str"][b]) == 12 and int(s.world["stats"]["stat_points"][b]) == 5
-        assert int(s.world["items"]["zeny"][b]) == 4321
+        assert int(s.world["items"]["ryn"][b]) == 4321
         assert int(s.world["stats"]["kills_seen"][b]) == int(s.world["players"]["kills"][b])
     run(body())
 

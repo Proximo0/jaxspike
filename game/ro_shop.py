@@ -1,9 +1,9 @@
-"""RO NPC shops: buy and sell at shop tiles for zeny, per-town stock, Discount / Overcharge. Pure JAX.
+"""RO NPC shops: buy and sell at shop tiles for ryn, per-town stock, Discount / Overcharge. Pure JAX.
 
 Where: a living player is "at a shop" when it stands on, or next to (8 neighbours, RO's talk range), a T_SHOP
 tile (game/data/terrain.py, placed by map_gen in each town's shop row). If the terrain module has no T_SHOP (an
-older world), the kafra tile and its 8 neighbours act as the shop instead. Which town's stock applies comes from
-the town box the player stands in (ro_kafra.town_of_tile); outside every town nothing is sold.
+older world), the waybell tile and its 8 neighbours act as the shop instead. Which town's stock applies comes from
+the town box the player stands in (ro_waybell.town_of_tile); outside every town nothing is sold.
 
 Inputs (one-shot per tick, int32 [MAX_PLAYERS]):
   buy   item id to buy one unit of; 0 or -1 = none. Must be in the town's stock (SHOP_STOCK).
@@ -14,26 +14,26 @@ Order inside the phase: sell, then buy (so selling loot can pay for a potion in 
 Prices (classic): buy = BUY[id] * (100 - discount) // 100, sell = SELL[id] * (100 + overcharge) // 100 per unit,
 where discount / overcharge = min(5 + 2 * level, 24) percent for a learned Discount / Overcharge level 1..10 (7 % at
 1, 24 % at 10, iRO wiki), read from world["skills"]["learned"] when the skills block and the skill exist.
-Zeny is capped at MAX_ZENY. A buy needs the zeny and either a stack of the same stackable id below MAX_STACK (the
+Ryn is capped at MAX_RYN. A buy needs the ryn and either a stack of the same stackable id below MAX_STACK (the
 unit joins the lowest such slot) or an empty slot (the unit lands in the lowest one).
 """
 import jax.numpy as jnp
 import numpy as np
 
-from game import ro_items, ro_kafra, world_layout
+from game import ro_items, ro_waybell, world_layout
 from game.config import INV_SLOTS, ITEM_NONE, MAP, MAX_PLAYERS
 from game.data import items as I
 from game.data import skills as skill_data
 from game.data import terrain
 
 T_SHOP = getattr(terrain, "T_SHOP", None)
-SHOP_FALLBACK_KAFRA = T_SHOP is None  # True only for terrain modules from before ro-world2's shop rows
+SHOP_FALLBACK_WAYBELL = T_SHOP is None  # True only for terrain modules from before ro-world2's shop rows
 
-# Per-town stock, index == world_layout.TOWNS index (Prontera, Geffen, Payon, Alberta, Morroc). RO flavour: the
-# Prontera tool / weapon / armor dealers, Geffen's magic shop, Payon's bows, Alberta's axes and heavy armor,
-# Morroc's daggers.
+# Per-town stock, index == world_layout.TOWNS index (Solmera, Lunavell, Pinehollow, Tidewick, Kharsand). RO flavour: the
+# Solmera tool / weapon / armor dealers, Lunavell's magic shop, Pinehollow's bows, Tidewick's axes and heavy armor,
+# Kharsand's daggers.
 MAX_STOCK = 16
-_TOOLS = (I.ITEM_RED_POTION, I.ITEM_ORANGE_POTION, I.ITEM_FLY_WING, I.ITEM_BUTTERFLY_WING)
+_TOOLS = (I.ITEM_RED_POTION, I.ITEM_ORANGE_POTION, I.ITEM_FLIT_FEATHER, I.ITEM_HOMING_FEATHER)
 _STOCK = (
     _TOOLS + (I.ITEM_YELLOW_POTION, I.ITEM_KNIFE, I.ITEM_CUTTER, I.ITEM_MAIN_GAUCHE, I.ITEM_SWORD, I.ITEM_FALCHION,
               I.ITEM_HAT, I.ITEM_CAP, I.ITEM_COTTON_SHIRT, I.ITEM_ADVENTURER_SUIT, I.ITEM_GUARD, I.ITEM_SANDALS),
@@ -89,21 +89,21 @@ def overcharge_pct(world):
 
 
 def buy_price(world, item):
-    """int32 [P]: zeny one unit of item id `item` [P] costs each player (Discount applied, at least 1)."""
+    """int32 [P]: ryn one unit of item id `item` [P] costs each player (Discount applied, at least 1)."""
     base = I.BUY[jnp.clip(item, 0, I.N_ITEMS - 1)]
     return jnp.maximum(base * (100 - discount_pct(world)) // 100, 1).astype(jnp.int32)
 
 
 def sell_price(world, item):
-    """int32 [P]: zeny one unit of item id `item` [P] fetches (Overcharge applied)."""
+    """int32 [P]: ryn one unit of item id `item` [P] fetches (Overcharge applied)."""
     base = I.SELL[jnp.clip(item, 0, I.N_ITEMS - 1)]
     return (base * (100 + overcharge_pct(world)) // 100).astype(jnp.int32)
 
 
 def at_shop(world):
-    """bool [P]: the player stands on or next to a shop tile (the kafra tile when T_SHOP is unknown)."""
+    """bool [P]: the player stands on or next to a shop tile (the waybell tile when T_SHOP is unknown)."""
     pos = world["players"]["pos"]
-    tile = T_SHOP if T_SHOP is not None else terrain.T_KAFRA
+    tile = T_SHOP if T_SHOP is not None else terrain.T_WAYBELL
     near = jnp.zeros((MAX_PLAYERS,), jnp.bool_)
     for dx, dy in _NEAR:  # 9 constant offsets
         x = jnp.clip(pos[:, 0] + dx, 0, MAP - 1)
@@ -116,7 +116,7 @@ def shop_town(world):
     """int32 [P]: the town whose stock the player may buy from, -1 when not at a shop or not alive."""
     p = world["players"]
     ok = p["active"] & ~p["dead"] & at_shop(world)
-    return jnp.where(ok, ro_kafra.town_of_tile(p["pos"]), -1).astype(jnp.int32)
+    return jnp.where(ok, ro_waybell.town_of_tile(p["pos"]), -1).astype(jnp.int32)
 
 
 def _sell(world, inputs, town):
@@ -130,10 +130,10 @@ def _sell(world, inputs, town):
     do = valid & (town >= 0) & (item != ITEM_NONE) & (cnt > 0) & ~worn
     units = jnp.where(I.STACKABLE[item], 1, cnt)
     gain = jnp.where(do, sell_price(world, item) * units, 0)
-    zeny = jnp.minimum(it["zeny"] + gain, I.MAX_ZENY)
+    ryn = jnp.minimum(it["ryn"] + gain, I.MAX_RYN)
     mask = (_SIDX[None, :] == sl[:, None]) & do[:, None]
     new_cnt = it["inv_count"] - jnp.where(mask, units[:, None], 0)
-    world = {**world, "items": {**it, "zeny": zeny, "inv_count": new_cnt}}
+    world = {**world, "items": {**it, "ryn": ryn, "inv_count": new_cnt}}
     return ro_items.clear_slots(world, mask & (new_cnt <= 0))
 
 
@@ -149,12 +149,12 @@ def _buy(world, inputs, town):
     empty = inv == ITEM_NONE
     has_stack, has_empty = stack_ok.any(axis=1), empty.any(axis=1)
     slot = jnp.where(has_stack, jnp.argmax(stack_ok, axis=1), jnp.argmax(empty, axis=1))
-    do = stocked & (it["zeny"] >= price) & (has_stack | has_empty)
+    do = stocked & (it["ryn"] >= price) & (has_stack | has_empty)
     row = jnp.where(do, _PIDX, MAX_PLAYERS)
     new_inv = inv.at[row, slot].set(safe, mode="drop")
     new_cnt = cnt.at[row, slot].add(1, mode="drop")
-    zeny = it["zeny"] - jnp.where(do, price, 0)
-    return {**world, "players": {**pl, "inv": new_inv}, "items": {**it, "inv_count": new_cnt, "zeny": zeny}}
+    ryn = it["ryn"] - jnp.where(do, price, 0)
+    return {**world, "players": {**pl, "inv": new_inv}, "items": {**it, "inv_count": new_cnt, "ryn": ryn}}
 
 
 def phase(world, inputs):

@@ -8,9 +8,9 @@ Legacy (required): `town pos spawn hp inv kills deaths`.
 - stats (16 scalars): `stats_str stats_agi stats_vit stats_int stats_dex stats_luk stats_base_level stats_job_level
   stats_base_exp stats_job_exp stats_job stats_stat_points stats_skill_points stats_sp stats_max_sp stats_was_dead`
 - skills: `skills_learned` (int32 [33]), `skills_sp`
-- items: `items_inv_count` [16], `items_inv_refine` [16], `items_inv_cards` [16,4], `items_equip` [8], `items_zeny`
+- items: `items_inv_count` [16], `items_inv_refine` [16], `items_inv_cards` [16,4], `items_equip` [8], `items_ryn`
 - craft: `craft_level` [6], `craft_exp` [6], `craft_gathers`, `craft_crafts`
-- `storage` (int32 [100], kafra)
+- `storage` (int32 [100], waybell)
 Not saved: `kills_seen`, `deaths_seen`, cooldowns, casts, buffs, party block (parties do not persist), `mvp`.
 
 `characters.load` always returns every key above (fresh values for absent groups), so `apply_character` can be
@@ -35,7 +35,7 @@ def _fields(self, slot, world_np=None):
         f["hp"] = PLAYER_MAX_HP
     return f
 ```
-`self.storage` is the per-slot kafra array the server keeps (`new_storage()` / `character_storage(char)`); it is
+`self.storage` is the per-slot waybell array the server keeps (`new_storage()` / `character_storage(char)`); it is
 already in `char["storage"]` after `load`. `_collect_batch` passes `pull["world_np"]` instead of `pull["players"]`.
 `inv` in the dict is the full `[INV_SLOTS]` row, so the old `[:INV_SLOTS]` slice is not needed.
 

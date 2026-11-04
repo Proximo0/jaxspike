@@ -45,6 +45,6 @@ def ro_bot_inputs(world, key):
     }
     if "sit" in engine_inputs():
         inp["sit"] = sit
-    if "teleport" in engine_inputs():  # kafra teleport: bots never buy one (yet); -1 = none
+    if "teleport" in engine_inputs():  # waybell teleport: bots never buy one (yet); -1 = none
         inp["teleport"] = jnp.full_like(inp["allot"], -1)
     return inp

@@ -1,4 +1,4 @@
-# M5 wire: parties, MVP bosses, kafra storage, chat
+# M5 wire: parties, MVP bosses, waybell storage, chat
 
 Additive to `docs/brief.md` (Networking) and `docs/ro_contract.md`. Old keys keep their meaning; unknown keys are ignored by older clients. Messages keep `"v"` and `"t"` (`net/protocol.py::encode`).
 
@@ -11,7 +11,7 @@ Additive to `docs/brief.md` (Networking) and `docs/ro_contract.md`. Old keys kee
 | `party` | int | every snap | party id from `world["party"]["party_id"]`, -1 when none |
 | `leader` | bool | every snap | true when this player leads its party; false without a party |
 | `members` | list of str | on change only, else omitted | names of all active members in slot order, self included; `[]` when leaving or disbanding |
-| `storage` | list of 100 int | on change only, else omitted | kafra storage item ids, `ITEM_NONE` for empty slots |
+| `storage` | list of 100 int | on change only, else omitted | waybell storage item ids, `ITEM_NONE` for empty slots |
 
 "On change" means the server compares with the last value it sent to that slot and sends the full list when it
 differs. A missing key means "unchanged".
@@ -26,8 +26,8 @@ kinds, `chat.text` a str, `storage.op` in `in|out`, `storage.slot` a real int (n
 |---|---|---|---|
 | `party` | `op`: `create`, `leave`, `invite`, `accept`; `target`: name or null | `inputs["party"][slot]` = 1, 2, 3, 4; `inputs["target"][slot]` = slot of the named player, -1 when unknown or null | `target` only matters for `invite`. Invite with an unknown name sends `notice` "no such player" and still sends op 3 with target -1, which the tick ignores. |
 | `chat` | `kind`: `say`, `party`, `whisper`; `text`: str; `to`: name or null | no tick input; appended to the tick's chat list for `ChatRouter` | `to` required for `whisper`. Text is stripped and cut to 200 by the router. |
-| `storage` | `op`: `in`, `out`; `slot`: int | only while the player stands in a town box; else `notice` "no kafra here" | `in`: `slot` is an inventory slot (0..15). `out`: `slot` is a storage slot (0..99). Runs `net.kafra.transfer`; a refused transfer changes nothing and sends no notice. |
-| `save` | none | `inputs["save"][slot]` = True for one tick | `ro_kafra.phase` moves spawn to that town's temple. Outside a town: no effect. |
+| `storage` | `op`: `in`, `out`; `slot`: int | only while the player stands in a town box; else `notice` "no waybell here" | `in`: `slot` is an inventory slot (0..15). `out`: `slot` is a storage slot (0..99). Runs `net.waybell.transfer`; a refused transfer changes nothing and sends no notice. |
+| `save` | none | `inputs["save"][slot]` = True for one tick | `ro_waybell.phase` moves spawn to that town's temple. Outside a town: no effect. |
 
 `party` and `save` are one-tick pulses. After the tick's inputs are built, the server resets
 `inputs["party"]` and `inputs["target"]` to 0 and -1 and `inputs["save"]` to False for every slot, so an action
@@ -49,7 +49,7 @@ named player only, and the sender gets `system` "no such player" for an unknown 
 
 ```json
 "mvp_kinds": [null, null, null, null, null, null, null, null, null, null,
-              null, null, null, null, null, null, null, null, "Golden Thief Bug", "Eddga"]
+              null, null, null, null, null, null, null, null, "Gildscarab", "Scorchstripe"]
 ```
 
 The list is built from `game/ro_mvp.py` at server start (length `N_KINDS` = 20, from the table `MVP` flag and names) and is display text only.
@@ -59,7 +59,7 @@ The list is built from `game/ro_mvp.py` at server start (length `N_KINDS` = 20, 
 Imports (`game/state.py` or wherever `make_empty_world` lives, and `game/step.py`):
 
 ```python
-from game import ro_party, ro_mvp, ro_kafra
+from game import ro_party, ro_mvp, ro_waybell
 ```
 
 `empty_inputs()` (`game/state.py`), added next to the existing keys:
@@ -82,7 +82,7 @@ from game import ro_party, ro_mvp, ro_kafra
 ```python
 world = ro_party.phase(world, inputs)
 world = ro_mvp.phase(world)
-world = ro_kafra.phase(world, inputs)
+world = ro_waybell.phase(world, inputs)
 ```
 
 `game/combat.py`, after the player-hit scatter and before the death handling (`jnp.where(hit, PLAYER_ATTACK, 0)`
@@ -95,10 +95,10 @@ world = ro_mvp.record_damage(world, pidx, tgt_w, jnp.where(hit, PLAYER_ATTACK, 0
 `net/characters.py` (lead-owned, Python):
 
 ```python
-from net.kafra import new_storage, character_storage
+from net.waybell import new_storage, character_storage
 # new_character(): return dict gains  "storage": new_storage()
 # load(): after reading the npz, set  char["storage"] = character_storage(char)
-# save(): the storage array is saved as an int32 key named "storage" (round trip tested in tests/test_kafra.py)
+# save(): the storage array is saved as an int32 key named "storage" (round trip tested in tests/test_waybell.py)
 ```
 
 `net/protocol.py`: `validate_client` gains the `party`, `chat`, `storage` and `save` cases above; `welcome_message`

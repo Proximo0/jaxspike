@@ -163,12 +163,12 @@ def test_welcome_static_tables():
         assert k in w, k
     assert w["terrain"] == "a" and w["slot"] == 2
     world = w["world"]
-    assert [t["name"] for t in world["towns"]][0] == "Prontera" and len(world["towns"]) == 5
-    assert world["towns"][0]["kafra"] == [264, 256] and world["towns"][0]["station"] == [248, 256]
+    assert [t["name"] for t in world["towns"]][0] == "Solmera" and len(world["towns"]) == 5
+    assert world["towns"][0]["waybell"] == [264, 256] and world["towns"][0]["station"] == [248, 256]
     assert world["dungeons"][0]["box"] == [228, 18, 284, 74] and len(world["warps"]) == len(world_layout.WARPS)
     assert world["warps"][0] == {"from": [256, 77], "to": [256, 71]}
-    assert world["terrain_names"][8:] == ["warp", "kafra", "station", "cave", "shop"] and len(world["terrain_names"]) == 13
-    assert len(world["monsters"]) == 20 and world["monsters"][18]["mvp"] is True and world["monsters"][0]["name"] == "Poring"
+    assert world["terrain_names"][8:] == ["warp", "waybell", "station", "cave", "shop"] and len(world["terrain_names"]) == 13
+    assert len(world["monsters"]) == 20 and world["monsters"][18]["mvp"] is True and world["monsters"][0]["name"] == "Blobbin"
     assert len(w["items"]) == item_data.N_ITEMS and w["items"][5]["id"] == 5
     assert w["drops"][0]["kind"] == 0 and "drops" in w["drops"][0]
     assert len(w["skills"]["names"]) == 42 and len(w["skills"]["list"]) == 41 and w["skills"]["jobs"][1] == "Swordsman"
@@ -179,7 +179,7 @@ def test_welcome_static_tables():
     assert w["stat_names"] == ["str", "agi", "vit", "int", "dex", "luk"] and len(w["job_names"]) == 7
     assert len(w["max_job_level"]) == 7 and w["max_base_level"] == 99 and w["base_exp_len"] == 100 and w["job_exp_len"] == 51
     assert len(w["stat_cost"]) == 100
-    assert w["mvp_kinds"][18] == "Golden Thief Bug" and w["mvp_kinds"][19] == "Eddga" and w["mvp_kinds"][0] is None
+    assert w["mvp_kinds"][18] == "Gildscarab" and w["mvp_kinds"][19] == "Scorchstripe" and w["mvp_kinds"][0] is None
     assert len(w["mvp_kinds"]) == 20
     assert all({"id", "inputs", "output", "skill", "level", "exp", "station"} <= set(r) for r in w["recipes"])
     assert len(w["nodes"]) == 8 and w["craft_skills"]["names"][0] == "mining" and len(w["craft_skills"]["level_exp"]) == 50
@@ -205,7 +205,7 @@ def test_snapshot_ro_you_block():
     p = w["players"]
     p = {**p, "inv": p["inv"].at[0, 1].set(7)}
     it = {**it, "inv_count": it["inv_count"].at[0, 1].set(3), "inv_refine": it["inv_refine"].at[0, 1].set(4),
-          "inv_cards": it["inv_cards"].at[0, 1, 0].set(9), "equip": it["equip"].at[0, 0].set(1), "zeny": it["zeny"].at[0].set(1234)}
+          "inv_cards": it["inv_cards"].at[0, 1, 0].set(9), "equip": it["equip"].at[0, 0].set(1), "ryn": it["ryn"].at[0].set(1234)}
     cr = {**cr, "level": cr["level"].at[0, 1].set(3), "exp": cr["exp"].at[0, 1].set(55)}
     pa = {**pa, "party_id": pa["party_id"].at[0].set(2), "leader": pa["leader"].at[0].set(True)}
     w = {**w, "stats": st, "skills": sk, "items": it, "craft": cr, "party": pa, "players": p}
@@ -218,7 +218,7 @@ def test_snapshot_ro_you_block():
     assert you["base_exp"] == 7 and you["base_exp_next"] == sd.BASE_EXP_TABLE[5] and you["job_exp_next"] == sd.JOB_EXP_TABLE[2][3]
     assert you["buffs"] == [[2, 40, 3], [5, 9, 1]] and you["cooldowns"] == [[4, 6]] and you["learned"] == [[2, 1], [9, 5]]
     assert you["casting"] == 4 and you["cast_left"] == 3
-    assert you["zeny"] == 1234 and len(you["inv"]) == INV_SLOTS and you["equip"] == [1, -1, -1, -1, -1, -1, -1, -1]
+    assert you["ryn"] == 1234 and len(you["inv"]) == INV_SLOTS and you["equip"] == [1, -1, -1, -1, -1, -1, -1, -1]
     assert you["inv"][1] == {"item": 7, "count": 3, "refine": 4, "cards": [9, 0, 0, 0]}
     assert you["inv"][0] == {"item": 0, "count": 0, "refine": 0, "cards": [0, 0, 0, 0]}
     assert you["craft"]["level"][1] == 3 and you["craft"]["exp"][1] == 55 and len(you["craft"]["level"]) == 6
@@ -306,13 +306,13 @@ def test_miss_is_h_zero_and_hit_is_damage_json_and_bin():
 
 def test_you_delta_sends_changes_only():
     last = {}
-    you = {"pos": [1, 2], "hp": 5, "inv": [1], "zeny": 3}
+    you = {"pos": [1, 2], "hp": 5, "inv": [1], "ryn": 3}
     assert you_delta(you, last, True) == you
     assert you_delta(dict(you), last, False) == {"pos": [1, 2], "hp": 5}
-    assert you_delta({**you, "zeny": 4}, last, False) == {"pos": [1, 2], "hp": 5, "zeny": 4}
-    assert you_delta({**you, "zeny": 4}, last, False) == {"pos": [1, 2], "hp": 5}
+    assert you_delta({**you, "ryn": 4}, last, False) == {"pos": [1, 2], "hp": 5, "ryn": 4}
+    assert you_delta({**you, "ryn": 4}, last, False) == {"pos": [1, 2], "hp": 5}
     assert you_delta({**you, "new": 1}, last, False)["new"] == 1   # a key never sent before goes out
-    assert you_delta({**you, "zeny": 4}, last, True)["inv"] == [1]  # full: everything again
+    assert you_delta({**you, "ryn": 4}, last, True)["inv"] == [1]  # full: everything again
 
 
 def test_validate_login_format():

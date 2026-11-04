@@ -12,13 +12,13 @@ from game.state import make_empty_world
 KEY = jax.random.PRNGKey(0)
 
 
-def world(inv, job=JOB_NOVICE, worn=(), hp_pct=100, zeny=0, pz=False):
+def world(inv, job=JOB_NOVICE, worn=(), hp_pct=100, ryn=0, pz=False):
     """Slot 0 active at (100, 100) holding `inv` (item ids, one each); worn = [(equip slot, inv slot)]."""
     w = make_empty_world(KEY)
     p, it = w["players"], w["items"]
     p = {**p, "pos": p["pos"].at[0].set(jnp.array([100, 100])), "active": p["active"].at[0].set(True),
          "inv": p["inv"].at[0, :len(inv)].set(jnp.asarray(inv, jnp.int32))}
-    it = {**it, "inv_count": it["inv_count"].at[0, :len(inv)].set(1), "zeny": it["zeny"].at[0].set(zeny)}
+    it = {**it, "inv_count": it["inv_count"].at[0, :len(inv)].set(1), "ryn": it["ryn"].at[0].set(ryn)}
     for e, s in worn:
         it = {**it, "equip": it["equip"].at[0, e].set(s)}
     w = {**w, "players": p, "items": it, "stats": {**w["stats"], "job": w["stats"]["job"].at[0].set(job)}}
@@ -71,15 +71,15 @@ def test_potion_below_potion_pct_never_meat():
 
 
 def test_shop_keys_only_when_the_engine_has_them(monkeypatch):
-    out = _items(world([I.ITEM_JELLOPY], zeny=5000, pz=True), KEY)
+    out = _items(world([I.ITEM_JELLY_BEAD], ryn=5000, pz=True), KEY)
     keys = P.engine_inputs()
     assert ("buy" in out) == ("buy" in keys) and ("sell" in out) == ("sell" in keys)
     monkeypatch.setattr(P, "engine_inputs", lambda: {"buy", "sell"})
-    out = P.item_inputs(world([I.ITEM_JELLOPY], zeny=5000, pz=True), KEY)
+    out = P.item_inputs(world([I.ITEM_JELLY_BEAD], ryn=5000, pz=True), KEY)
     assert int(out["buy"][0]) == P.BUY_ITEM and int(out["sell"][0]) == 0
-    out = P.item_inputs(world([I.ITEM_JELLOPY], zeny=5000, pz=False), KEY)
+    out = P.item_inputs(world([I.ITEM_JELLY_BEAD], ryn=5000, pz=False), KEY)
     assert int(out["buy"][0]) == -1 and int(out["sell"][0]) == -1
-    out = P.item_inputs(world([I.ITEM_JELLOPY], zeny=10, pz=True), KEY)
+    out = P.item_inputs(world([I.ITEM_JELLY_BEAD], ryn=10, pz=True), KEY)
     assert int(out["buy"][0]) == -1
 
 

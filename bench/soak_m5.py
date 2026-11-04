@@ -1,6 +1,6 @@
-"""M5 soak: bot-played worlds with the party, MVP and kafra phases attached in a test harness.
+"""M5 soak: bot-played worlds with the party, MVP and waybell phases attached in a test harness.
 
-step() runs the party, mvp and kafra phases and combat feeds record_damage. MVPs are the table's MVP-flag
+step() runs the party, mvp and waybell phases and combat feeds record_damage. MVPs are the table's MVP-flag
 kinds placed by spawn_population (slots found via world["mvp"]["mvp_slot"]). Bots use ro_bot_inputs. Reports party
 sizes, MVP kills per 1000 ticks and the standard invariants (MVP slots are excluded from the per-kind hp check).
 """
@@ -30,7 +30,7 @@ def attach(worlds):
 
 
 def m5_step(world, inputs):
-    """step() already runs party, mvp and kafra phases and combat feeds record_damage."""
+    """step() already runs party, mvp and waybell phases and combat feeds record_damage."""
     return step(world, inputs)
 
 

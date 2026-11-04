@@ -37,7 +37,7 @@ world = {
       "item":   int32 [MAX_DROPS]               ITEM_NONE if slot unused
       "active": bool  [MAX_DROPS]
       "ttl":    int32 [MAX_DROPS]
-      "count":  int32 [MAX_DROPS]               units in the pile (a coin pile's count is its zeny)
+      "count":  int32 [MAX_DROPS]               units in the pile (a coin pile's count is its ryn)
       "refine": int32 [MAX_DROPS]
       "cards":  int32 [MAX_DROPS, 4]
   }
@@ -91,11 +91,11 @@ def empty_inputs():
         "gather": jnp.zeros((MAX_PLAYERS,), jnp.bool_),
         "craft": jnp.zeros((MAX_PLAYERS,), jnp.int32),      # recipe id
         "party": jnp.zeros((MAX_PLAYERS,), jnp.int32),      # 1 create, 2 leave, 3 invite, 4 accept
-        "save": jnp.zeros((MAX_PLAYERS,), jnp.bool_),       # kafra save point
+        "save": jnp.zeros((MAX_PLAYERS,), jnp.bool_),       # waybell save point
         "buy": jnp.zeros((MAX_PLAYERS,), jnp.int32),        # shop: item id (0 = none)
         "sell": jnp.full((MAX_PLAYERS,), -1, jnp.int32),    # shop: inventory slot
         "sit": jnp.zeros((MAX_PLAYERS,), jnp.bool_),        # survival: toggle sitting (anim SIT; HP regen twice as often)
-        "teleport": jnp.full((MAX_PLAYERS,), -1, jnp.int32),  # kafra teleport: destination town index (ro_kafra)
+        "teleport": jnp.full((MAX_PLAYERS,), -1, jnp.int32),  # waybell teleport: destination town index (ro_waybell)
     }
 
 
@@ -136,7 +136,7 @@ def make_empty_world(key):
             "item": jnp.zeros((MAX_DROPS,), jnp.int32),
             "active": jnp.zeros((MAX_DROPS,), jnp.bool_),
             "ttl": jnp.zeros((MAX_DROPS,), jnp.int32),
-            **ro_drops.drop_fields(),  # round 3: count (a coin pile's count is its zeny), refine, cards [MAX_DROPS, 4]
+            **ro_drops.drop_fields(),  # round 3: count (a coin pile's count is its ryn), refine, cards [MAX_DROPS, 4]
         },
         # RO system blocks (docs/ro_contract.md). Nodes and MVPs are placed by bots.runner.make_world_batch.
         "stats": ro_stats.make_state(),

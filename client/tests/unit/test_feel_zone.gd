@@ -3,8 +3,8 @@ extends TestCase
 
 
 static func _feel_world() -> Dictionary:
-	return {"towns": [{"idx": 0, "name": "Prontera", "center": [50, 50]}, {"idx": 1, "name": "Geffen", "center": [10, 10]}],
-		"dungeons": [{"idx": 0, "name": "Prontera Culvert", "box": [40, 0, 60, 8]}]}
+	return {"towns": [{"idx": 0, "name": "Solmera", "center": [50, 50]}, {"idx": 1, "name": "Lunavell", "center": [10, 10]}],
+		"dungeons": [{"idx": 0, "name": "Solmera Culvert", "box": [40, 0, 60, 8]}]}
 
 
 static func _feel_zone_map() -> MapData:
@@ -24,11 +24,11 @@ static func _feel_zone_map() -> MapData:
 func test_fallback_regions() -> void:
 	var w: Dictionary = _feel_world()
 	var m: MapData = _feel_zone_map()
-	assert_eq(ZoneBanner.zone_at(w, m, Vector2i(50, 50), 0)["name"], "Prontera")
+	assert_eq(ZoneBanner.zone_at(w, m, Vector2i(50, 50), 0)["name"], "Solmera")
 	assert_eq(ZoneBanner.zone_at(w, m, Vector2i(50, 50), 0)["kind"], ZoneBanner.KIND_TOWN)
-	assert_eq(ZoneBanner.zone_at(w, m, Vector2i(50, 4), 0)["name"], "Prontera Culvert")
+	assert_eq(ZoneBanner.zone_at(w, m, Vector2i(50, 4), 0)["name"], "Solmera Culvert")
 	assert_eq(ZoneBanner.zone_at(w, m, Vector2i(50, 4), 0)["kind"], ZoneBanner.KIND_DUNGEON)
-	assert_eq(ZoneBanner.zone_at(w, m, Vector2i(14, 14), 0)["name"], "Geffen Field")
+	assert_eq(ZoneBanner.zone_at(w, m, Vector2i(14, 14), 0)["name"], "Lunavell Field")
 	assert_eq(ZoneBanner.zone_at(w, m, Vector2i(30, 30), 0)["kind"], ZoneBanner.KIND_DUNGEON, "cave floor")
 	assert_eq(ZoneBanner.zone_at({}, m, Vector2i(50, 50), 0)["name"], "Town", "no world block")
 	assert_eq(ZoneBanner.zone_at({}, m, Vector2i(1, 1), 0)["name"], "Field")
@@ -36,10 +36,10 @@ func test_fallback_regions() -> void:
 
 func test_welcome_zones_win() -> void:
 	var w: Dictionary = _feel_world()
-	w["zones"] = [{"name": "prt_fild08", "title": "Prontera Field 08", "box": [0, 0, 63, 63], "kind": "field"}]
+	w["zones"] = [{"name": "sol_fld08", "title": "Solmera Field 08", "box": [0, 0, 63, 63], "kind": "field"}]
 	var z: Dictionary = ZoneBanner.zone_at(w, _feel_zone_map(), Vector2i(50, 50), 0)
-	assert_eq(z["name"], "Prontera Field 08")
-	assert_eq(z["key"], "zone:prt_fild08")
+	assert_eq(z["name"], "Solmera Field 08")
+	assert_eq(z["key"], "zone:sol_fld08")
 
 
 func test_observe_and_alpha() -> void:

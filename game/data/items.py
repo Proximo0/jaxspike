@@ -29,8 +29,8 @@ N_BONUS = 14
 MAX_CARDS = 4
 MAX_STACK = 9999
 MAX_REFINE = 10
-ZENY_PER_COIN = 1  # a gold coin stack's count IS its zeny (a 73-zeny kill is one coin drop of count 73)
-MAX_ZENY = 2_000_000_000
+RYN_PER_COIN = 1  # a gold coin stack's count IS its ryn (a 73-ryn kill is one coin drop of count 73)
+MAX_RYN = 2_000_000_000
 
 # Id space (round 2): ids 0..N_BASE_ITEMS-1 are RO items (append rows below and bump N_BASE_ITEMS; keep it at most
 # CRAFT_ID_BASE), ids 100..299 are game/data/craft.py's materials and products (craft owns those ids; their rows are
@@ -42,24 +42,24 @@ N_ITEMS = 300
 
 # --- item ids ----------------------------------------------------------------------------------------------------
 (ITEM_NONE, ITEM_GOLD_COIN, ITEM_MEAT, ITEM_SWORD, ITEM_RED_POTION, ITEM_ORANGE_POTION, ITEM_YELLOW_POTION,
- ITEM_WHITE_POTION, ITEM_BLUE_POTION, ITEM_APPLE, ITEM_JELLOPY, ITEM_CLOVER, ITEM_FEATHER, ITEM_FLUFF,
- ITEM_STICKY_MUCUS, ITEM_SHELL, ITEM_ANIMAL_SKIN, ITEM_ORCISH_VOUCHER, ITEM_PHRACON, ITEM_EMVERETARCON,
- ITEM_ORIDECON, ITEM_ELUNIUM, ITEM_KNIFE, ITEM_MAIN_GAUCHE, ITEM_BLADE, ITEM_FALCHION, ITEM_SCIMITAR, ITEM_BOW,
+ ITEM_WHITE_POTION, ITEM_BLUE_POTION, ITEM_APPLE, ITEM_JELLY_BEAD, ITEM_CLOVER, ITEM_FEATHER, ITEM_FLUFF,
+ ITEM_STICKY_MUCUS, ITEM_SHELL, ITEM_ANIMAL_SKIN, ITEM_GRUKK_TOKEN, ITEM_TIN_LODE, ITEM_BRONZE_LODE,
+ ITEM_STARSTEEL, ITEM_MOONSTONE, ITEM_KNIFE, ITEM_MAIN_GAUCHE, ITEM_BLADE, ITEM_FALCHION, ITEM_SCIMITAR, ITEM_BOW,
  ITEM_COMPOSITE_BOW, ITEM_ROD, ITEM_WAND, ITEM_CLUB, ITEM_MACE, ITEM_AXE, ITEM_BATTLE_AXE, ITEM_DAMASCUS,
  ITEM_HAT, ITEM_CAP, ITEM_HELM, ITEM_COTTON_SHIRT, ITEM_JACKET, ITEM_ADVENTURER_SUIT, ITEM_MANTLE, ITEM_GUARD,
  ITEM_BUCKLER, ITEM_SHIELD, ITEM_HOOD, ITEM_MUFFLER, ITEM_SANDALS, ITEM_SHOES, ITEM_BOOTS, ITEM_RING, ITEM_CLIP,
- ITEM_NECKLACE, ITEM_GLOVE, ITEM_BROOCH, ITEM_ROSARY, ITEM_PORING_CARD, ITEM_FABRE_CARD, ITEM_PUPA_CARD,
- ITEM_LUNATIC_CARD, ITEM_ROCKER_CARD, ITEM_THIEF_BUG_CARD, ITEM_ORC_WARRIOR_CARD, ITEM_ANDRE_CARD,
- ITEM_DROPS_CARD, ITEM_CHONCHON_CARD, ITEM_PICKY_CARD, ITEM_RODA_FROG_CARD, ITEM_SPORE_CARD, ITEM_HORNET_CARD,
- ITEM_CONDOR_CARD, ITEM_WILLOW_CARD,
+ ITEM_NECKLACE, ITEM_GLOVE, ITEM_BROOCH, ITEM_ROSARY, ITEM_BLOBBIN_CARD, ITEM_WRIGGLET_CARD, ITEM_COCOONLING_CARD,
+ ITEM_MOONBUN_CARD, ITEM_FIDDLEHOP_CARD, ITEM_PILFERBUG_CARD, ITEM_GRUKK_BRUTE_CARD, ITEM_ANTLET_CARD,
+ ITEM_EMBERBLOB_CARD, ITEM_BUZZEYE_CARD, ITEM_PEEPIT_CARD, ITEM_CROAKLE_CARD, ITEM_CAPLING_CARD, ITEM_NEEDLEBUZZ_CARD,
+ ITEM_CRAGWING_CARD, ITEM_BRAMBLET_CARD,
  # round 2 (ro-items2): etc loot and the cards of the 20 monster kinds' drop tables
- ITEM_TRUNK, ITEM_DECAYED_NAIL, ITEM_WOLF_CLAW, ITEM_SKEL_BONE, ITEM_ROTTEN_BANDAGE, ITEM_TIGER_SKIN,
- ITEM_POPORING_CARD, ITEM_ZOMBIE_CARD, ITEM_WOLF_CARD, ITEM_SKELETON_CARD, ITEM_PECO_PECO_CARD, ITEM_HODE_CARD,
- ITEM_SOLDIER_SKELETON_CARD, ITEM_BIGFOOT_CARD, ITEM_MUMMY_CARD, ITEM_GOLDEN_THIEF_BUG_CARD,
- ITEM_EDDGA_CARD,
+ ITEM_TRUNK, ITEM_DECAYED_NAIL, ITEM_SNARLFANG_CLAW, ITEM_SKEL_BONE, ITEM_ROTTEN_BANDAGE, ITEM_TIGER_SKIN,
+ ITEM_VEXBLOB_CARD, ITEM_ROTLING_CARD, ITEM_SNARLFANG_CARD, ITEM_CLACKBONE_CARD, ITEM_GALLOPECK_CARD, ITEM_SANDGULPER_CARD,
+ ITEM_CLACKBONE_GUARD_CARD, ITEM_GRUMBLEBEAR_CARD, ITEM_TOMBWRAP_CARD, ITEM_GILDSCARAB_CARD,
+ ITEM_SCORCHSTRIPE_CARD,
  # ro-fidelity: early RO staples that were missing (rAthena 1204, 601, 602)
- ITEM_CUTTER, ITEM_FLY_WING, ITEM_BUTTERFLY_WING,
- # ro-items2: signature etc loot of Rocker, Spore, Peco Peco, Hode, Bigfoot (docs/ro_fidelity.md section 2)
+ ITEM_CUTTER, ITEM_FLIT_FEATHER, ITEM_HOMING_FEATHER,
+ # ro-items2: signature etc loot of Fiddlehop, Capling, Gallopeck, Sandgulper, Grumblebear (docs/ro_fidelity.md section 2)
  ITEM_GRASSHOPPER_LEG, ITEM_MUSHROOM_SPORE, ITEM_BILL_OF_BIRDS, ITEM_EARTHWORM_PEELING,
  ITEM_BEAR_FOOT) = range(N_BASE_ITEMS)
 
@@ -78,18 +78,18 @@ _rows = [
     ("white potion", _C, 0, 0, 0, 0, 0, 0, 15, 1200, 600, 365, 0, 0, True, 0, 0, 0, 0),
     ("blue potion", _C, 0, 0, 0, 0, 0, 0, 15, 5000, 2500, 0, 50, 0, True, 0, 0, 0, 0),
     ("apple", _C, 0, 0, 0, 0, 0, 0, 2, 15, 7, 19, 0, 0, True, 0, 0, 0, 0),
-    ("jellopy",        _E, 0,                  0,   0, 0,  0, 0, 1,   6,     3,   0,  0, 0, True,  0, 0, 0, 0),
+    ("jelly bead",        _E, 0,                  0,   0, 0,  0, 0, 1,   6,     3,   0,  0, 0, True,  0, 0, 0, 0),
     ("clover", _E, 0, 0, 0, 0, 0, 0, 1, 10, 5, 0, 0, 0, True, 0, 0, 0, 0),
     ("feather", _E, 0, 0, 0, 0, 0, 0, 1, 20, 10, 0, 0, 0, True, 0, 0, 0, 0),
     ("fluff",          _E, 0,                  0,   0, 0,  0, 0, 1,   8,     4,   0,  0, 0, True,  0, 0, 0, 0),
     ("sticky mucus", _E, 0, 0, 0, 0, 0, 0, 1, 70, 35, 0, 0, 0, True, 0, 0, 0, 0),
     ("shell", _E, 0, 0, 0, 0, 0, 0, 1, 14, 7, 0, 0, 0, True, 0, 0, 0, 0),
     ("animal skin", _E, 0, 0, 0, 0, 0, 0, 1, 36, 18, 0, 0, 0, True, 0, 0, 0, 0),
-    ("orcish voucher", _E, 0, 0, 0, 0, 0, 0, 1, 142, 71, 0, 0, 0, True, 0, 0, 0, 0),
-    ("phracon", _E, 0, 0, 0, 0, 0, 0, 20, 200, 100, 0, 0, 0, True, 0, 0, 0, 0),
-    ("emveretarcon", _E, 0, 0, 0, 0, 0, 0, 20, 1000, 500, 0, 0, 0, True, 0, 0, 0, 0),
-    ("oridecon", _E, 0, 0, 0, 0, 0, 0, 20, 1100, 550, 0, 0, 0, True, 0, 0, 0, 0),
-    ("elunium", _E, 0, 0, 0, 0, 0, 0, 20, 1100, 550, 0, 0, 0, True, 0, 0, 0, 0),
+    ("grukk token", _E, 0, 0, 0, 0, 0, 0, 1, 142, 71, 0, 0, 0, True, 0, 0, 0, 0),
+    ("tin lode", _E, 0, 0, 0, 0, 0, 0, 20, 200, 100, 0, 0, 0, True, 0, 0, 0, 0),
+    ("bronze lode", _E, 0, 0, 0, 0, 0, 0, 20, 1000, 500, 0, 0, 0, True, 0, 0, 0, 0),
+    ("starsteel", _E, 0, 0, 0, 0, 0, 0, 20, 1100, 550, 0, 0, 0, True, 0, 0, 0, 0),
+    ("moonstone", _E, 0, 0, 0, 0, 0, 0, 20, 1100, 550, 0, 0, 0, True, 0, 0, 0, 0),
     ("knife",          _W, WC_DAGGER,          17,  0, 0,  0, 3, 40,  50,    25,  0,  0, 1, False, 0, 0, 0, 0),
     ("main gauche", _W, WC_DAGGER, 43, 0, 0, 0, 3, 60, 2400, 1200, 0, 0, 1, False, 0, 0, 0, 0),
     ("blade", _W, WC_SWORD, 53, 0, 0, 0, 3, 70, 2900, 1450, 0, 0, 1, False, 0, 0, 0, 0),
@@ -125,44 +125,44 @@ _rows = [
     ("glove", _A, SLOT_ACCESSORY, 0, 0, 0, 0, 0, 10, 30000, 15000, 0, 0, 0, False, BONUS_DEX, 2, 0, 0),
     ("brooch", _A, SLOT_ACCESSORY, 0, 0, 0, 0, 0, 10, 30000, 15000, 0, 0, 0, False, BONUS_AGI, 2, 0, 0),
     ("rosary", _A, SLOT_ACCESSORY, 0, 0, 0, 0, 0, 10, 15000, 7500, 0, 0, 0, False, BONUS_LUK, 2, 0, 0),
-    ("poring card", _K, SLOT_BODY, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_LUK, 2),
-    ("fabre card", _K, SLOT_WEAPON, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_VIT, 1),
-    ("pupa card", _K, SLOT_BODY, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_MAX_HP, 700),
-    ("lunatic card", _K, SLOT_WEAPON, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_CRIT, 1),
-    ("rocker card", _K, SLOT_BODY, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_ATK, 5),
-    ("thief bug card", _K, SLOT_BODY, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_AGI, 1),
-    ("orc warrior card", _K, SLOT_SHIELD, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, 0, 0),
-    ("andre card", _K, SLOT_WEAPON, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_ATK, 20),
-    ("drops card", _K, SLOT_WEAPON, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_HIT, 3),
-    ("chonchon card", _K, SLOT_SHOES, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_FLEE, 2),
-    ("picky card", _K, SLOT_BODY, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_ATK, 10),
-    ("roda frog card", _K, SLOT_BODY, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_MAX_HP, 400),
-    ("spore card", _K, SLOT_ACCESSORY, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_VIT, 2),
-    ("hornet card", _K, SLOT_WEAPON, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_ATK, 3),
-    ("condor card", _K, SLOT_GARMENT, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_FLEE, 10),
-    ("willow card", _K, SLOT_HEAD, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_MAX_SP, 80),
+    ("blobbin card", _K, SLOT_BODY, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_LUK, 2),
+    ("wrigglet card", _K, SLOT_WEAPON, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_VIT, 1),
+    ("cocoonling card", _K, SLOT_BODY, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_MAX_HP, 700),
+    ("moonbun card", _K, SLOT_WEAPON, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_CRIT, 1),
+    ("fiddlehop card", _K, SLOT_BODY, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_ATK, 5),
+    ("pilferbug card", _K, SLOT_BODY, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_AGI, 1),
+    ("grukk brute card", _K, SLOT_SHIELD, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, 0, 0),
+    ("antlet card", _K, SLOT_WEAPON, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_ATK, 20),
+    ("emberblob card", _K, SLOT_WEAPON, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_HIT, 3),
+    ("buzzeye card", _K, SLOT_SHOES, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_FLEE, 2),
+    ("peepit card", _K, SLOT_BODY, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_ATK, 10),
+    ("croakle card", _K, SLOT_BODY, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_MAX_HP, 400),
+    ("capling card", _K, SLOT_ACCESSORY, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_VIT, 2),
+    ("needlebuzz card", _K, SLOT_WEAPON, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_ATK, 3),
+    ("cragwing card", _K, SLOT_GARMENT, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_FLEE, 10),
+    ("bramblet card", _K, SLOT_HEAD, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_MAX_SP, 80),
     # round 2 (ro-items2): drop-table etc items and cards (classic names; numbers approximate, ro-fidelity audits)
     ("trunk", _E, 0, 0, 0, 0, 0, 0, 1, 12, 6, 0, 0, 0, True, 0, 0, 0, 0),
     ("decayed nail", _E, 0, 0, 0, 0, 0, 0, 1, 82, 41, 0, 0, 0, True, 0, 0, 0, 0),
-    ("wolf claw", _E, 0, 0, 0, 0, 0, 0, 1, 58, 29, 0, 0, 0, True, 0, 0, 0, 0),
+    ("snarlfang claw", _E, 0, 0, 0, 0, 0, 0, 1, 58, 29, 0, 0, 0, True, 0, 0, 0, 0),
     ("skel bone", _E, 0, 0, 0, 0, 0, 0, 1, 232, 116, 0, 0, 0, True, 0, 0, 0, 0),
     ("rotten bandage", _E, 0, 0, 0, 0, 0, 0, 1, 350, 175, 0, 0, 0, True, 0, 0, 0, 0),
     ("tiger skin", _E, 0, 0, 0, 0, 0, 0, 1, 548, 274, 0, 0, 0, True, 0, 0, 0, 0),
-    ("poporing card", _K, SLOT_ACCESSORY, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, 0, 0),
-    ("zombie card", _K, SLOT_SHOES, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, 0, 0),
-    ("wolf card", _K, SLOT_WEAPON, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_ATK, 15),
-    ("skeleton card", _K, SLOT_WEAPON, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_ATK, 10),
-    ("peco peco card", _K, SLOT_BODY, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_MAX_HP, 100),
-    ("hode card", _K, SLOT_GARMENT, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_FLEE, 5),
-    ("soldier skeleton card", _K, SLOT_WEAPON, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_CRIT, 9),
-    ("bigfoot card", _K, SLOT_SHIELD, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, 0, 0),
-    ("mummy card", _K, SLOT_WEAPON, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_HIT, 20),
-    ("golden thief bug card", _K, SLOT_SHIELD, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, 0, 0),
-    ("eddga card", _K, SLOT_SHOES, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, 0, 0),
+    ("vexblob card", _K, SLOT_ACCESSORY, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, 0, 0),
+    ("rotling card", _K, SLOT_SHOES, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, 0, 0),
+    ("snarlfang card", _K, SLOT_WEAPON, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_ATK, 15),
+    ("clackbone card", _K, SLOT_WEAPON, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_ATK, 10),
+    ("gallopeck card", _K, SLOT_BODY, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_MAX_HP, 100),
+    ("sandgulper card", _K, SLOT_GARMENT, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_FLEE, 5),
+    ("clackbone guard card", _K, SLOT_WEAPON, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_CRIT, 9),
+    ("grumblebear card", _K, SLOT_SHIELD, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, 0, 0),
+    ("tombwrap card", _K, SLOT_WEAPON, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_HIT, 20),
+    ("gildscarab card", _K, SLOT_SHIELD, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, 0, 0),
+    ("scorchstripe card", _K, SLOT_SHOES, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, 0, 0),
     # ro-fidelity: early RO staples (rAthena db/pre-re). Wings teleport in RO (random / save point): no hook yet.
     ("cutter",         _W, WC_DAGGER,          30,  0, 0,  0, 3, 50,  1250,  625, 0,  0, 1, False, 0, 0, 0, 0),
-    ("fly wing",       _C, 0,                  0,   0, 0,  0, 0, 5,   60,    30,  0,  0, 0, True,  0, 0, 0, 0),
-    ("butterfly wing", _C, 0,                  0,   0, 0,  0, 0, 5,   300,   150, 0,  0, 0, True,  0, 0, 0, 0),
+    ("flit feather",       _C, 0,                  0,   0, 0,  0, 0, 5,   60,    30,  0,  0, 0, True,  0, 0, 0, 0),
+    ("homing feather", _C, 0,                  0,   0, 0,  0, 0, 5,   300,   150, 0,  0, 0, True,  0, 0, 0, 0),
     # ro-items2: drop-table etc loot (classic names; prices approximate)
     ("grasshopper leg", _E, 0,                 0,   0, 0,  0, 0, 1,   36,    18,  0,  0, 0, True,  0, 0, 0, 0),
     ("mushroom spore", _E, 0,                  0,   0, 0,  0, 0, 1,   30,    15,  0,  0, 0, True,  0, 0, 0, 0),
@@ -244,9 +244,9 @@ ITEM_TABLE = {
 
 assert int(HEAL_HP[ITEM_MEAT]) == config.MEAT_HEAL
 
-# Refine ore by weapon level (0 = armor); zeny cost per attempt by weapon level.
-REFINE_ORE = jnp.asarray([ITEM_ELUNIUM, ITEM_PHRACON, ITEM_EMVERETARCON, ITEM_ORIDECON, ITEM_ORIDECON], jnp.int32)
-REFINE_ZENY = jnp.asarray([2000, 50, 200, 5000, 20000], jnp.int32)
+# Refine ore by weapon level (0 = armor); ryn cost per attempt by weapon level.
+REFINE_ORE = jnp.asarray([ITEM_MOONSTONE, ITEM_TIN_LODE, ITEM_BRONZE_LODE, ITEM_STARSTEEL, ITEM_STARSTEEL], jnp.int32)
+REFINE_RYN = jnp.asarray([2000, 50, 200, 5000, 20000], jnp.int32)
 
 
 # --- job equip restrictions (classic pre-renewal job lists, irowiki item pages) ------------------------------------
@@ -295,7 +295,7 @@ _SLOT_ICON = {SLOT_HEAD: "hat", SLOT_BODY: "armor", SLOT_SHIELD: "shield", SLOT_
               SLOT_SHOES: "boots", SLOT_ACCESSORY: "ring"}
 _NAME_ICON = {"gold coin": "gold_coin", "meat": "meat", "blue potion": "potion_blue", "herb": "herb",
               "clover": "herb", "raw fish": "fish", "cooked fish": "fish", "fish stew": "fish"}
-_ORE_WORDS = ("ore", "coal", "bar", "phracon", "emveretarcon", "oridecon", "elunium")
+_ORE_WORDS = ("ore", "coal", "bar", "tin lode", "bronze lode", "starsteel", "moonstone")
 
 
 def _icon(r):

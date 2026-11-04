@@ -23,7 +23,7 @@ Placeholders only: replace with CC0 packs (for example Kenney's "RPG Audio" / "I
 
 ## Animated sheets (round 2, `client/assets/anim/`)
 
-Every sheet in `client/assets/anim/<kind>/` (7 jobs, 20 monsters, `act.json` + one PNG per action) is generated
+Every sheet in `client/assets/anim/<kind>/` (7 jobs, 20 monsters, 2 NPCs `npc_shop` and `npc_waybell`, `act.json` + one PNG per action) is generated
 procedurally by `client/tools/gen_placeholder_anim.py` (stdlib only, no source images, nothing photo-derived). They
 are project-original and dedicated CC0 1.0. Rebuild: `python client/tools/gen_placeholder_anim.py`. The review
 contact sheet lands in `client/assets/anim/_review/` (`.gdignore`, not exported).
@@ -40,3 +40,20 @@ CC0 sources evaluated 2026-11-02 and **not used** (none is chibi + 8 directions 
 | [Adventurer and Slime](https://opengameart.org/node/153748), [Slime 4](https://opengameart.org/content/slime-4) | CC0 | side-view / 3-4 directions only |
 
 No CC-BY-SA or GPL sheets were downloaded. Hand-drawn RO-style art remains the art team's open item.
+
+## Pre-rendered sheets (round 3, team ro3-art, 2026-11-03)
+
+The 7 job and 20 monster sheets in `client/assets/anim/<kind>/` are now rendered from CC0 3D models with the
+Blender pipeline in `client/tools/art/` (`render_kind.py`, manifest `kinds.json`, source list `licenses.json`):
+cel-shaded 3-step ramp, dark outline, orthographic camera at 35 degrees, 5 directions drawn and 3 mirrored. The
+source models stay on `D:/jaxspike-art/src` (not in git); only the rendered PNGs and `act.json` are committed. The
+renders are original work derived from CC0 sources and are dedicated CC0 1.0 as well. No RO or other game assets.
+
+| Source | Author | URL | License | Used for |
+|---|---|---|---|---|
+| KayKit Character Pack: Adventurers 1.0 | Kay Lousberg (www.kaylousberg.com) | https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0 | CC0 1.0 | jobs: Knight (swordsman), Mage (mage, acolyte), Rogue (novice, thief), Rogue_Hooded (archer), Barbarian (merchant) |
+| KayKit Character Pack: Skeletons 1.0 | Kay Lousberg | https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Skeletons-1.0 | CC0 1.0 | monsters 12 skeleton (Minion), 15 soldier_skeleton (Warrior), 17 mummy (Mage, tinted) |
+| Ultimate Monsters pack (Oct 2022) | Quaternius (quaternius.com) | https://quaternius.com/packs/ultimatemonsters.html | CC0 1.0 (License.txt in the pack) | the other 17 monsters: Blob/PinkBlob (blobbin, emberblob), GreenBlob (vexblob), GreenSpikyBlob (wrigglet), Alien (fiddlehop), Mushnub (capling), Dog (snarlfang), Cat (scorchstripe); Big/Orc (grukk_brute), Bunny (moonbun), Cactoro (bramblet), Tribal (rotling), Birb (gallopeck), Fish (sandgulper), Yeti (grumblebear); Flying/Armabee (pilferbug), Armabee_Evolved (gildscarab) |
+
+Evaluated and not used this round: Universal LPC Spritesheet Generator (CC-BY-SA 3.0 / GPL 3.0 mixed, 4 directions,
+pixel art, no diagonals); Mixamo (needs an Adobe account); VRoid sample models (need a VRoid Hub account).

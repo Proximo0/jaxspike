@@ -78,7 +78,7 @@ def test_card_chance_is_exactly_one_per_10000_for_every_kind():
 
 def test_roll_chances_per_10000_within_three_sigma():
     roll = jax.jit(ro_drops.roll_drops)
-    for kind in (0, 1, 10):  # Poring, Orc Warrior, Zombie
+    for kind in (0, 1, 10):  # Blobbin, Grukk Brute, Rotling
         w = make_world(False)
         w = {**w, "monsters": {**w["monsters"], "kind": jnp.full((MAX_MONSTERS,), kind, jnp.int32)}}
         items = np.concatenate([np.asarray(roll(w, jax.random.PRNGKey(7 + k))[0]) for k in range(8)])
@@ -92,26 +92,26 @@ def test_roll_chances_per_10000_within_three_sigma():
             assert abs(hits - p * n) <= 3 * np.sqrt(n * p * (1 - p)) + 1, (kind, j, hits, p * n)
 
 
-def test_coin_drop_carries_rolled_zeny_and_pickup_gives_exactly_that():
+def test_coin_drop_carries_rolled_ryn_and_pickup_gives_exactly_that():
     w = add_player(make_world())
     m = dict(w["monsters"])
     m["died"] = m["died"].at[3].set(True)
     m["pos"] = m["pos"].at[3].set(jnp.array(POS, jnp.int32))
     w = {**w, "monsters": m}
     items = jnp.zeros((MAX_MONSTERS, D.DROPS_PER_KIND), jnp.int32)
-    zeny = jnp.zeros((MAX_MONSTERS,), jnp.int32).at[3].set(73)
-    w = ro_drops.place_drops(w, items, items, zeny)
+    ryn = jnp.zeros((MAX_MONSTERS,), jnp.int32).at[3].set(73)
+    w = ro_drops.place_drops(w, items, items, ryn)
     assert int(w["drops"]["active"].sum()) == 1
     assert int(w["drops"]["item"][0]) == ITEM_GOLD_COIN and int(w["drops"]["count"][0]) == 73
     w, picked = ro_drops.pickup(w)
     assert bool(picked[0]) and int(w["items"]["inv_count"][0, 0]) == 73
     w = ro_items._normalize(w)
-    assert int(w["items"]["zeny"][0]) == 73
+    assert int(w["items"]["ryn"][0]) == 73
     assert int(w["players"]["inv"][0, 0]) == ITEM_NONE
 
 
 def test_refined_slotted_sword_survives_drop_and_pickup():
-    cards = (I.ITEM_PORING_CARD, I.ITEM_FABRE_CARD, 0, 0)
+    cards = (I.ITEM_BLOBBIN_CARD, I.ITEM_WRIGGLET_CARD, 0, 0)
     w = put(add_player(make_world()), 2, ITEM_SWORD, 1, refine=5, cards=cards)
     out = jax.jit(ro_items.phase)(w, drop_input(2))
     d = out["drops"]
@@ -146,17 +146,17 @@ def test_legacy_drops_block_without_fields_still_works():
     m = dict(w2["monsters"])
     m["died"] = m["died"].at[0].set(True)
     w2 = {**w2, "monsters": m}
-    items = jnp.zeros((MAX_MONSTERS, D.DROPS_PER_KIND), jnp.int32).at[0, 0].set(I.ITEM_JELLOPY)
+    items = jnp.zeros((MAX_MONSTERS, D.DROPS_PER_KIND), jnp.int32).at[0, 0].set(I.ITEM_JELLY_BEAD)
     placed = ro_drops.place_drops(w2, items, jnp.where(items > 0, 9, 0), jnp.zeros((MAX_MONSTERS,), jnp.int32))
     assert int(placed["drops"]["active"].sum()) == 1 and "count" not in placed["drops"]
     placed = {**placed, "drops": {**placed["drops"], "pos": placed["drops"]["pos"].at[0].set(jnp.array(POS, jnp.int32))}}
     got, picked = ro_drops.pickup(placed)
-    assert bool(picked[0]) and int(got["players"]["inv"][0, 0]) == I.ITEM_JELLOPY
+    assert bool(picked[0]) and int(got["players"]["inv"][0, 0]) == I.ITEM_JELLY_BEAD
     assert int(got["items"]["inv_count"][0, 0]) == 1 and int(got["items"]["inv_refine"][0, 0]) == 0
 
 
 def test_pickup_jit_and_vmap():
-    w = set_drop(add_player(make_world()), 0, I.ITEM_JELLOPY, count=5)
+    w = set_drop(add_player(make_world()), 0, I.ITEM_JELLY_BEAD, count=5)
     out, picked = jax.jit(ro_drops.pickup)(w)
     assert bool(picked[0]) and int(out["items"]["inv_count"][0, 0]) == 5
     assert picked.shape == (MAX_PLAYERS,)

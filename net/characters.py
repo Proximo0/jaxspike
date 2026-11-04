@@ -13,7 +13,7 @@ from game.config import INV_SLOTS, MAP, PLAYER_MAX_HP
 from game.data.items import N_ITEMS
 from game.world_layout import TOWNS
 from net import char_fields
-from net.kafra import character_storage, new_storage
+from net.waybell import character_storage, new_storage
 
 _NAME_RE = re.compile(r"[a-z0-9_]{3,16}")
 _INT_FIELDS = ("town", "hp", "kills", "deaths")

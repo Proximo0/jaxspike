@@ -19,7 +19,7 @@ def build(players=(), monsters=(), walls=(), pz=(), kind=1, tick=0):
         m["spawn"] = m["spawn"].at[i].set(jnp.array(pos, jnp.int32))
         m["active"] = m["active"].at[i].set(True)
         m["hp"] = m["hp"].at[i].set(20)
-        m["kind"] = m["kind"].at[i].set(kind)  # default 1 = Orc Warrior: aggro, moves every tick
+        m["kind"] = m["kind"].at[i].set(kind)  # default 1 = Grukk Brute: aggro, moves every tick
     w["tick"] = jnp.int32(tick)
     w["monai"] = {**w["monai"], "wander_in": jnp.full_like(w["monai"]["wander_in"], 1000)}  # no random walks here
     for x, y in walls:
@@ -138,7 +138,7 @@ def test_monster_chases_reachable_player_not_pz_player():
 
 
 def test_non_aggro_kind_never_chases():
-    for name in ("Poring", "Fabre", "Lunatic", "Drops"):
+    for name in ("Blobbin", "Wrigglet", "Moonbun", "Emberblob"):
         k = KIND_BY_NAME[name]
         assert not bool(AGGRO[k])
         for tick in range(4):
@@ -150,7 +150,7 @@ def test_non_aggro_kind_never_chases():
 
 
 def test_aggro_kind_chases():
-    k = KIND_BY_NAME["Thief Bug"]
+    k = KIND_BY_NAME["Pilferbug"]
     assert bool(AGGRO[k]) and int(MOVE_TICKS[k]) == 1
     assert mpos(monster_ai(build(players=[(20, 20)], monsters=[(24, 21)], kind=k)), 0) == (23, 20)
 
@@ -158,7 +158,7 @@ def test_aggro_kind_chases():
 def test_move_ticks_gate_the_step():
     slow = [k for k in range(len(MONSTER_HP)) if bool(AGGRO[k]) and int(MOVE_TICKS[k]) > 1][:2]
     assert slow  # pick from the table: ro-fidelity edits the aggro and move_ticks numbers
-    for k in slow + [KIND_BY_NAME["Orc Warrior"]]:
+    for k in slow + [KIND_BY_NAME["Grukk Brute"]]:
         name = k
         mt = int(MOVE_TICKS[k])
         for tick in range(2 * mt + 1):

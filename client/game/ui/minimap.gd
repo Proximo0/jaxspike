@@ -1,7 +1,7 @@
 class_name Minimap
 extends PanelContainer
 ## RO minimap (top right): the map downscaled into one texture built once from MapData, the own position as a
-## blinking white dot, portal (warp) and kafra markers from `welcome.world`, and optional entity dots (monsters
+## blinking white dot, portal (warp) and waybell markers from `welcome.world`, and optional entity dots (monsters
 ## red, players blue, drops yellow) behind the "Dots" toggle. "+/-" switches between the whole map and a local
 ## window around the player. Feed set_welcome(msg) and build(map); the view polls the session's store.
 
@@ -9,7 +9,7 @@ const VIEW_PX: int = 200  ## Drawn square size.
 const MAX_TEX_PX: int = 512  ## The texture is at most this wide: maps above it are sampled every stride tiles.
 const LOCAL_TILES: int = 96  ## Tiles across in the local view.
 const WARP_COLOR: Color = Color(0.80, 0.45, 1.0)
-const KAFRA_COLOR: Color = Color(1.0, 0.85, 0.30)
+const WAYBELL_COLOR: Color = Color(1.0, 0.85, 0.30)
 const OWN_COLOR: Color = Color(1.0, 1.0, 1.0)
 const DOT_COLORS: Array[Color] = [Color(0.35, 0.60, 1.0), Color(1.0, 0.30, 0.30), Color(1.0, 0.90, 0.30), Color(0.50, 0.95, 0.50)]
 const MAX_DOTS: int = 256
@@ -27,7 +27,7 @@ var welcome: Dictionary = {}
 var map_size: int = 0
 var stride: int = 1
 var texture: ImageTexture = null
-var markers: Array[Dictionary] = []  ## {pos: Vector2i, kind: "warp" | "kafra"}
+var markers: Array[Dictionary] = []  ## {pos: Vector2i, kind: "warp" | "waybell"}
 var show_dots: bool = false
 var local_view: bool = false
 var blink_s: float = 0.0
@@ -142,7 +142,7 @@ func draw_into(c: Control) -> void:
 		var p: Vector2 = (Vector2(m["pos"] as Vector2i) - w.position + Vector2(0.5, 0.5)) * scale
 		if not Rect2(Vector2.ZERO, Vector2(VIEW_PX, VIEW_PX)).has_point(p):
 			continue
-		var col: Color = WARP_COLOR if String(m["kind"]) == "warp" else KAFRA_COLOR
+		var col: Color = WARP_COLOR if String(m["kind"]) == "warp" else WAYBELL_COLOR
 		c.draw_circle(p, 4.0, Color(0, 0, 0, 0.8))
 		c.draw_circle(p, 3.0, col)
 	if show_dots and session != null:
@@ -210,7 +210,7 @@ static func image_bytes(map: MapData, stride: int) -> PackedByteArray:
 	return out
 
 
-## Warp sources and kafra tiles from welcome.world.
+## Warp sources and waybell tiles from welcome.world.
 static func world_markers(world: Dictionary) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	var warps: Variant = world.get("warps")
@@ -221,16 +221,16 @@ static func world_markers(world: Dictionary) -> Array[Dictionary]:
 	var towns: Variant = world.get("towns")
 	if typeof(towns) == TYPE_ARRAY:
 		for t: Variant in towns as Array:
-			if typeof(t) == TYPE_DICTIONARY and (t as Dictionary).has("kafra"):
-				out.append({"pos": Vector2i(ViewMath.to_vec((t as Dictionary)["kafra"])), "kind": "kafra"})
+			if typeof(t) == TYPE_DICTIONARY and (t as Dictionary).has("waybell"):
+				out.append({"pos": Vector2i(ViewMath.to_vec((t as Dictionary)["waybell"])), "kind": "waybell"})
 	return out
 
 
-## Fallback without welcome.world: every warp (8) and kafra (9) tile of a small map.
+## Fallback without welcome.world: every warp (8) and waybell (9) tile of a small map.
 static func scan_markers(map: MapData) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for i: int in range(map.terrain.size()):
 		var t: int = map.terrain[i]
 		if t == 8 or t == 9:
-			out.append({"pos": Vector2i(i % map.size, i / map.size), "kind": "warp" if t == 8 else "kafra"})
+			out.append({"pos": Vector2i(i % map.size, i / map.size), "kind": "warp" if t == 8 else "waybell"})
 	return out

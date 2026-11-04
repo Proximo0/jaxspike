@@ -1,7 +1,7 @@
 """MVP bosses: damage tracking, kill event ring, top-damager drops, in-place respawn.
 
 Pure JAX, fixed shapes, int32. All state lives in world["mvp"] (see make_state). MVP identity comes from the
-`MVP` flag of game/data/monsters.py (Golden Thief Bug 18, Eddga 19); state is indexed by monster kind
+`MVP` flag of game/data/monsters.py (Gildscarab 18, Scorchstripe 19); state is indexed by monster kind
 (`[N_KINDS]`), and the event ring stores the monster kind. MVPs are placed by `ro_spawns`/`spawn_population`
 (each MVP kind once, in its dungeon), so the slot's own `spawn` is the respawn tile; there is no placement step.
 
@@ -33,8 +33,8 @@ MVP_KIND = tuple(bool(m.mvp) for m in _mon.MONSTERS)
 MVP_SPAWN_TICKS = tuple(3000 if f else 0 for f in MVP_KIND)
 MVP_HP = tuple(m.hp if m.mvp else 0 for m in _mon.MONSTERS)
 _DROPS = {
-    "Golden Thief Bug": (_items.ITEM_THIEF_BUG_CARD, _items.ITEM_ELUNIUM, _items.ITEM_GOLD_COIN, _items.ITEM_GOLD_COIN),
-    "Eddga": (_items.ITEM_ORC_WARRIOR_CARD, _items.ITEM_ORIDECON, _items.ITEM_GOLD_COIN, _items.ITEM_GOLD_COIN),
+    "Gildscarab": (_items.ITEM_PILFERBUG_CARD, _items.ITEM_MOONSTONE, _items.ITEM_GOLD_COIN, _items.ITEM_GOLD_COIN),
+    "Scorchstripe": (_items.ITEM_GRUKK_BRUTE_CARD, _items.ITEM_STARSTEEL, _items.ITEM_GOLD_COIN, _items.ITEM_GOLD_COIN),
 }
 MVP_DROP = tuple(_DROPS.get(m.name, (0,) * 4) for m in _mon.MONSTERS)  # [N_KINDS, 4], padded with ITEM_NONE
 EVENT_RING = 8

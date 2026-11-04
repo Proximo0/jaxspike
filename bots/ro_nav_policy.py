@@ -34,7 +34,7 @@ from game.data.monsters import LEVEL as MON_LEVEL
 from game.data.terrain import T_WARP
 from game.map_gen import DIST_UNREACHABLE, _shift_min, blocking, warp_table
 from game.spatial import build_grid, nearest_in_block
-from game.world_layout import (DUNGEONS, TOWNS, dungeon_index, dungeon_pads, kafra_tiles, portal_warp_tiles,
+from game.world_layout import (DUNGEONS, TOWNS, dungeon_index, dungeon_pads, waybell_tiles, portal_warp_tiles,
                                zone_of)
 
 try:  # 8 directions once ro-move's module exists (movement reads these codes)
@@ -60,8 +60,8 @@ RING_BY_LEVEL = ((HUNT_RADIUS // 2, 2 * HUNT_RADIUS), (HUNT_RADIUS, 2 * HUNT_RAD
 FOLLOW_MIN = 6          # a party member farther than this (manhattan) from its leader walks toward it
 WARP_WAIT_TICKS = 4     # a bot left standing on a warp tile (destination busy) waits all but one tick in four
 
-# Dive level per dungeon (index = DUNGEONS index): the Culvert from DUNGEON_MIN_LEVEL (Thief Bug 6, Skeleton 10,
-# Zombie 15, Spore 16), Payon Cave only from 25 (its Soldier Skeletons are level 29 and aggressive).
+# Dive level per dungeon (index = DUNGEONS index): the Culvert from DUNGEON_MIN_LEVEL (Pilferbug 6, Clackbone 10,
+# Rotling 15, Capling 16), Pinehollow Cave only from 25 (its Soldier Skeletons are level 29 and aggressive).
 DUNGEON_DIVE_LEVEL = (DUNGEON_MIN_LEVEL, 25)
 assert len(DUNGEON_DIVE_LEVEL) == len(DUNGEONS) and min(DUNGEON_DIVE_LEVEL) == DUNGEON_MIN_LEVEL
 _DIVE_LEVEL = jnp.asarray(DUNGEON_DIVE_LEVEL, jnp.int32)  # [ND]
@@ -85,8 +85,8 @@ ENTRANCE_TILES = _tile_mask(dungeon_pads()[:, 0])       # dungeon entrance warps
 
 
 def _shop_of_town():
-    """int32 [NT, 2]: the middle tile of each town's shop row (the kafra tile for a layout without shop rows)."""
-    out = np.array(kafra_tiles(), np.int32)
+    """int32 [NT, 2]: the middle tile of each town's shop row (the waybell tile for a layout without shop rows)."""
+    out = np.array(waybell_tiles(), np.int32)
     try:
         from game.world_layout import shop_tiles
         tiles, town = shop_tiles()
@@ -245,7 +245,7 @@ def nav_moves(world, key, base_move, shop=None):
     BOT_CHASE_RANGE by stepping to the free neighbour (no wall, no corner cut, no living player) with the smallest
     manhattan distance to it (equal to the current one allowed, so it sidesteps obstacles), attack it when orthogonally
     adjacent. Monsters more than LEVEL_MARGIN levels above the bot are left alone unless adjacent (no level-1 bot pulls
-    a Hode). A bot with no such neighbour takes a random free step; one that is "bored" this window (BORED_PCT of
+    a Sandgulper). A bot with no such neighbour takes a random free step; one that is "bored" this window (BORED_PCT of
     (slot, tick // BORED_TICKS) windows) keeps its roam move: that breaks the stateless chase loops at tree lines and
     around monsters other bots surround. A heading step into a blocked tile is replaced by a random free one.
     """

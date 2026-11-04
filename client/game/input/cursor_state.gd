@@ -1,6 +1,6 @@
 class_name CursorState
 extends RefCounted
-## RO cursor states from what is under the mouse: sword on a monster, speech bubble on an NPC tile (kafra) or a
+## RO cursor states from what is under the mouse: sword on a monster, speech bubble on an NPC tile (waybell) or a
 ## gather/craft node, grab hand on a drop, crossed arrow on blocked terrain, plain arrow (walk) elsewhere.
 ## `pick` is pure; `make_image` draws the placeholder cursor art (chibi-bright, dark outline) once per state.
 
@@ -11,7 +11,7 @@ const PICKUP: int = 3
 const BLOCKED: int = 4
 const NAMES: Array[String] = ["walk", "attack", "talk", "pickup", "blocked"]
 const NO_ENTITY: int = -1
-const KAFRA_TERRAIN: int = 9
+const WAYBELL_TERRAIN: int = 9
 const SIZE: int = 32
 const OUTLINE: Color = Color(0.10, 0.08, 0.12)
 
@@ -26,7 +26,7 @@ static func pick(hover_cat: int, terrain_id: int) -> int:
 			return PICKUP
 		ViewMath.CAT_NODE:
 			return TALK
-	if terrain_id == KAFRA_TERRAIN:
+	if terrain_id == WAYBELL_TERRAIN:
 		return TALK
 	if terrain_id < 0 or ViewMath.is_blocked_terrain(terrain_id):
 		return BLOCKED

@@ -11,7 +11,7 @@ SLOT = 5
 
 
 def _geared(world):
-    """Give SLOT a refined, carded, worn weapon, potions, zeny, stats, skills and craft progress."""
+    """Give SLOT a refined, carded, worn weapon, potions, ryn, stats, skills and craft progress."""
     w = jax.device_get(world)
     w = jax.tree_util.tree_map(np.array, w)
     weapon = next(i for i in range(item_data.N_ITEMS) if int(item_data.KIND[i]) == item_data.KIND_WEAPON
@@ -23,7 +23,7 @@ def _geared(world):
     w["items"]["inv_refine"][SLOT, 0] = 4
     w["items"]["inv_cards"][SLOT, 0, 0] = card
     w["items"]["equip"][SLOT, 0] = 0
-    w["items"]["zeny"][SLOT] = 4321
+    w["items"]["ryn"][SLOT] = 4321
     w["players"]["pos"][SLOT] = (30, 40); w["players"]["kills"][SLOT] = 7
     w["stats"]["str"][SLOT] = 30; w["stats"]["base_level"][SLOT] = 9; w["stats"]["job"][SLOT] = 1
     w["stats"]["base_exp"][SLOT] = 5; w["stats"]["was_dead"][SLOT] = True
@@ -49,14 +49,14 @@ def test_apply_then_extract_equals_saved(tmp_path):
     dst = char_fields.apply_character(make_empty_world(None), 9, loaded)
     back = char_fields.character_fields(jax.device_get(dst), 9, town=2, storage=loaded["storage"])
     _eq(back, fields)
-    assert loaded["items_equip"][0] == 0 and loaded["items_zeny"] == 4321 and loaded["stats_was_dead"] == 1
+    assert loaded["items_equip"][0] == 0 and loaded["items_ryn"] == 4321 and loaded["stats_was_dead"] == 1
 
 
 def test_apply_missing_fields_keeps_fresh():
     w = make_empty_world(None)
     out = char_fields.apply_character(w, 3, {"hp": 12})
     assert int(out["players"]["hp"][3]) == 12
-    assert int(out["stats"]["base_level"][3]) == 1 and int(out["items"]["zeny"][3]) == 0
+    assert int(out["stats"]["base_level"][3]) == 1 and int(out["items"]["ryn"][3]) == 0
     other = char_fields.apply_character(w, 4, {"stats_str": 50})
     assert int(other["stats"]["str"][4]) == 50 and int(other["stats"]["str"][3]) == 1
 

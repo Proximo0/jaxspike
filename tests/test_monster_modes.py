@@ -12,11 +12,11 @@ from game.data.monsters import KIND_BY_NAME
 from game.monsters import _occupancy, monster_ai
 from tests.test_monsters import build, mpos
 
-ORC = KIND_BY_NAME["Orc Warrior"]
-PORING = KIND_BY_NAME["Poring"]
-WOLF = KIND_BY_NAME["Wolf"]
-THIEF = KIND_BY_NAME["Thief Bug"]
-EDDGA = KIND_BY_NAME["Eddga"]
+ORC = KIND_BY_NAME["Grukk Brute"]
+BLOBBIN = KIND_BY_NAME["Blobbin"]
+SNARLFANG = KIND_BY_NAME["Snarlfang"]
+THIEF = KIND_BY_NAME["Pilferbug"]
+SCORCHSTRIPE = KIND_BY_NAME["Scorchstripe"]
 
 
 def ro(w, wander_in=1000, state=None):
@@ -47,10 +47,10 @@ def test_aggressive_chases_within_sight_only():
 
 
 def test_passive_ignores_until_hurt():
-    w = ro(build(players=[(20, 20)], monsters=[(23, 20)], kind=PORING))
+    w = ro(build(players=[(20, 20)], monsters=[(23, 20)], kind=BLOBBIN))
     out = monster_ai(w)
     assert st(out, 0) == modes.IDLE and mpos(out, 0) == (23, 20)
-    w["monsters"]["hp"] = w["monsters"]["hp"].at[0].set(MONSTER_HP[PORING] - 1)
+    w["monsters"]["hp"] = w["monsters"]["hp"].at[0].set(MONSTER_HP[BLOBBIN] - 1)
     out = monster_ai(w)
     assert st(out, 0) == modes.CHASE and mpos(out, 0) == (22, 20)
 
@@ -76,7 +76,7 @@ def test_gives_up_beyond_chase_radius_and_walks_home():
 
 
 def test_idle_outside_wander_box_returns_home():
-    w = ro(build(monsters=[(20, 20)], kind=PORING))
+    w = ro(build(monsters=[(20, 20)], kind=BLOBBIN))
     w["monsters"]["pos"] = w["monsters"]["pos"].at[0].set(jnp.array([20 + mdata.WANDER_BOX + 2, 20]))
     out = monster_ai(w)
     assert st(out, 0) == modes.RETURN and mpos(out, 0) == (21 + mdata.WANDER_BOX, 20)
@@ -85,7 +85,7 @@ def test_idle_outside_wander_box_returns_home():
 def test_random_walk_stays_near_spawn_and_out_of_pz():
     spawns = [(10 + 4 * (i % 8), 10 + 4 * (i // 8)) for i in range(32)]
     pz = [(x, y) for x in range(8, 46) for y in range(8, 46) if (x + y) % 7 == 0 and (x, y) not in spawns]
-    w = ro(build(monsters=spawns, kind=PORING, pz=pz), wander_in=0)
+    w = ro(build(monsters=spawns, kind=BLOBBIN, pz=pz), wander_in=0)
     w = {**w, "move": ro_move.make_state()}
     step = jax.jit(monster_ai)
     pzn = np.asarray(w["pz"])
@@ -104,7 +104,7 @@ def test_random_walk_stays_near_spawn_and_out_of_pz():
 
 
 def test_wander_is_deterministic_under_jit():
-    w = ro(build(monsters=[(30, 30)], kind=PORING), wander_in=0)
+    w = ro(build(monsters=[(30, 30)], kind=BLOBBIN), wander_in=0)
     a = jax.jit(monster_ai)(w)
     b = monster_ai(w)
     assert mpos(a, 0) == mpos(b, 0)
@@ -117,19 +117,19 @@ def test_wander_is_deterministic_under_jit():
 
 def test_assist_pulls_kind_mate_into_the_fight():
     passive = {**modes.TABLES, "aggro": jnp.zeros_like(mdata.AGGRO)}
-    w = ro(build(players=[(20, 20)], monsters=[(22, 20), (25, 20)], kind=WOLF))
-    w["monsters"]["hp"] = w["monsters"]["hp"].at[0].set(1)  # wolf 0 is fighting (hurt)
+    w = ro(build(players=[(20, 20)], monsters=[(22, 20), (25, 20)], kind=SNARLFANG))
+    w["monsters"]["hp"] = w["monsters"]["hp"].at[0].set(1)  # snarlfang 0 is fighting (hurt)
     out, pd = decide(w, passive)
     assert st(out, 1) == modes.CHASE and int(pd[1]) == int(ro_move.dir_toward(jnp.array([-1, 0])))
     no_assist = {**passive, "assist": jnp.zeros_like(mdata.ASSIST)}
     out, pd = decide(w, no_assist)
     assert st(out, 1) == modes.IDLE and int(pd[1]) == -1
-    w2 = ro(build(players=[(20, 20)], monsters=[(22, 20)], kind=WOLF))  # another kind fighting does not pull
+    w2 = ro(build(players=[(20, 20)], monsters=[(22, 20)], kind=SNARLFANG))  # another kind fighting does not pull
     w2 = {**w2, "monsters": {**w2["monsters"]}}
     m = w2["monsters"]
     m["pos"], m["spawn"] = m["pos"].at[1].set(jnp.array([25, 20])), m["spawn"].at[1].set(jnp.array([25, 20]))
     m["active"], m["kind"] = m["active"].at[1].set(True), m["kind"].at[1].set(ORC)
-    m["hp"] = m["hp"].at[1].set(1).at[0].set(MONSTER_HP[WOLF])
+    m["hp"] = m["hp"].at[1].set(1).at[0].set(MONSTER_HP[SNARLFANG])
     out, _ = decide(w2, passive)
     assert st(out, 0) == modes.IDLE
 
@@ -144,10 +144,10 @@ def _drop(w, slot, pos, item=ITEM_MEAT):
 
 
 def test_looter_walks_to_drop_and_picks_it_up():
-    w = _drop(ro(build(monsters=[(20, 20)], kind=PORING)), 3, (24, 20))
+    w = _drop(ro(build(monsters=[(20, 20)], kind=BLOBBIN)), 3, (24, 20))
     w = monster_ai(w)
     assert mpos(w, 0) == (21, 20) and int(w["monai"]["held_item"][0]) == ITEM_NONE
-    for _ in range(3 * int(mdata.SPEED_MS[PORING]) // TICK_MS + 1):  # three more cells at Poring speed
+    for _ in range(3 * int(mdata.SPEED_MS[BLOBBIN]) // TICK_MS + 1):  # three more cells at Blobbin speed
         w = monster_ai(w)
     assert int(w["monai"]["held_item"][0]) == ITEM_MEAT
     assert not bool(w["drops"]["active"][3]) and int(w["drops"]["item"][3]) == ITEM_NONE
@@ -156,13 +156,13 @@ def test_looter_walks_to_drop_and_picks_it_up():
 
 
 def test_lowest_index_looter_wins_a_drop():
-    w = _drop(ro(build(monsters=[(20, 20), (22, 20)], kind=PORING)), 0, (21, 20))
+    w = _drop(ro(build(monsters=[(20, 20), (22, 20)], kind=BLOBBIN)), 0, (21, 20))
     w = monster_ai(w)
     assert int(w["monai"]["held_item"][0]) == ITEM_MEAT and int(w["monai"]["held_item"][1]) == ITEM_NONE
 
 
 def test_looted_item_falls_where_the_monster_died_and_kind_respawn_applies():
-    w = ro(build(monsters=[(20, 20)], kind=PORING))
+    w = ro(build(monsters=[(20, 20)], kind=BLOBBIN))
     w["monai"]["held_item"] = w["monai"]["held_item"].at[0].set(ITEM_MEAT)
     w["monai"]["was_active"] = w["monai"]["was_active"].at[0].set(True)
     m = w["monsters"]
@@ -175,11 +175,11 @@ def test_looted_item_falls_where_the_monster_died_and_kind_respawn_applies():
     assert bool(d["active"][slot]) and int(d["item"][slot]) == ITEM_MEAT
     assert tuple(int(v) for v in d["pos"][slot]) == (27, 21)
     assert int(out["monai"]["held_item"][0]) == ITEM_NONE
-    assert int(out["monsters"]["respawn_in"][0]) == int(modes.RESPAWN_TICKS[PORING]) - 1
+    assert int(out["monsters"]["respawn_in"][0]) == int(modes.RESPAWN_TICKS[BLOBBIN]) - 1
 
 
 def test_mvp_respawn_timer_untouched():
-    w = ro(build(monsters=[(20, 20)], kind=EDDGA))
+    w = ro(build(monsters=[(20, 20)], kind=SCORCHSTRIPE))
     w["monai"]["was_active"] = w["monai"]["was_active"].at[0].set(True)
     m = w["monsters"]
     m["active"] = m["active"].at[0].set(False)
@@ -198,7 +198,7 @@ def test_kind_speed_through_move_block():
     """Returning home in a straight line: cells walked in 12 ticks follow SPEED_MS[kind]."""
     from game.config import TICK_MS
     walked = {}
-    for k in (PORING, THIEF):
+    for k in (BLOBBIN, THIEF):
         w = ro(build(monsters=[(10, 20)], kind=k), state={0: modes.RETURN})
         w["monsters"]["pos"] = w["monsters"]["pos"].at[0].set(jnp.array([40, 20]))
         w = {**w, "move": ro_move.make_state()}
@@ -215,9 +215,9 @@ def test_fallback_without_block_still_chases_and_returns():
     assert "monai" not in w
     out = monster_ai(w)
     assert mpos(out, 0) == (23, 20) and "monai" not in out
-    far = build(monsters=[(20, 20)], kind=PORING)
+    far = build(monsters=[(20, 20)], kind=BLOBBIN)
     far = {k: v for k, v in far.items() if k not in ("monai", "move")}
-    far["monsters"]["hp"] = far["monsters"]["hp"].at[0].set(MONSTER_HP[PORING])
+    far["monsters"]["hp"] = far["monsters"]["hp"].at[0].set(MONSTER_HP[BLOBBIN])
     far["monsters"]["pos"] = far["monsters"]["pos"].at[0].set(jnp.array([30, 20]))
     assert mpos(monster_ai(far), 0) == (29, 20)
 
