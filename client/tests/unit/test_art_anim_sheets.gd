@@ -203,7 +203,8 @@ func test_npc_sheets() -> void:
 			assert_true(img != null, "%s.%s png" % [kind, a])
 			if img == null:
 				continue
-			assert_eq(img.get_height(), fh * DRAWN_ROWS, "%s.%s height" % [kind, a])
-			for row: int in range(DRAWN_ROWS):
+			var rows: int = int(act.get("rows", DRAWN_ROWS))
+			assert_eq(img.get_height(), fh * rows, "%s.%s height" % [kind, a])
+			for row: int in range(rows):
 				for col: int in range(4):
 					assert_true(_opaque_count(_frame(img, fw, fh, row, col)) >= MIN_OPAQUE_PX, "%s.%s %d/%d empty" % [kind, a, row, col])

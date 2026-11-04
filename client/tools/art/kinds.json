@@ -10,7 +10,8 @@
   "Licences: see `licenses.json` next to this file; every source here is CC0.",
   "Quaternius's atlas is a muted palette: those kinds get brightness 1.35 and a tint above 1.0 on the hue they should read as (tints multiply before the cel ramp, values over 1 lighten).",
   "Chibi: `bone_scales` scales pose bones (head, hands); `face` puts an anime face decal (gen_faces.py style) on the `target` mesh, parented to `bone`; `squash` bounces blobs in idle/walk; `outline_rel`, `specular`, `rim` shape the ink and the cel look.",
-  "`dirs` 8 draws all 8 directions (no mirrored rows, the weapon stays in the right hand); 5 draws S..N and the client mirrors 5..7."
+  "`dirs` 8 draws all 8 directions (no mirrored rows, the weapon stays in the right hand); 5 draws S..N and the client mirrors 5..7.",
+  "`shadow` (defaults) bakes a soft ellipse under the feet of every frame except dead; set a kind's \"shadow\": null to skip (flying things get a smaller one)."
  ],
  "source_root": "D:/jaxspike-art/src",
  "defaults": {
@@ -52,7 +53,13 @@
   "specular_at": 0.96,
   "rim": 0.18,
   "rim_at": 0.16,
-  "dirs": 8
+  "dirs": 8,
+  "shadow": {
+   "w": 0.5,
+   "h": 0.36,
+   "alpha": 95,
+   "blur": 1.5
+  }
  },
  "_paths": {
   "adv": "kaykit_adv/KayKit-Character-Pack-Adventures-1.0-main/addons/kaykit_character_pack_adventures/Characters/gltf",
@@ -700,7 +707,9 @@
     "target": ".*",
     "size": 0.22,
     "up": 0.5
-   }
+   },
+   "portrait_zoom": 1.1,
+   "portrait_bottom": -70
   },
   "fiddlehop": {
    "folder": "fiddlehop",
@@ -809,7 +818,13 @@
     0.15,
     0.1,
     0.05
-   ]
+   ],
+   "shadow": {
+    "w": 0.4,
+    "h": 0.36,
+    "alpha": 70,
+    "blur": 2.0
+   }
   },
   "rotling": {
    "folder": "rotling",
@@ -1137,7 +1152,13 @@
     0.35,
     0.3,
     0.05
-   ]
+   ],
+   "shadow": {
+    "w": 0.4,
+    "h": 0.36,
+    "alpha": 70,
+    "blur": 2.0
+   }
   },
   "scorchstripe": {
    "folder": "scorchstripe",
@@ -1178,6 +1199,85 @@
    ],
    "portrait_zoom": 0.85,
    "portrait_bottom": -40
+  },
+  "npc_shop": {
+   "role": "npc",
+   "license": "kaykit-adventurers",
+   "source": "kaykit_adv/KayKit-Character-Pack-Adventures-1.0-main/addons/kaykit_character_pack_adventures/Characters/gltf/Barbarian.glb",
+   "show": [
+    "^Barbarian_(Arm|Body|Head|Leg)",
+    "^Mug$"
+   ],
+   "tint": [
+    0.95,
+    0.85,
+    0.75
+   ],
+   "bone_scales": {
+    "head": 1.45,
+    "handslot.r": 1.2,
+    "handslot.l": 1.2
+   },
+   "face": {
+    "style": "merchant",
+    "bone": "head",
+    "target": "Barbarian_Head$",
+    "size": 0.36,
+    "up": 0.5,
+    "lift": 0.07,
+    "offset": 0.02,
+    "aspect": 1.35
+   },
+   "hair": {
+    "style": "bob",
+    "color": [
+     0.3,
+     0.2,
+     0.12
+    ],
+    "cover": 0.3,
+    "front_cut": 0.4,
+    "offset": 0.06,
+    "bone": "head",
+    "target": "Barbarian_Head$"
+   },
+   "clips": {
+    "idle": "Idle",
+    "talk": "Cheer"
+   }
+  },
+  "npc_waybell": {
+   "role": "npc",
+   "license": "kaykit-adventurers",
+   "source": "kaykit_adv/KayKit-Character-Pack-Adventures-1.0-main/addons/kaykit_character_pack_adventures/Characters/gltf/Mage.glb",
+   "show": [
+    "^Mage_(Arm|Body|Cape|Head|Leg)",
+    "^Spellbook$"
+   ],
+   "tint": [
+    0.85,
+    0.95,
+    1.2
+   ],
+   "bone_scales": {
+    "head": 1.45,
+    "handslot.r": 1.2,
+    "handslot.l": 1.2
+   },
+   "face": {
+    "style": "acolyte",
+    "bone": "head",
+    "target": "Mage_Head$",
+    "size": 0.36,
+    "up": 0.5,
+    "lift": 0.07,
+    "offset": 0.02,
+    "aspect": 1.35
+   },
+   "clips": {
+    "idle": "Idle",
+    "talk": "Interact"
+   }
   }
  },
  "faces_dir": "D:/jaxspike-art/faces"

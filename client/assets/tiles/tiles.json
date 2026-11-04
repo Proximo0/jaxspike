@@ -1,0 +1,438 @@
+{
+ "version": 1,
+ "cell_px": 64,
+ "columns": 13,
+ "rows": 16,
+ "terrain_atlas": "res://assets/tiles/terrain.png",
+ "props_atlas": "res://assets/tiles/props.png",
+ "props_columns": 9,
+ "props_rows": 6,
+ "mask_bits": {
+  "N": 1,
+  "E": 2,
+  "S": 4,
+  "W": 8
+ },
+ "terrains": [
+  {
+   "id": 0,
+   "name": "grass",
+   "source": "procedural (gen_tiles.py)",
+   "mode": "variants",
+   "weights": [
+    30,
+    30,
+    24,
+    16,
+    8,
+    6,
+    4,
+    3
+   ]
+  },
+  {
+   "id": 1,
+   "name": "road",
+   "source": "procedural (gen_tiles.py)",
+   "mode": "blob4",
+   "connects": [
+    1,
+    8,
+    9,
+    10,
+    12
+   ]
+  },
+  {
+   "id": 2,
+   "name": "floor",
+   "source": "procedural (gen_tiles.py)",
+   "mode": "variants",
+   "weights": [
+    40,
+    10,
+    6,
+    6
+   ]
+  },
+  {
+   "id": 3,
+   "name": "temple",
+   "source": "procedural (gen_tiles.py)",
+   "mode": "blob4",
+   "connects": [
+    3
+   ]
+  },
+  {
+   "id": 4,
+   "name": "water",
+   "source": "procedural (gen_tiles.py)",
+   "mode": "blob4",
+   "connects": [
+    4
+   ]
+  },
+  {
+   "id": 5,
+   "name": "tree",
+   "source": "procedural (gen_tiles.py)",
+   "mode": "single"
+  },
+  {
+   "id": 6,
+   "name": "wall",
+   "source": "procedural (gen_tiles.py)",
+   "mode": "blob4",
+   "connects": [
+    6
+   ]
+  },
+  {
+   "id": 7,
+   "name": "rock",
+   "source": "procedural (gen_tiles.py)",
+   "mode": "variants",
+   "weights": [
+    5,
+    3,
+    3
+   ]
+  },
+  {
+   "id": 8,
+   "name": "warp",
+   "source": "procedural (gen_tiles.py)",
+   "mode": "single"
+  },
+  {
+   "id": 9,
+   "name": "waybell",
+   "source": "procedural (gen_tiles.py)",
+   "mode": "single"
+  },
+  {
+   "id": 10,
+   "name": "station",
+   "source": "procedural (gen_tiles.py)",
+   "mode": "single"
+  },
+  {
+   "id": 11,
+   "name": "cave",
+   "source": "procedural (gen_tiles.py)",
+   "mode": "variants",
+   "weights": [
+    16,
+    10,
+    4,
+    2
+   ]
+  },
+  {
+   "id": 12,
+   "name": "shop",
+   "source": "procedural (gen_tiles.py)",
+   "mode": "single"
+  }
+ ],
+ "props": {
+  "cells": {
+   "tree0": {
+    "atlas": [
+     0,
+     0
+    ],
+    "size": [
+     1,
+     2
+    ],
+    "origin": [
+     0,
+     32
+    ]
+   },
+   "tree1": {
+    "atlas": [
+     1,
+     0
+    ],
+    "size": [
+     1,
+     2
+    ],
+    "origin": [
+     0,
+     32
+    ]
+   },
+   "tree2": {
+    "atlas": [
+     2,
+     0
+    ],
+    "size": [
+     1,
+     2
+    ],
+    "origin": [
+     0,
+     32
+    ]
+   },
+   "bell": {
+    "atlas": [
+     3,
+     0
+    ],
+    "size": [
+     1,
+     2
+    ],
+    "origin": [
+     0,
+     32
+    ]
+   },
+   "stall0": {
+    "atlas": [
+     4,
+     0
+    ],
+    "size": [
+     1,
+     2
+    ],
+    "origin": [
+     0,
+     32
+    ]
+   },
+   "stall1": {
+    "atlas": [
+     5,
+     0
+    ],
+    "size": [
+     1,
+     2
+    ],
+    "origin": [
+     0,
+     32
+    ]
+   },
+   "stall2": {
+    "atlas": [
+     6,
+     0
+    ],
+    "size": [
+     1,
+     2
+    ],
+    "origin": [
+     0,
+     32
+    ]
+   },
+   "stall3": {
+    "atlas": [
+     7,
+     0
+    ],
+    "size": [
+     1,
+     2
+    ],
+    "origin": [
+     0,
+     32
+    ]
+   },
+   "furnace": {
+    "atlas": [
+     8,
+     0
+    ],
+    "size": [
+     1,
+     2
+    ],
+    "origin": [
+     0,
+     32
+    ]
+   },
+   "fountain": {
+    "atlas": [
+     0,
+     2
+    ],
+    "size": [
+     4,
+     4
+    ],
+    "origin": [
+     -32,
+     -32
+    ]
+   },
+   "fire": {
+    "atlas": [
+     4,
+     2
+    ],
+    "size": [
+     1,
+     1
+    ],
+    "origin": [
+     0,
+     0
+    ]
+   }
+  },
+  "on_terrain": {
+   "5": [
+    "tree0",
+    "tree1",
+    "tree2"
+   ],
+   "9": [
+    "bell"
+   ],
+   "12": [
+    "stall0",
+    "stall1",
+    "stall2",
+    "stall3"
+   ]
+  },
+  "shop_pick": "x",
+  "block_center": {
+   "3": "fountain"
+  },
+  "nodes": {
+   "406": "furnace",
+   "407": "fire"
+  }
+ },
+ "licence": "CC0 1.0, project-original, generated procedurally by client/tools/art/tiles/gen_tiles.py",
+ "filled_rows": {
+  "0": [
+   0,
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7
+  ],
+  "1": [
+   0,
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10,
+   11,
+   12,
+   13,
+   14,
+   15
+  ],
+  "3": [
+   0,
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10,
+   11,
+   12,
+   13,
+   14,
+   15
+  ],
+  "4": [
+   0,
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10,
+   11,
+   12,
+   13,
+   14,
+   15
+  ],
+  "6": [
+   0,
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10,
+   11,
+   12,
+   13,
+   14,
+   15
+  ],
+  "2": [
+   0,
+   1,
+   2,
+   3
+  ],
+  "5": [
+   0
+  ],
+  "7": [
+   0,
+   1,
+   2
+  ],
+  "8": [
+   0
+  ],
+  "9": [
+   0
+  ],
+  "10": [
+   0
+  ],
+  "11": [
+   0,
+   1,
+   2,
+   3
+  ],
+  "12": [
+   0
+  ]
+ }
+}

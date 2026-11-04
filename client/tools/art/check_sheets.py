@@ -18,7 +18,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_DIR = os.path.normpath(os.path.join(HERE, "..", "..", "assets", "anim"))
 PLAYER_ACTIONS = ["idle", "walk", "sit", "pickup", "standby", "attack", "hurt", "dead", "cast"]
 MONSTER_ACTIONS = ["idle", "walk", "attack", "hurt", "dead"]
-MOTION = ["walk", "attack", "hurt", "dead"]
+NPC_ACTIONS = ["idle", "talk"]
+MOTION = ["walk", "attack", "hurt", "dead", "talk"]
 MIN_OPAQUE = 80
 
 
@@ -48,12 +49,12 @@ def check_kind(kdir, kind, min_px, problems):
     fw, fh_ = int(act["frame_w"]), int(act["frame_h"])
     anchor = act.get("anchor", [0, 0])
     is_player = "sit" in act["actions"]
-    want = PLAYER_ACTIONS if is_player else MONSTER_ACTIONS
+    want = PLAYER_ACTIONS if is_player else (NPC_ACTIONS if "talk" in act["actions"] else MONSTER_ACTIONS)
     if fw < min_px or fh_ < min_px:
         problems.append("%s: frame %dx%d under %d px" % (kind, fw, fh_, min_px))
     if not (0 <= anchor[0] < fw and 0 <= anchor[1] < fh_):
         problems.append("%s: anchor %s outside the frame" % (kind, anchor))
-    if int(act.get("atk_frame", -1)) != 3 or int(act["actions"].get("attack", {}).get("frames", 0)) != 6:
+    if "attack" in want and (int(act.get("atk_frame", -1)) != 3 or int(act["actions"].get("attack", {}).get("frames", 0)) != 6):
         problems.append("%s: atk_frame must be 3 of 6" % kind)
     rows = int(act.get("rows", 0))
     if rows == 5:

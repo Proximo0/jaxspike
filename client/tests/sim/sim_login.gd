@@ -65,17 +65,16 @@ func run() -> Array:
 		tuning.set_value("tile_px", float(px))
 		view.map_renderer.build(session.map)
 		await host.get_tree().process_frame
-		var want := Vector2i(px * MapRenderer.TERRAIN_IDS, px)
 		rows.append(row("tile_px_%d" % px, view.map_renderer.get_used_cells().size() == MAP_SIZE * MAP_SIZE
-				and view.map_renderer.tile_count() == MAP_SIZE * MAP_SIZE and view.map_renderer.atlas_size() == want
-				and view.map_renderer.tile_set.tile_size == Vector2i(px, px),
-				"atlas=%s tile=%s" % [str(view.map_renderer.atlas_size()), str(view.map_renderer.tile_set.tile_size)]))
+				and view.map_renderer.tile_count() == MAP_SIZE * MAP_SIZE
+				and is_equal_approx(view.map_renderer.drawn_tile_px(), float(px)),
+				"drawn=%.1f atlas=%s" % [view.map_renderer.drawn_tile_px(), str(view.map_renderer.atlas_size())]))
 	# A live change after the build swaps the atlas in place and keeps every cell.
 	tuning.set_value("tile_px", 24.0)
 	await host.get_tree().process_frame
 	rows.append(row("tile_px_live", view.map_renderer.get_used_cells().size() == MAP_SIZE * MAP_SIZE
-			and view.map_renderer.atlas_size() == Vector2i(24 * MapRenderer.TERRAIN_IDS, 24),
-			"atlas=%s" % str(view.map_renderer.atlas_size())))
+			and is_equal_approx(view.map_renderer.drawn_tile_px(), 24.0),
+			"drawn=%.1f" % view.map_renderer.drawn_tile_px()))
 	tuning.set_value("tile_px", old_px)
 	await host.get_tree().process_frame
 

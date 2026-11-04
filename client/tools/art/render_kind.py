@@ -34,11 +34,16 @@ BLENDER_CANDIDATES = [
 
 PLAYER_ACTIONS = ["idle", "walk", "sit", "pickup", "standby", "attack", "hurt", "dead", "cast"]
 MONSTER_ACTIONS = ["idle", "walk", "attack", "hurt", "dead"]
+NPC_ACTIONS = ["idle", "talk"]
+
+
+def actions_for(role):
+    return {"job": PLAYER_ACTIONS, "monster": MONSTER_ACTIONS, "npc": NPC_ACTIONS}[role]
 # action -> (frames, delay_ms, loop) as the placeholder generator and the client's ClipTiming expect
 CLIP = {
     "idle": (4, 200, True), "walk": (8, 75, True), "sit": (4, 300, True), "pickup": (4, 100, False),
     "standby": (4, 150, True), "attack": (6, 100, False), "hurt": (4, 75, False), "dead": (5, 120, False),
-    "cast": (6, 100, True),
+    "cast": (6, 100, True), "talk": (4, 160, True),
 }
 ATK_FRAME = 3  # of 6 -> 60 %
 # The sheets are rendered at 2x the size the client draws at a 32 px tile (crisp at zoom 2.0); act.json carries
@@ -62,8 +67,9 @@ def load_manifest():
 def build_job(kind, spec, man, work, ss):
     src_root = man.get("source_root", "D:/jaxspike-art/src")
     actions = {}
-    is_player = spec.get("role", "job") == "job"
-    names = PLAYER_ACTIONS if is_player else MONSTER_ACTIONS
+    role = spec.get("role", "job")
+    is_player = role == "job"
+    names = actions_for(role)
     defaults = man["defaults"]
     for a in names:
         n, _delay, loop = CLIP[a]
@@ -87,7 +93,8 @@ def build_job(kind, spec, man, work, ss):
         face["image"] = os.path.join(man.get("faces_dir", "D:/jaxspike-art/faces"), face.get("style", "novice") + ".png").replace("\\", "/")
         job["face"] = face
     job["out"] = work.replace("\\", "/")
-    job["frame"] = spec.get("frame", defaults["frame_job"] if is_player else defaults["frame_monster"])
+    job["frame"] = spec.get("frame", defaults["frame_job"] if role != "monster" else defaults["frame_monster"])
+    job["role"] = role
     job["actions"] = actions
     job["supersample"] = ss
     return job
@@ -135,6 +142,19 @@ def run_blender(blender, job, work, fresh=True, retries=6):
     return time.time() - t0
 
 
+def shadow_layer(fw, fh, anchor, spec):
+    """A soft dark ellipse under the feet (RO draws one under every sprite): baked into each frame so the client
+    needs nothing. spec: {"w": fraction of frame_w, "h": fraction of w, "alpha": 0..255, "blur": px}."""
+    from PIL import ImageDraw, ImageFilter
+    w = fw * float(spec.get("w", 0.5))
+    h = w * float(spec.get("h", 0.36))
+    cx, cy = anchor[0], anchor[1] - h * 0.15
+    img = Image.new("RGBA", (fw, fh), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    d.ellipse((cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2), fill=(20, 25, 40, int(spec.get("alpha", 95))))
+    return img.filter(ImageFilter.GaussianBlur(float(spec.get("blur", 1.5))))
+
+
 def shrink(img, ss):
     if ss == 1:
         return img
@@ -158,7 +178,8 @@ def make_act(kind, fw, fh, anchor, is_player, source, folder=None, rows=5):
         "mirror_rows": {"5": 3, "6": 2, "7": 1} if mirror else {},
         "actions": {}, "source": source,
     }
-    for a in (PLAYER_ACTIONS if is_player else MONSTER_ACTIONS):
+    names = actions_for(is_player) if isinstance(is_player, str) else (PLAYER_ACTIONS if is_player else MONSTER_ACTIONS)
+    for a in names:
         n, delay, loop = CLIP[a]
         entry = {"file": a + ".png", "image": "res://assets/anim/%s/%s.png" % (folder, a), "row0": 0, "frames": n,
                  "delay_ms": delay, "mirror": mirror, "loop": loop}
@@ -188,9 +209,11 @@ def compose(kind, job, work, out_dir, ss, is_player, partial=False):
     kdir = os.path.join(out_dir, folder)
     os.makedirs(kdir, exist_ok=True)
     rows = int(job.get("dirs", 5))
-    act = make_act(kind, fw, fh, anchor, is_player, "client/tools/art render_kind.py (%s)" % job["source"], folder, rows)
+    act = make_act(kind, fw, fh, anchor, job.get("role", "job" if is_player else "monster"),
+                   "client/tools/art render_kind.py (%s)" % job["source"], folder, rows)
     total_bytes = 0
     missing = 0
+    shadow = shadow_layer(fw, fh, anchor, job["shadow"]) if job.get("shadow") else None
     for a in act["actions"]:
         n = CLIP[a][0]
         sheet = Image.new("RGBA", (fw * n, fh * rows), (0, 0, 0, 0))
@@ -203,6 +226,8 @@ def compose(kind, job, work, out_dir, ss, is_player, partial=False):
                         continue
                     raise SystemExit("%s: missing frame %s" % (kind, p))
                 fr = shrink(Image.open(p).convert("RGBA"), ss)
+                if shadow is not None and a != "dead":
+                    fr = Image.alpha_composite(shadow, fr)
                 sheet.paste(fr, (i * fw, d * fh), fr)
         # palette-quantise to keep the PNGs small while staying crisp (alpha kept in the palette)
         q = sheet.quantize(colors=255, method=Image.Quantize.FASTOCTREE, dither=Image.Dither.NONE)
@@ -225,7 +250,7 @@ def review(kind, out_dir, is_player, folder=None):
     with open(os.path.join(kdir, "act.json"), "r", encoding="utf-8") as fh:
         act = json.load(fh)
     fw, fh_ = act["frame_w"], act["frame_h"]
-    names = PLAYER_ACTIONS if is_player else MONSTER_ACTIONS
+    names = actions_for(is_player) if isinstance(is_player, str) else (PLAYER_ACTIONS if is_player else MONSTER_ACTIONS)
     z = 2
     label_w = 70 * z
     img = Image.new("RGBA", (label_w + fw * z * 8, (fh_ * z + 4) * len(names) + 24), (70, 130, 70, 255))
@@ -257,7 +282,7 @@ def contact(kind, out_dir, work_root, is_player, folder=None):
     with open(os.path.join(kdir, "act.json"), "r", encoding="utf-8") as fh:
         act = json.load(fh)
     fw, fh_ = act["frame_w"], act["frame_h"]
-    names = PLAYER_ACTIONS if is_player else MONSTER_ACTIONS
+    names = actions_for(is_player) if isinstance(is_player, str) else (PLAYER_ACTIONS if is_player else MONSTER_ACTIONS)
     cols = 5 + 8
     img = Image.new("RGBA", (fw * cols, fh_ * len(names)), (70, 130, 70, 255))
     for r, a in enumerate(names):
@@ -282,6 +307,7 @@ def main():
     ap.add_argument("--all", action="store_true")
     ap.add_argument("--jobs", action="store_true")
     ap.add_argument("--monsters", action="store_true")
+    ap.add_argument("--npcs", action="store_true")
     ap.add_argument("--out", default=DEFAULT_OUT)
     ap.add_argument("--work", default=DEFAULT_WORK)
     ap.add_argument("--blender", default="")
@@ -326,7 +352,7 @@ def main():
     kinds = list(args.kind)
     for k, spec in man["kinds"].items():
         role = spec.get("role", "job")
-        if args.all or (args.jobs and role == "job") or (args.monsters and role == "monster"):
+        if args.all or (args.jobs and role == "job") or (args.monsters and role == "monster") or (args.npcs and role == "npc"):
             if k not in kinds:
                 kinds.append(k)
     if not kinds:
@@ -334,7 +360,7 @@ def main():
     if args.act_only:
         for kind in kinds:
             spec = man["kinds"][kind]
-            is_player = spec.get("role", "job") == "job"
+            is_player = spec.get("role", "job")
             job = build_job(kind, spec, man, os.path.join(args.work, kind), args.ss)
             kdir = os.path.join(args.act_only, job.get("folder", kind))
             os.makedirs(kdir, exist_ok=True)
@@ -351,7 +377,7 @@ def main():
     grand = 0
     for kind in kinds:
         spec = man["kinds"][kind]
-        is_player = spec.get("role", "job") == "job"
+        is_player = spec.get("role", "job")
         work = os.path.join(args.work, kind)
         job = build_job(kind, spec, man, work, args.ss)
         secs = 0.0

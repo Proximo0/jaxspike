@@ -228,3 +228,104 @@ static func is_blocked_tile(map: MapData, tile: Vector2i) -> bool:
 static func marker_done(target: Vector2i, own_pos: Vector2i, stalled_ticks: int,
 		max_stalled: int = MARKER_STALL_TICKS) -> bool:
 	return own_pos == target or stalled_ticks >= max_stalled
+
+
+## Tileset index written by client/tools/art/tiles/gen_tiles.py (TERRAIN_COLORS above stay the fallback).
+const TILESET_INDEX: String = "res://assets/tiles/tiles.json"
+## Tile row modes per terrain column of the tileset atlas.
+const TILE_SINGLE: int = 0
+const TILE_VARIANTS: int = 1
+const TILE_BLOB4: int = 2
+## Bits of the 4-neighbour mask (row of a blob4 column): a set bit = that neighbour connects.
+const MASK_N: int = 1
+const MASK_E: int = 2
+const MASK_S: int = 4
+const MASK_W: int = 8
+
+
+## Deterministic per-tile hash (31 bits), the same as preview_tiles.py tile_hash.
+static func tile_hash(x: int, y: int) -> int:
+	var h: int = (x * 73856093) ^ (y * 19349663)
+	h = ((h ^ (h >> 13)) & 0x7FFFFFFF) * 1274126177
+	return (h ^ (h >> 16)) & 0x7FFFFFFF
+
+
+## Index into `weights` picked by `h` in proportion to the weights (0 when they are empty or all zero).
+static func weighted_pick(h: int, weights: PackedInt32Array) -> int:
+	var total: int = 0
+	for w: int in weights:
+		total += w
+	if total <= 0:
+		return 0
+	var r: int = h % total
+	for i: int in range(weights.size()):
+		if r < weights[i]:
+			return i
+		r -= weights[i]
+	return 0
+
+
+## 4-neighbour mask at (x, y) of a row-major `terrain`: bit set where the neighbour's id is in `connect_bits`
+## (bit k = terrain id k). Outside the map never connects.
+static func blob4_mask(terrain: PackedByteArray, size: int, x: int, y: int, connect_bits: int) -> int:
+	var m: int = 0
+	var i: int = y * size + x
+	if y > 0 and (connect_bits >> terrain[i - size]) & 1 != 0:
+		m |= MASK_N
+	if x < size - 1 and (connect_bits >> terrain[i + 1]) & 1 != 0:
+		m |= MASK_E
+	if y < size - 1 and (connect_bits >> terrain[i + size]) & 1 != 0:
+		m |= MASK_S
+	if x > 0 and (connect_bits >> terrain[i - 1]) & 1 != 0:
+		m |= MASK_W
+	return m
+
+
+## Atlas row of every cell (row-major, one byte each): the blob4 mask, a weighted variant from tile_hash, or 0.
+## `modes`, `connects` (bit masks) and `weights` are indexed by terrain id; ids outside them read as id 0.
+static func tile_rows(terrain: PackedByteArray, size: int, modes: PackedInt32Array, connects: PackedInt32Array,
+		weights: Array[PackedInt32Array]) -> PackedByteArray:
+	var out := PackedByteArray()
+	out.resize(size * size)
+	var n_ids: int = modes.size()
+	for y: int in range(size):
+		var row: int = y * size
+		for x: int in range(size):
+			var t: int = terrain[row + x]
+			if t >= n_ids:
+				t = 0
+			var mode: int = modes[t]
+			if mode == TILE_BLOB4:
+				out[row + x] = blob4_mask(terrain, size, x, y, connects[t])
+			elif mode == TILE_VARIANTS:
+				out[row + x] = weighted_pick(tile_hash(x, y), weights[t])
+	return out
+
+
+## Prop variant of a tile: cycles by x when `by_x` (a row of shops alternates), else from tile_hash.
+static func prop_variant(x: int, y: int, count: int, by_x: bool) -> int:
+	if count <= 1:
+		return 0
+	if by_x:
+		return x % count
+	return posmod(tile_hash(x, y) >> 3, count)
+
+
+## Centre tile of every axis-aligned block of `terrain_id` (top-left corner scan; even sides round down), row-major.
+static func block_centers(terrain: PackedByteArray, size: int, terrain_id: int) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	for y: int in range(size):
+		for x: int in range(size):
+			var i: int = y * size + x
+			if terrain[i] != terrain_id:
+				continue
+			if (x > 0 and terrain[i - 1] == terrain_id) or (y > 0 and terrain[i - size] == terrain_id):
+				continue
+			var w: int = 0
+			while x + w < size and terrain[i + w] == terrain_id:
+				w += 1
+			var h: int = 0
+			while y + h < size and terrain[i + h * size] == terrain_id:
+				h += 1
+			out.append(Vector2i(x + ((w - 1) >> 1), y + ((h - 1) >> 1)))
+	return out

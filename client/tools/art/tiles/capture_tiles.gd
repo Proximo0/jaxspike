@@ -8,7 +8,7 @@ extends SceneTree
 const MAP: int = 512
 const SHOTS: Array[Dictionary] = [
 	{"name": "solmera_square", "tile": Vector2(256.0, 257.0)},
-	{"name": "field_edge", "tile": Vector2(282.0, 297.0)},
+	{"name": "field_edge", "tile": Vector2(282.0, 294.0)},
 ]
 const ZOOMS: Array[float] = [1.0, 2.0]
 const SPRITES: Array[Dictionary] = [
@@ -49,8 +49,7 @@ func _initialize() -> void:
 	_sprites = Node2D.new()
 	root.add_child(_sprites)
 	_camera = Camera2D.new()
-	root.add_child(_camera)
-	_camera.make_current()
+	root.add_child(_camera)  # the only Camera2D: current once it enters the tree
 	_run.call_deferred(build_ms)
 
 
