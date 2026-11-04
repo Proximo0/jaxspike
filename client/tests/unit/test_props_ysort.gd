@@ -117,5 +117,29 @@ func test_roof_feature_rows_and_rule_props() -> void:
 	r.free()
 
 
+func test_big_blocks_keep_the_plain_wall() -> void:
+	var m := _map(16)
+	for y: int in range(1, 3):  # 10 x 2: too wide for a roof
+		for x: int in range(1, 11):
+			_put(m, x, y, 6)
+	for y: int in range(6, 9):  # 4 x 3: a house
+		for x: int in range(2, 6):
+			_put(m, x, y, 6)
+	assert_false(MapRenderer.block_fits(m.terrain, m.size, 5, 1, 6, 6), "a 10-wide run does not fit 6")
+	assert_true(MapRenderer.block_fits(m.terrain, m.size, 3, 7, 6, 6), "a 4x3 block fits 6")
+	assert_true(MapRenderer.block_fits(m.terrain, m.size, 5, 1, 6, 0), "0 means every block")
+	if not FileAccess.file_exists(ViewMath.TILESET_INDEX):
+		return
+	var r := MapRenderer.new()
+	r.build(m)
+	if r.roof_terrain < 0:
+		r.free()
+		return
+	assert_eq(r.roof_max_block, 6)
+	assert_eq(r.props_layer.get_cell_source_id(Vector2i(5, 1)), -1, "the big block has no roof tile")
+	assert_eq(r.props_layer.get_cell_source_id(Vector2i(3, 7)), MapRenderer.ROOF_SOURCE_ID, "the house has one")
+	r.free()
+
+
 func _put(m: MapData, x: int, y: int, t: int) -> void:
 	m.terrain[y * m.size + x] = t

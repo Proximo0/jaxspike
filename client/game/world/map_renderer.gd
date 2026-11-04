@@ -155,6 +155,7 @@ const ROOF_SOURCE_ID: int = 1
 var roof_terrain: int = -1  ## terrain id that gets roofs (-1: no roofs atlas)
 var roof_feature_every: int = 0  ## tiles.json roofs.features.every (0: plain roofs only)
 var roof_row_cells: int = 2  ## atlas cell rows per roof tile (its size.y): feature row r is at atlas row r * this
+var roof_max_block: int = 0  ## tiles.json roofs.max_block: roofs only on wall blocks up to this wide and deep (0: all)
 var _rules: Array[Dictionary] = []  ## prepared tiles.json "rules" rows: {on, near, every, by_x, atlas}
 var _rules_by_terrain: Array = []  ## TERRAIN_IDS arrays of those rows, indexed by `on` (fast per-cell check)
 var _rule_flags: PackedByteArray = PackedByteArray()  ## TERRAIN_IDS bytes: 1 when that terrain has a rule
@@ -197,6 +198,34 @@ func rule_prop(terrain: PackedByteArray, size: int, x: int, y: int, t: int) -> V
 		if posmod(pick, every) == 0:
 			return r["atlas"]
 	return Vector2i(-1, -1)
+
+
+## True when the wall block through (x, y) is at most `max_block` cells wide and deep (its horizontal and vertical
+## runs of `wall_id`); a bounded scan, at most 4 * max_block reads per wall cell. 0 or less: every block fits.
+static func block_fits(terrain: PackedByteArray, size: int, x: int, y: int, wall_id: int, max_block: int) -> bool:
+	if max_block <= 0:
+		return true
+	var w: int = 1
+	var i: int = x - 1
+	while i >= 0 and w <= max_block and terrain[y * size + i] == wall_id:
+		w += 1
+		i -= 1
+	i = x + 1
+	while i < size and w <= max_block and terrain[y * size + i] == wall_id:
+		w += 1
+		i += 1
+	if w > max_block:
+		return false
+	var h: int = 1
+	var j: int = y - 1
+	while j >= 0 and h <= max_block and terrain[j * size + x] == wall_id:
+		h += 1
+		j -= 1
+	j = y + 1
+	while j < size and h <= max_block and terrain[j * size + x] == wall_id:
+		h += 1
+		j += 1
+	return h <= max_block
 
 
 ## 4-bit mask of the neighbours of (x, y) that are `wall_id`: N 1, E 2, S 4, W 8 (off-map counts as not wall).
@@ -274,6 +303,7 @@ func _make_props(index: Dictionary) -> void:
 			roof_terrain = int(roofs.get("terrain", 6))
 			roof_feature_every = int(feats.get("every", 0)) if feat_rows >= 3 else 0
 			roof_row_cells = rsz.y
+			roof_max_block = int(roofs.get("max_block", 0))
 	_rules.clear()
 	_rules_by_terrain.clear()
 	_rule_flags.resize(TERRAIN_IDS)
@@ -364,7 +394,7 @@ func _fill_tileset(map: MapData, index: Dictionary) -> void:
 					var v: int = ViewMath.prop_variant(x, y, list.size(), shop_by_x and t == SHOP_ID)
 					props_layer.set_cell(cell, SOURCE_ID, list[v])
 					prop_tiles += 1
-				elif t == roof_terrain:
+				elif t == roof_terrain and block_fits(terrain, size, x, y, t, roof_max_block):
 					var mask: int = wall_mask(terrain, size, x, y, t)
 					props_layer.set_cell(cell, ROOF_SOURCE_ID,
 							Vector2i(mask, roof_feature_row(mask, x, y, roof_feature_every) * roof_row_cells))

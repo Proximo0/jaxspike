@@ -677,7 +677,9 @@
    ],
    "every": 3,
    "_doc": "row 1 door / row 2 window on wall cells whose S side is open and that have wall neighbours W and E (a house front); picked by tile_hash % every: 1 door, 0 window, else plain"
-  }
+  },
+  "max_block": 6,
+  "_doc_max_block": "roofs (and door/window fronts) only on wall blocks up to max_block tiles wide and deep; bigger decor rects keep the plain wall until map_gen splits them into houses"
  },
  "rules": [
   {
