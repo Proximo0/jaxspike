@@ -154,7 +154,10 @@ const ROOF_SOURCE_ID: int = 1
 
 var roof_terrain: int = -1  ## terrain id that gets roofs (-1: no roofs atlas)
 var roof_feature_every: int = 0  ## tiles.json roofs.features.every (0: plain roofs only)
+var roof_row_cells: int = 2  ## atlas cell rows per roof tile (its size.y): feature row r is at atlas row r * this
 var _rules: Array[Dictionary] = []  ## prepared tiles.json "rules" rows: {on, near, every, by_x, atlas}
+var _rules_by_terrain: Array = []  ## TERRAIN_IDS arrays of those rows, indexed by `on` (fast per-cell check)
+var _rule_flags: PackedByteArray = PackedByteArray()  ## TERRAIN_IDS bytes: 1 when that terrain has a rule
 
 
 static func prop_sort_origin(base_px: int, atlas_cell_px: int) -> int:
@@ -178,9 +181,10 @@ static func roof_feature_row(mask: int, x: int, y: int, every: int) -> int:
 ## 4-neighbour of terrain `near` gets `prop` when (by_x ? x : tile_hash) % every == 0. Returns the prop's atlas
 ## coords or (-1, -1). `_rules` is prepared by _make_props from the index.
 func rule_prop(terrain: PackedByteArray, size: int, x: int, y: int, t: int) -> Vector2i:
-	for r: Dictionary in _rules:
-		if int(r["on"]) != t:
-			continue
+	if t < 0 or t >= _rules_by_terrain.size():
+		return Vector2i(-1, -1)
+	var rules_here: Array = _rules_by_terrain[t]  # empty for every terrain without a rule: one index per bare cell
+	for r: Dictionary in rules_here:
 		var near: int = int(r["near"])
 		var touches: bool = (y > 0 and terrain[(y - 1) * size + x] == near) \
 				or (x < size - 1 and terrain[y * size + x + 1] == near) \
@@ -252,28 +256,41 @@ func _make_props(index: Dictionary) -> void:
 		var rorg: Vector2i = _vec2i(roofs.get("origin", [0, 32]))
 		var rbase: int = int(roofs.get("base_px", cell_px / 2))
 		var made: int = 0
-		for c: int in range(int(roofs.get("columns", 16))):
-			var at := Vector2i(c, 0)
-			if not rs.has_room_for_tile(at, rsz, 1, Vector2i.ZERO, 1):
-				continue
-			rs.create_tile(at, rsz)
-			var rtd: TileData = rs.get_tile_data(at, 0)
-			rtd.texture_origin = rorg
-			rtd.y_sort_origin = prop_sort_origin(rbase, cell_px)
-			made += 1
+		var feats: Dictionary = roofs.get("features", {})
+		var feat_rows: int = maxi(1, (feats.get("rows", ["plain"]) as Array).size())
+		for fr: int in range(feat_rows):
+			for c: int in range(int(roofs.get("columns", 16))):
+				var at := Vector2i(c, fr * rsz.y)  # a 1x2 tile spans two atlas cells: feature row r sits at cell row r*2
+				if not rs.has_room_for_tile(at, rsz, 1, Vector2i.ZERO, 1):
+					continue
+				rs.create_tile(at, rsz)
+				var rtd: TileData = rs.get_tile_data(at, 0)
+				rtd.texture_origin = rorg
+				rtd.y_sort_origin = prop_sort_origin(rbase, cell_px)
+				if fr == 0:
+					made += 1
 		if made == 16:
 			ts.add_source(rs, ROOF_SOURCE_ID)
 			roof_terrain = int(roofs.get("terrain", 6))
-			var feats: Dictionary = roofs.get("features", {})
-			roof_feature_every = int(feats.get("every", 0)) if (feats.get("rows", []) as Array).size() >= 3 else 0
+			roof_feature_every = int(feats.get("every", 0)) if feat_rows >= 3 else 0
+			roof_row_cells = rsz.y
 	_rules.clear()
+	_rules_by_terrain.clear()
+	_rule_flags.resize(TERRAIN_IDS)
+	_rule_flags.fill(0)
+	for t: int in range(TERRAIN_IDS):
+		_rules_by_terrain.append([])
 	for r: Variant in index.get("rules", []):
 		var rd: Dictionary = r
 		var pname: String = str(rd.get("prop", ""))
-		if not cells.has(pname):
+		var on: int = int(rd.get("on", -1))
+		if not cells.has(pname) or on < 0 or on >= TERRAIN_IDS:
 			continue
-		_rules.append({"on": int(rd.get("on", -1)), "near": int(rd.get("near", -1)), "every": int(rd.get("every", 1)),
-				"by_x": bool(rd.get("by_x", false)), "atlas": _vec2i((cells[pname] as Dictionary).get("atlas", [0, 0]))})
+		var row: Dictionary = {"on": on, "near": int(rd.get("near", -1)), "every": int(rd.get("every", 1)),
+				"by_x": bool(rd.get("by_x", false)), "atlas": _vec2i((cells[pname] as Dictionary).get("atlas", [0, 0]))}
+		_rules.append(row)
+		(_rules_by_terrain[on] as Array).append(row)
+		_rule_flags[on] = 1
 	props_layer.tile_set = ts
 
 
@@ -349,9 +366,10 @@ func _fill_tileset(map: MapData, index: Dictionary) -> void:
 					prop_tiles += 1
 				elif t == roof_terrain:
 					var mask: int = wall_mask(terrain, size, x, y, t)
-					props_layer.set_cell(cell, ROOF_SOURCE_ID, Vector2i(mask, roof_feature_row(mask, x, y, roof_feature_every)))
+					props_layer.set_cell(cell, ROOF_SOURCE_ID,
+							Vector2i(mask, roof_feature_row(mask, x, y, roof_feature_every) * roof_row_cells))
 					prop_tiles += 1
-				else:
+				elif _rule_flags[t] == 1:  # only terrains with a rule pay the neighbour check
 					var rp: Vector2i = rule_prop(terrain, size, x, y, t)
 					if rp.x >= 0:
 						props_layer.set_cell(cell, SOURCE_ID, rp)

@@ -244,7 +244,7 @@ RAMP = JOB.get("ramp", [[0.0, 0.62], [0.42, 0.84], [0.72, 1.0]])
 OUTLINE = float(JOB.get("outline", 0.02))
 
 
-def toonify(mat):
+def toonify(mat, plain=False):
     """Rewrite a material to a 3-step cel ramp over its base colour (texture or flat), emission output."""
     nt = mat.node_tree
     if nt is None:
@@ -305,7 +305,7 @@ def toonify(mat):
         rgb = nodes.new("ShaderNodeRGB")
         rgb.outputs[0].default_value = base_rgb
         src = rgb.outputs[0]
-    if TINT:
+    if TINT and not plain:
         tn = nodes.new("ShaderNodeMix")
         tn.data_type = "RGBA"
         tn.blend_type = "MULTIPLY"
@@ -315,11 +315,11 @@ def toonify(mat):
         src = tn.outputs[2]
     # saturation / brightness push for the bright anime look
     hsv = nodes.new("ShaderNodeHueSaturation")
-    hsv.inputs["Saturation"].default_value = float(JOB.get("saturation", 1.25))
-    hsv.inputs["Value"].default_value = float(JOB.get("brightness", 1.08))
+    hsv.inputs["Saturation"].default_value = 1.0 if plain else float(JOB.get("saturation", 1.25))
+    hsv.inputs["Value"].default_value = 1.0 if plain else float(JOB.get("brightness", 1.08))
     links.new(src, hsv.inputs["Color"])
     src = hsv.outputs["Color"]
-    lift = JOB.get("lift")  # additive [r, g, b]: lightens a dark palette entry towards a pastel (multiply cannot)
+    lift = None if plain else JOB.get("lift")  # additive [r, g, b]: lightens a dark palette entry towards a pastel (multiply cannot)
     if lift:
         ln = nodes.new("ShaderNodeMix")
         ln.data_type = "RGBA"
@@ -526,6 +526,87 @@ def make_hair(spec):
     log("hair", style, "on", target.name, "verts", len(baked.vertices), "r", round(r, 3))
     return obj
 
+
+def make_eyes(spec):
+    """Sculpted anime eyes for models whose own eyes read flat: two white spheres with dark pupils and a tiny
+    highlight sphere, placed on the front of the `target` mesh and parented to `bone`. spec: {"target", "bone",
+    "size" (fraction of model height), "sep" (fraction of the head width), "up" (fraction of the head height
+    above its centre), "pupil" (fraction of the eye), "color", "pupil_color", "forward"}."""
+    import bmesh
+    bone = spec.get("bone", "Head")
+    tgt_re = re.compile(spec.get("target", ".*"))
+    target = next((o for o in kept if tgt_re.search(o.name)), None)
+    if target is None or rig is None or rig.pose.bones.get(bone) is None:
+        log("eyes: no target/bone", spec.get("target"), bone)
+        return []
+    dg2 = bpy.context.evaluated_depsgraph_get()
+    ev = target.evaluated_get(dg2)
+    pts = [ev.matrix_world @ v.co for v in ev.data.vertices]
+    lo = Vector((min(p.x for p in pts), min(p.y for p in pts), min(p.z for p in pts)))
+    hi = Vector((max(p.x for p in pts), max(p.y for p in pts), max(p.z for p in pts)))
+    c = (lo + hi) / 2
+    w, h = hi.x - lo.x, hi.z - lo.z
+    size = float(spec.get("size", 0.09)) * height
+    sep = float(spec.get("sep", 0.28)) * w
+    cz = c.z + float(spec.get("up", 0.1)) * h
+    # the eye centre sits a little inside the front face so the sphere pokes out; nearest front y at that height
+    front = min((p.y for p in pts if abs(p.z - cz) < h * 0.15), default=lo.y)
+    cy = front + size * float(spec.get("forward", 0.35))
+    out = []
+    white = bpy.data.materials.new("jx_eye_white")
+    bw = white.node_tree.nodes.get("Principled BSDF")
+    col = spec.get("color", [1.0, 1.0, 1.0])
+    if bw:
+        bw.inputs["Base Color"].default_value = (col[0], col[1], col[2], 1.0)
+    dark = bpy.data.materials.new("jx_eye_pupil")
+    bd = dark.node_tree.nodes.get("Principled BSDF")
+    pc = spec.get("pupil_color", [0.12, 0.06, 0.14])
+    if bd:
+        bd.inputs["Base Color"].default_value = (pc[0], pc[1], pc[2], 1.0)
+    for sx in (-1.0, 1.0):
+        for part, rad, mat, off in (("white", size, white, Vector((0, 0, 0))),
+                                    ("pupil", size * float(spec.get("pupil", 0.55)), dark, Vector((0, -size * 0.82, -size * 0.05))),
+                                    ("glint", size * 0.22, white, Vector((-size * 0.3 * sx, -size * 1.22, size * 0.3)))):
+            me = bpy.data.meshes.new("jx_eye_%s" % part)
+            bm = bmesh.new()
+            bmesh.ops.create_uvsphere(bm, u_segments=16, v_segments=10, radius=rad)
+            bm.to_mesh(me)
+            bm.free()
+            for p in me.polygons:
+                p.use_smooth = True
+            me.materials.append(mat)
+            obj = bpy.data.objects.new("jx_eye_%s" % part, me)
+            scene.collection.objects.link(obj)
+            obj.parent = rig
+            obj.parent_type = "BONE"
+            obj.parent_bone = bone
+            obj.matrix_world = Matrix.Translation(Vector((c.x + sx * sep, cy, cz)) + off)
+            out.append((obj, part))
+    log("eyes on", target.name, "size", round(size, 3), "sep", round(sep, 3))
+    return out
+
+
+EYES = JOB.get("eyes")
+if EYES and rig is not None:
+    try:
+        eye_mats_done = set()
+        for obj, part in make_eyes(EYES):
+            kept.append(obj)
+            emat = obj.data.materials[0]
+            if emat.name not in eye_mats_done:  # shared by both eyes: a second toonify would lose the colour
+                toonify(emat, plain=True)  # eyes keep their own colours (no kind tint/lift)
+                eye_mats_done.add(emat.name)
+            if OUTLINE > 0 and part == "white":
+                obj.data.materials.append(outline_mat)
+                em = obj.modifiers.new("jx_outline", "SOLIDIFY")
+                em.thickness = -OUTLINE * 0.6
+                em.offset = 1.0
+                em.use_flip_normals = True
+                em.use_rim = False
+                em.material_offset = 1
+                em.material_offset_rim = 1
+    except Exception as exc:  # noqa: BLE001
+        log("eyes failed:", repr(exc))
 
 HAIR = JOB.get("hair")
 if HAIR and rig is not None:

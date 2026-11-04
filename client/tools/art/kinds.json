@@ -549,10 +549,20 @@
    ],
    "squash": 0.07,
    "hide": [
-    "^Icosphere"
+    "^Icosphere",
+    "\\.00\\d$"
    ],
    "portrait_zoom": 0.8,
-   "portrait_bottom": -30
+   "portrait_bottom": -30,
+   "eyes": {
+    "target": "_Blob$",
+    "bone": "Head",
+    "size": 0.1,
+    "sep": 0.15,
+    "up": 0.1,
+    "pupil": 0.72,
+    "forward": 0.5
+   }
   },
   "moonbun": {
    "folder": "moonbun",
@@ -669,10 +679,20 @@
    ],
    "squash": 0.07,
    "hide": [
-    "^Icosphere"
+    "^Icosphere",
+    "\\.00\\d$"
    ],
    "portrait_zoom": 0.8,
-   "portrait_bottom": -30
+   "portrait_bottom": -30,
+   "eyes": {
+    "target": "_Blob$",
+    "bone": "Head",
+    "size": 0.1,
+    "sep": 0.16,
+    "up": 0.28,
+    "pupil": 0.72,
+    "forward": 0.5
+   }
   },
   "bramblet": {
    "folder": "bramblet",
@@ -745,10 +765,20 @@
    ],
    "squash": 0.07,
    "hide": [
-    "^Icosphere"
+    "^Icosphere",
+    "\\.00\\d$"
    ],
    "portrait_zoom": 0.8,
-   "portrait_bottom": -30
+   "portrait_bottom": -30,
+   "eyes": {
+    "target": "_Blob$",
+    "bone": "Head",
+    "size": 0.1,
+    "sep": 0.15,
+    "up": 0.12,
+    "pupil": 0.72,
+    "forward": 0.5
+   }
   },
   "capling": {
    "folder": "capling",
