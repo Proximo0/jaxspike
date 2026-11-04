@@ -291,6 +291,13 @@ def test_ring_by_level_sends_higher_bots_further_out():
     move, _ = run(world(pos, level=nav.BAND1_LEVEL), base=0)
     assert int(move[0]) in (NE, E, SE)  # walks away from the gate
     assert nav.RING_BY_LEVEL[1][0] > 3 * HUNT_RADIUS // 4 > nav.RING_BY_LEVEL[0][0]
+    # ro5-balance: from BAND1_OUTER_LEVEL the ring reaches band 1's outer half; below it the same spot is past ring_hi
+    assert nav.RING_BY_LEVEL[2][0] > nav.RING_BY_LEVEL[1][0] and nav.RING_BY_LEVEL[2][1] > nav.RING_BY_LEVEL[1][1]
+    lo2, hi1 = nav.RING_BY_LEVEL[2][0], nav.RING_BY_LEVEL[1][1]
+    move, _ = run(world((10 + lo2 - 3, MAP // 2), level=nav.BAND1_OUTER_LEVEL), base=0)
+    assert int(move[0]) in (NE, E, SE)  # short of the outer ring: still walking out
+    move, _ = run(world((10 + hi1 + 3, MAP // 2), level=nav.BAND1_OUTER_LEVEL - 1), base=0)
+    assert int(move[0]) in (NW, W, SW)  # beyond the inner band-1 ring: turns back toward the gate
 
 
 def test_walking_away_prefers_a_zone_portal_tile():

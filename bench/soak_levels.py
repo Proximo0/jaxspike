@@ -83,7 +83,7 @@ def main(batch=2, chunks=20, ticks=250, seed=0, dungeons=True, zones=False, dens
         worlds = {k: v for k, v in worlds.items() if k != "dist_dungeon"}
     elif "dist_dungeon" not in worlds:
         worlds = {**worlds, "dist_dungeon": jax.lax.map(nav.dungeon_fields, worlds["terrain"])}
-    if density:  # the runner placement line (ro_spawns.spawn_tiles) until bots/runner.py has it
+    if density:  # re-roll the placement with ro_spawns.repopulate (bots/runner.py already uses spawn_tiles, round 4)
         keys = jax.random.split(jax.random.PRNGKey(seed + 7919), batch)
         worlds = jax.vmap(lambda w, k: ro_spawns.repopulate(w, k, POP_MONSTERS))(worlds, keys)
     jax.block_until_ready(worlds)
@@ -169,15 +169,19 @@ def curve_table(first_base, total, kills, dpb):
     """Leveling-curve table: ticks (and game hours at TICK_MS) until the first and the median bot reach each
     CURVE_LEVELS base level, with the EXP_RATE projection (ticks / rate: exp per kill scales, kill rate does not)."""
     print(f"\nleveling curve ({total} ticks measured; kills/bot/1k {kills:.2f}, deaths/bot/1k {dpb:.3f}):")
-    print("  base level | reached by | first (ticks) | median (ticks) | median (h) | " +
+    # "median" is over the bots that got there; "all-bot median" counts the rest as not there yet (ro5-balance: with
+    # 17/128 at base 10 the first figure reads like a curve when most bots are still levels below)
+    print("  base level | reached by | first (ticks) | median (ticks) | median (h) | all-bot median | " +
           " | ".join(f"median at EXP_RATE {r}" for r in EXP_RATES))
     for lv, arr in first_base.items():
         hit = arr[arr >= 0]
         if hit.size:
             med = float(np.median(hit))
             proj = " | ".join(f"{med / r:.0f}" for r in EXP_RATES)
+            allmed = (f"{np.median(np.where(arr >= 0, arr, np.iinfo(np.int64).max)):.0f}"
+                      if 2 * hit.size >= arr.size else f"> {total}")
             print(f"  {lv:10d} | {hit.size:4d}/{arr.size:<4d} | {hit.min():13d} | {med:14.0f} | "
-                  f"{med * TICK_MS / 3.6e6:10.2f} | {proj}")
+                  f"{med * TICK_MS / 3.6e6:10.2f} | {allmed:>14} | {proj}")
         else:
             print(f"  {lv:10d} | {0:4d}/{arr.size:<4d} | not reached within {total} ticks")
 

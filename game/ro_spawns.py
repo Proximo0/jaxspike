@@ -47,7 +47,12 @@ assert len(BAND_DENSITY) == N_BANDS
 # Kind weights per band, (inner half, outer half), by name (every name must be in that band's FIELD_BANDS list;
 # missing names weigh 0). Tuned 2026-11-03 (ro4-balance).
 SPAWN_MIX = (
-    ({"Blobbin": 60, "Wrigglet": 25, "Moonbun": 15},
+    # inner band 0 was Blobbin 60 / Wrigglet 25 / Moonbun 15 (round 4); round 5 (ro5-balance) moves weight to the
+    # sturdier Wrigglet / Moonbun (more hp lost and more exp per kill), which holds kills under 5 per bot per 1000
+    # ticks with the riskier bot margins (bots/ro_nav_policy at 15 / 50 / 0, 1 world x 1000 ticks: Blobbin 60 / 25 /
+    # 15 gave 5.47 kills; 35 / 35 / 30 gave 4.99; this mix at 15 / 45 / 0 gave 5.28 kills and 0.31 deaths; Blobbin
+    # stays at half the inner mix: the round-4 rule that a fresh Novice hits most first prey at 80%, test_ro_spawns)
+    ({"Blobbin": 50, "Wrigglet": 25, "Moonbun": 25},
      {"Blobbin": 25, "Wrigglet": 25, "Moonbun": 25, "Emberblob": 25}),
     ({"Bramblet": 60, "Fiddlehop": 40},
      {"Bramblet": 20, "Fiddlehop": 25, "Pilferbug": 25, "Capling": 15, "Vexblob": 15}),

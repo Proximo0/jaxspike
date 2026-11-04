@@ -46,15 +46,20 @@ except ImportError:  # pragma: no cover - legacy 4-direction engine
 
 DELTAS = jnp.asarray(_DELTAS_T, jnp.int32)  # [K + 1, 2], code 0 = stay
 N_DIRS = len(_DELTAS_T) - 1
-RETREAT_PCT = 55        # below this percent of max_hp: stop hunting (sit where it is safe, else walk home)
+# Margins (ro5-balance, 2026-11-03): round 4's RETREAT 55 / COST_SAFETY 125 / FLOOR 10 gave 0.06 deaths per bot per
+# 1000 ticks (GPU 64x1000; target 0.3-0.6). Bots now hunt down to RETREAT_PCT and take a fight expected to cost up to
+# 100 / COST_SAFETY_PCT times their hp (a gamble), so some lose; regen is linear, so a lost fight (respawn at full hp)
+# also lifts kills a little. Measured with scratch diag over 1 world x 1000 ticks, seed 0: 5.66 kills / 0.41 deaths
+# at 10 / 40 / 0, 5.47 / 0.29 at 15 / 50 / 0, 5.14 / 0.29 at 15 / 45 / 0 with the round-5 band-0 mix (ro_spawns).
+RETREAT_PCT = 15        # below this percent of max_hp: stop hunting (sit where it is safe, else walk home)
 REST_PCT = 90           # a sitting bot (in town or in a safe field spot) stands up at this percent
 # Prey choice (ro4-balance, "fight what you can hit"): the nearest monster is chased and hit only when the bot's
 # hit chance on it (80 + HIT - (level + AGI), combat.hit_percent_player) is at least MIN_HIT_PCT and the HP the bot
 # expects to lose killing it, times COST_SAFETY_PCT / 100, leaves it above FLOOR_PCT of max_hp. A passive monster
 # that fails the test is left alone even when adjacent (it never starts a fight); a provoked one is fought back.
 MIN_HIT_PCT = 70
-COST_SAFETY_PCT = 125
-FLOOR_PCT = 10
+COST_SAFETY_PCT = 45    # was 125 (round 4): below 100 the bot accepts fights expected to cost more than its hp
+FLOOR_PCT = 0           # was 10
 SAFE_DIST = 3           # field rest only when no aggressive or provoked monster is within this many cells
 # Monster swing period the bot's estimate assumes: the engine's (combat.py swings every MONSTER_ATTACK_COOLDOWN
 # ticks); switch to max(1, (mdata.ADELAY_MS + TICK_MS // 2) // TICK_MS) per kind together with combat.
@@ -72,7 +77,11 @@ BAND1_LEVEL = 5         # from this base level a bot hunts out to the inner half
 # (game/ro_spawns: walk distance < HUNT_RADIUS, Blobbin-class prey; it used to reach 2 * HUNT_RADIUS, half of it in
 # band 1, where the level 9-16 kinds killed level-1 bots); from BAND1_LEVEL band 0's outer half and band 1's inner
 # half (Bramblet / Fiddlehop; the aggressive Pilferbug and Vexblob / Capling live in band 1's outer half).
-RING_BY_LEVEL = ((HUNT_RADIUS // 3, HUNT_RADIUS), (HUNT_RADIUS * 4 // 5, HUNT_RADIUS * 3 // 2))
+# From BAND1_OUTER_LEVEL (ro5-balance) band 1's outer half too: level 6-9 bots on the inner ring killed 6.4 per 1000
+# ticks and died 0.02-0.08 (soak_levels 1 world x 20000 ticks), the inner prey no longer a risk once DEX and STR grow.
+BAND1_OUTER_LEVEL = 7
+RING_BY_LEVEL = ((HUNT_RADIUS // 3, HUNT_RADIUS), (HUNT_RADIUS * 4 // 5, HUNT_RADIUS * 3 // 2),
+                 (HUNT_RADIUS * 5 // 4, HUNT_RADIUS * 2))
 FOLLOW_MIN = 6          # a party member farther than this (manhattan) from its leader walks toward it
 WARP_WAIT_TICKS = 4     # a bot left standing on a warp tile (destination busy) waits all but one tick in four
 
@@ -86,7 +95,7 @@ _SLOT = jnp.arange(MAX_PLAYERS, dtype=jnp.int32)
 _HOME = _SLOT % len(TOWNS)
 _IS_GATHERER = _SLOT % GATHER_EVERY == 1
 _STEPS = DELTAS[1:]  # [K, 2]
-_RING = jnp.asarray(RING_BY_LEVEL, jnp.int32)  # [2, 2]
+_RING = jnp.asarray(RING_BY_LEVEL, jnp.int32)  # [3, 2]
 
 
 def _tile_mask(tiles):
@@ -369,7 +378,7 @@ def nav_moves(world, key, base_move, shop=None):
     field = world["dist_town"]
     own = field[_HOME, pos[:, 0], pos[:, 1]].astype(jnp.int32)
     nbr = field[_HOME[:, None], tgt[..., 0], tgt[..., 1]].astype(jnp.int32)
-    ring = _RING[(level >= BAND1_LEVEL).astype(jnp.int32)]  # [N, 2]
+    ring = _RING[(level >= BAND1_LEVEL).astype(jnp.int32) + (level >= BAND1_OUTER_LEVEL).astype(jnp.int32)]  # [N, 2]
     ring_lo, ring_hi = ring[:, 0], ring[:, 1]
     toward, can_toward = _pick(nbr, free)
     can_toward = can_toward & (jnp.min(jnp.where(free, nbr, 1 << 30), axis=1) < own)
