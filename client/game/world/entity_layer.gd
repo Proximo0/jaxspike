@@ -23,6 +23,10 @@ var use_placeholders: bool = true  ## players and monsters animate, with Placeho
 var auto_refresh: bool = true  ## refresh from _process with the wall clock (the lab drives a virtual clock instead)
 
 var configured_count: int = 0  ## Sprites configured in the last refresh (for tests and the overlay).
+
+
+func _init() -> void:
+	y_sort_enabled = true  # sprites sort by their tile-centre y together with the map's y-sorted Props (nested sort)
 var clock: RenderClock = RenderClock.new()
 var pops: DamagePops = DamagePops.new()
 var last_render_ms: float = 0.0  ## server ms drawn by the last refresh
@@ -49,7 +53,7 @@ var _rec_list: Array[LayerEntityRec] = []  ## _recs values, rebuilt when ids com
 var _recs_dirty: bool = false
 var card_fx: CardSparkle = null  ## ro4-cards: sparkles over card drops, made on the first one
 ## ro4-pvp: the arena floor (welcome.world.pvp.arena; Hud.set_welcome sets it). Players standing on it, or whose
-## row carries `pk: true`, can be attacked: their name is drawn in PVP_NAME_COLOR.
+## row carries the PK flag (ro5-pvp2: wire key `k` = 1, docs/anim_wire.md), are drawn with PVP_NAME_COLOR names.
 static var pvp_arena: Rect2i = Rect2i()
 const PVP_NAME_COLOR: Color = Color(1.0, 0.36, 0.3)
 
@@ -271,13 +275,16 @@ func _update(id: int, render: float, tile_px: float, label_px: int) -> void:
 		sprite.configure(kind, own, label, ViewMath.hp_fraction(hp, max_hp),
 				tile_px, label_px, tex, cat == ViewMath.CAT_NODE and ViewMath.node_depleted(hp), cat)
 	sprite.visible = true
-	sprite.z_index = 10 if id == own_id else 2 - mini(cat, ViewMath.CAT_DROP)
+	# y-sorted world (round 4, ro3-art): players, monsters and nodes draw in feet order against the map's props
+	# (MapRenderer's Props layer, z 0); loot stays under feet at z -1. The own player is no longer forced on top.
+	sprite.z_index = -1 if cat == ViewMath.CAT_DROP else 0
 	configured_count += 1
 
 
-## ro4-pvp: true when the row is PvP-attackable: it carries `pk: true`, or its tile is on the arena floor.
+## ro4-pvp: true when the row is PvP-attackable: it carries the PK flag (`k` from the wire, ro5-pvp2; the older
+## `pk: true` still counts), or its tile is on the arena floor.
 static func pvp_marked(e: Dictionary) -> bool:
-	if bool(e.get("pk", false)):
+	if int(e.get("k", 0)) != 0 or bool(e.get("pk", false)):
 		return true
 	if pvp_arena.size == Vector2i.ZERO or not e.has("pos"):
 		return false
@@ -487,6 +494,10 @@ func entity_texture(e: Dictionary, cat: int) -> Texture2D:
 		ViewMath.CAT_DROP:
 			key = AssetSlots.item_key(int(e.get("item", 0)))
 		ViewMath.CAT_NODE:
+			# crafting stations draw the tiles team's prop art (tiles.json props.nodes); gather nodes get null and keep their shapes
+			var prop_tex: Texture2D = ViewMath.node_prop_texture(int(e.get("kind", 0)))
+			if prop_tex != null:
+				return prop_tex
 			key = "node.%d" % (int(e.get("kind", 0)) - ViewMath.NODE_KIND_BASE)
 	return slot_texture(key)
 
