@@ -87,10 +87,11 @@ def test_feel_target_swings_per_second():
 def _derived(job=NOV, level=1, **stats):
     from game import ro_stats
     from game.state import make_empty_world
+    from tests.bare_world import bare
     st = ro_stats.make_state()
     for k, v in {"job": job, "base_level": level, **stats}.items():
         st[k] = st[k].at[0].set(v)
-    w = {**make_empty_world(jax.random.PRNGKey(0)), "stats": st}
+    w = {**bare(make_empty_world(jax.random.PRNGKey(0))), "stats": st}
     return {k: int(v[0]) for k, v in ro_stats.derived(w).items()}
 
 

@@ -6,6 +6,7 @@ from game import ro_stats
 from game.config import MAX_PLAYERS
 from game.data import stats as S
 from game.state import empty_inputs, make_empty_world
+from tests.bare_world import bare
 
 PHASE = jax.jit(ro_stats.phase)
 NEG = jnp.full((MAX_PLAYERS,), -1, jnp.int32)
@@ -70,7 +71,8 @@ def test_fresh_novice_derived():
     assert int(d["max_hp"][0]) == 40  # RO pre-re Novice level 1 = 40 HP
     assert int(d["hit"][0]) == 2  # RO: level 1 + dex 1
     assert int(d["flee"][0]) == 2  # RO: level 1 + agi 1
-    assert int(d["aspd"][0]) == 151 and int(d["aspd_ticks"][0]) == 10  # Novice fist 150, delay 980 ms
+    # the starter kit's Knife is worn: ASPD 136, 13 ticks
+    assert int(d["aspd"][0]) == 136 and int(d["aspd_ticks"][0]) == 13
     assert 990 <= int(d["cast_mult"][0]) <= 1000
     assert int(d["max_sp"][0]) >= 10
     assert d["max_hp"].dtype == jnp.int32 and d["max_hp"].shape == (MAX_PLAYERS,)
@@ -284,13 +286,13 @@ def test_swordsman_sword_aspd_from_weapon_column():
     from game.data import items as I
     from game.ro_items import make_state as make_items
     w = _set(_world(), 0, job=S.JOB_SWORDSMAN)
-    bare = ro_stats.derived(w)
+    fist = ro_stats.derived(bare(w))
     it = make_items()
     it["equip"] = it["equip"].at[0, I.EQ_WEAPON].set(0)
     it["inv_count"] = it["inv_count"].at[0, 0].set(1)
     w = {**w, "items": it, "players": {**w["players"], "inv": w["players"]["inv"].at[0, 0].set(I.ITEM_SWORD)}}
     d = ro_stats.derived(w)
-    assert int(bare["aspd"][0]) == 200 - 40 * 995 // 1000  # fist 160
+    assert int(fist["aspd"][0]) == 200 - 40 * 995 // 1000  # fist 160
     assert int(d["aspd"][0]) == 200 - 55 * 995 // 1000  # sword column 145
 
 

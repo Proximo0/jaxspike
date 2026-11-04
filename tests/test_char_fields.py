@@ -6,13 +6,14 @@ from game.data import items as item_data
 from game.data.skills import N_SKILLS
 from game.state import make_empty_world
 from net import characters, char_fields
+from tests.bare_world import bare
 
 SLOT = 5
 
 
 def _geared(world):
     """Give SLOT a refined, carded, worn weapon, potions, ryn, stats, skills and craft progress."""
-    w = jax.device_get(world)
+    w = jax.device_get(bare(world))
     w = jax.tree_util.tree_map(np.array, w)
     weapon = next(i for i in range(item_data.N_ITEMS) if int(item_data.KIND[i]) == item_data.KIND_WEAPON
                   and int(item_data.SLOTS[i]) > 0)
@@ -64,7 +65,7 @@ def test_apply_missing_fields_keeps_fresh():
 def test_fresh_character_extracts_to_fresh_fields():
     w = jax.device_get(make_empty_world(None))
     got = char_fields.character_fields(w, 0)
-    fresh = char_fields.fresh_ro_fields()
+    fresh = characters.new_character(0, (0, 0))  # a fresh character wears the Novice starter kit
     for k in char_fields.RO_KEYS:
         np.testing.assert_array_equal(got[k], fresh[k], err_msg=k)
 

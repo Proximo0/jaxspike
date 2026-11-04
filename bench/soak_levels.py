@@ -75,7 +75,17 @@ def zone_census(worlds):
     return np.asarray(jax.vmap(one)(worlds).sum(0))
 
 
-def main(batch=2, chunks=20, ticks=250, seed=0, dungeons=True, zones=False, density=False):
+def with_starter_kit(worlds):
+    """Every slot wearing the Novice starter kit (Knife in inventory slot 0, Cotton Shirt in slot 1), as the
+    ro6-balance game/state.py line gives new worlds; a no-op once state.py already does it."""
+    from game.data import items as I
+    p, it = worlds["players"], worlds["items"]
+    return {**worlds, "players": {**p, "inv": p["inv"].at[..., 0].set(I.ITEM_KNIFE).at[..., 1].set(I.ITEM_COTTON_SHIRT)},
+            "items": {**it, "inv_count": it["inv_count"].at[..., :2].set(1),
+                      "equip": it["equip"].at[..., I.EQ_WEAPON].set(0).at[..., I.EQ_BODY].set(1)}}
+
+
+def main(batch=2, chunks=20, ticks=250, seed=0, dungeons=True, zones=False, density=False, kit=False):
     print("platform:", jax.devices()[0].platform, flush=True)
     t0 = time.perf_counter()
     worlds = make_world_batch(seed, batch)  # the runner adds world["dist_dungeon"] already
@@ -86,9 +96,11 @@ def main(batch=2, chunks=20, ticks=250, seed=0, dungeons=True, zones=False, dens
     if density:  # re-roll the placement with ro_spawns.repopulate (bots/runner.py already uses spawn_tiles, round 4)
         keys = jax.random.split(jax.random.PRNGKey(seed + 7919), batch)
         worlds = jax.vmap(lambda w, k: ro_spawns.repopulate(w, k, POP_MONSTERS))(worlds, keys)
+    if kit:
+        worlds = with_starter_kit(worlds)
     jax.block_until_ready(worlds)
     print(f"built {batch} worlds in {time.perf_counter() - t0:.1f}s (dungeon fields: {dungeons}, "
-          f"spawn density: {density})", flush=True)
+          f"spawn density: {density}, starter kit: {kit})", flush=True)
 
     n = POP_PLAYERS
     first_base10 = np.full((batch, n), -1)
@@ -198,5 +210,7 @@ if __name__ == "__main__":
     ap.add_argument("--zones", action="store_true", help="also print living bots per RO zone after each chunk")
     ap.add_argument("--density", action="store_true",
                     help="re-place the monsters with game/ro_spawns.spawn_tiles (band density) after the runner")
+    ap.add_argument("--kit", action="store_true",
+                    help="every slot wears the Novice starter kit (Knife + Cotton Shirt) before the first tick")
     a = ap.parse_args()
-    main(a.batch, a.chunks, a.ticks, a.seed, not a.no_dungeons, a.zones, a.density)
+    main(a.batch, a.chunks, a.ticks, a.seed, not a.no_dungeons, a.zones, a.density, a.kit)

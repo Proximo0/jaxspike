@@ -7,6 +7,7 @@ from game.config import MAX_MONSTERS, MAX_PLAYERS
 from game.data import monsters as mon
 from game.data.items import ITEM_NONE
 from game.state import make_empty_world
+from tests.bare_world import bare
 
 KIND = mon.KIND_BY_NAME["Scorchstripe"]
 assert bool(mon.MVP[KIND])
@@ -17,7 +18,7 @@ DROP = [int(x) for x in ro_mvp.MVP_DROP[KIND]]
 
 
 def mk():
-    w = make_empty_world(jax.random.PRNGKey(0))
+    w = bare(make_empty_world(jax.random.PRNGKey(0)))
     w = {**w, "mvp": ro_mvp.make_state()}
     p = w["players"]
     w = {**w, "players": {**p, "active": p["active"].at[:4].set(True)}}

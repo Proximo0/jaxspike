@@ -10,10 +10,11 @@ from game.data.items import ITEM_JELLY_BEAD, ITEM_TIGER_SKIN
 from game.loot import loot
 from game.ro_drops import roll_drops
 from game.state import make_empty_world, next_key
+from tests.bare_world import bare
 
 
 def world_with(seed=0):
-    return make_empty_world(jax.random.PRNGKey(seed))
+    return bare(make_empty_world(jax.random.PRNGKey(seed)))
 
 
 def set_drop(w, i, pos, item, ttl=DROP_TTL):

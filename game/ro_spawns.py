@@ -40,7 +40,11 @@ BAND_KINDS, BAND_COUNT = _table([b[2] for b in FIELD_BANDS])
 DUNGEON_KINDS, DUNGEON_COUNT = _table([d[4] for d in DUNGEONS])
 
 # Relative spawn weight per walkable tile: field bands 0..N_BANDS-1, then dungeons. Tuned 2026-11-02 (ro3-balance).
-BAND_DENSITY = (6.0, 1.5, 0.55)
+# ro6-balance: band 0 6.0 -> 2.5 and band 1 1.5 -> 2.5. With the starter Knife a level-1 Novice kills a Blobbin in
+# two hits, so the kill rate is set by the walk to the next prey, not by hp regen (1 world x 1000 ticks with the
+# kit: 6.0 gave 7.3 kills per bot per 1000 ticks at 300 ticks, 2.5 gave 4.1). Band 1 is denser so the level 2+ bots
+# (BAND1_LEVEL 2, bots/ro_nav_policy) find prey there; 3.0 with 20% Pilferbug gave 0.85 deaths at 1000 ticks (seed 1).
+BAND_DENSITY = (2.5, 2.5, 0.55)
 DUNGEON_DENSITY = 1.0
 assert len(BAND_DENSITY) == N_BANDS
 
@@ -54,7 +58,9 @@ SPAWN_MIX = (
     # stays at half the inner mix: the round-4 rule that a fresh Novice hits most first prey at 80%, test_ro_spawns)
     ({"Blobbin": 50, "Wrigglet": 25, "Moonbun": 25},
      {"Blobbin": 25, "Wrigglet": 25, "Moonbun": 25, "Emberblob": 25}),
-    ({"Bramblet": 60, "Fiddlehop": 40},
+    # inner band 1 was Bramblet 60 / Fiddlehop 40; ro6-balance adds the aggressive Pilferbug: with the starter Knife,
+    # level 2-4 bots out-hit this band, and an aggressive kind is what keeps deaths at 0.3-0.6 per 1000 ticks
+    ({"Bramblet": 50, "Fiddlehop": 35, "Pilferbug": 15},
      {"Bramblet": 20, "Fiddlehop": 25, "Pilferbug": 25, "Capling": 15, "Vexblob": 15}),
     ({"Snarlfang": 35, "Gallopeck": 35, "Sandgulper": 30},
      {"Snarlfang": 15, "Gallopeck": 15, "Sandgulper": 20, "Grumblebear": 25, "Grukk Brute": 25}),

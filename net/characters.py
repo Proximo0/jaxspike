@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 
 from game.config import INV_SLOTS, MAP, PLAYER_MAX_HP
-from game.data.items import N_ITEMS
+from game.data.items import EQ_BODY, EQ_WEAPON, ITEM_COTTON_SHIRT, ITEM_KNIFE, N_ITEMS
 from game.world_layout import TOWNS
 from net import char_fields
 from net.waybell import character_storage, new_storage
@@ -26,11 +26,15 @@ def valid_name(name: str) -> str | None:
 
 
 def new_character(town: int, tile: tuple[int, int]) -> dict:
-    """Build a fresh character standing on its spawn tile."""
+    """Build a fresh character standing on its spawn tile, wearing the Novice starter gear (Knife, Cotton Shirt)."""
     xy = np.array(tile, dtype=np.int32)
+    inv = np.zeros(INV_SLOTS, np.int32)
+    inv[:2] = (ITEM_KNIFE, ITEM_COTTON_SHIRT)
+    ro = char_fields.fresh_ro_fields(inv)  # items_inv_count = 1 where inv != 0
+    ro["items_equip"][EQ_WEAPON], ro["items_equip"][EQ_BODY] = 0, 1
     return {"town": int(town), "pos": xy.copy(), "spawn": xy.copy(),
-            "hp": PLAYER_MAX_HP, "inv": np.zeros(INV_SLOTS, np.int32),
-            "kills": 0, "deaths": 0, **char_fields.fresh_ro_fields(), "storage": new_storage()}
+            "hp": PLAYER_MAX_HP, "inv": inv,
+            "kills": 0, "deaths": 0, **ro, "storage": new_storage()}
 
 
 def save(chars_dir: Path, name: str, fields: dict, guard=None) -> None:

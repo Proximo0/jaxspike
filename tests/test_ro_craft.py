@@ -6,6 +6,7 @@ from game import ro_craft as rc
 from game.config import INV_SLOTS, MAP, MAX_PLAYERS
 from game.data import craft as C
 from game.state import empty_inputs, make_empty_world
+from tests.bare_world import bare
 
 
 def inv_of(*rows):
@@ -21,7 +22,7 @@ def vec(i, item):
 
 def make_world(players=(), nodes=(), seed=0):
     """Empty world with craft block; players = [(slot, x, y)], nodes = [(slot, kind, x, y)] (placed, active)."""
-    w = make_empty_world(jax.random.PRNGKey(seed))
+    w = bare(make_empty_world(jax.random.PRNGKey(seed)))
     cr = rc.make_state()
     pl = w["players"]
     for i, x, y in players:

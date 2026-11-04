@@ -6,12 +6,13 @@ from game.combat import combat
 from game.config import PLAYER_MAX_HP, TICK_MS, MONSTER_ATTACK_COOLDOWN, MONSTER_HP, MONSTER_RESPAWN_TICKS
 from game.data import monsters as mdata
 from game.state import empty_inputs, make_empty_world
+from tests.bare_world import bare
 
 ORC = 1  # Grukk Brute: aggro, atk 6..9, def 5, level 14
 
 
 def _world(player_pos=(20, 20), monster_pos=(21, 20), kind=0):
-    w = make_empty_world(jax.random.PRNGKey(0))
+    w = bare(make_empty_world(jax.random.PRNGKey(0)))
     p, m = w["players"], w["monsters"]
     p = {**p, "pos": p["pos"].at[0].set(jnp.array(player_pos)),
          "spawn": p["spawn"].at[0].set(jnp.array([30, 30])),
@@ -44,7 +45,7 @@ def _fake_equipped(monkeypatch, weapon_atk=0, weapon_elem=0, armor_def=0):
 
 def _fresh():
     """Derived values of player 0, a fresh Novice."""
-    return {k: int(v[0]) for k, v in ro_stats.derived(make_empty_world(jax.random.PRNGKey(0))).items()}
+    return {k: int(v[0]) for k, v in ro_stats.derived(bare(make_empty_world(jax.random.PRNGKey(0)))).items()}
 
 
 def _dmg_to_monster(w, seeds=range(30)):

@@ -123,8 +123,10 @@ def test_spawn_tiles_distinct_weighted_and_jittable():
     tiles = np.array([((tw > 0) & (np.asarray(ro_spawns.spawn_plan(_terrain, _fields)) == b)).sum()
                       for b in range(len(FIELD_BANDS))], float)
     uniform = tiles / tiles.sum()
-    # band 0 is the densest band: its share of the population beats its share of the tiles by a wide margin
-    assert share[0] > 3 * uniform[0] and share[0] > 0.25
+    # band 0 is at least as dense as band 1 (ro6-balance: 2.5 / 2.5, band 1 is where level 2+ bots hunt with the
+    # starter kit) and both are far denser than the outer field
+    assert ro_spawns.BAND_DENSITY[0] >= ro_spawns.BAND_DENSITY[1] > 2 * ro_spawns.BAND_DENSITY[2]
+    assert share[0] > 1.5 * uniform[0] and share[2] < uniform[2]
 
 
 def test_kind_mix_weights():
@@ -147,15 +149,19 @@ def test_kind_mix_weights():
 
 def test_mix_steps_up_with_distance_and_novice_prey_is_hittable():
     """The inner half of band 0 is mostly prey a fresh Novice (HIT 2) hits 80%+ of the time and that cannot one-shot
-    40 hp; the aggressive and level 14+ band-1 kinds only spawn in band 1's outer half."""
+    40 hp; the level 14+ band-1 kinds only spawn in band 1's outer half, and the only aggressive kind in its inner
+    half is the level-6 Pilferbug at no more than a quarter of the mix (ro6-balance: with the starter Knife it is what
+    keeps deaths at 0.3-0.6 per 1000 ticks)."""
     from game.data import monsters as md
     inner0 = ro_spawns.SPAWN_MIX[0][0]
     hit80 = sum(w for n, w in inner0.items() if 80 + 2 - (int(md.LEVEL[K[n]]) + int(md.AGI[K[n]])) >= 80)
     assert hit80 / sum(inner0.values()) >= 0.5
     for band0 in ro_spawns.SPAWN_MIX[0]:
         assert all(int(md.ATK_MAX[K[n]]) < 40 for n in band0)
-    for n in ro_spawns.SPAWN_MIX[1][0]:
-        assert not bool(md.AGGRO[K[n]]) and int(md.LEVEL[K[n]]) < 14
+    inner1 = ro_spawns.SPAWN_MIX[1][0]
+    for n in inner1:
+        assert int(md.LEVEL[K[n]]) < 14 and (not bool(md.AGGRO[K[n]]) or n == "Pilferbug")
+    assert inner1.get("Pilferbug", 0) * 4 <= sum(inner1.values())
     level = lambda mix: sum(int(md.LEVEL[K[n]]) * w for n, w in mix.items()) / sum(mix.values())
     rows = [m for band in ro_spawns.SPAWN_MIX for m in band]
     assert all(level(a) < level(b) for a, b in zip(rows, rows[1:]))

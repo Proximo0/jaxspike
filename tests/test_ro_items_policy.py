@@ -16,6 +16,9 @@ def world(inv, job=JOB_NOVICE, worn=(), hp_pct=100, ryn=0, pz=False):
     """Slot 0 active at (100, 100) holding `inv` (item ids, one each); worn = [(equip slot, inv slot)]."""
     w = make_empty_world(KEY)
     p, it = w["players"], w["items"]
+    # an empty bag and nothing worn first (ro6-balance: new worlds give every slot the Novice starter kit)
+    p = {**p, "inv": p["inv"].at[0].set(0)}
+    it = {**it, "inv_count": it["inv_count"].at[0].set(0), "equip": it["equip"].at[0].set(-1)}
     p = {**p, "pos": p["pos"].at[0].set(jnp.array([100, 100])), "active": p["active"].at[0].set(True),
          "inv": p["inv"].at[0, :len(inv)].set(jnp.asarray(inv, jnp.int32))}
     it = {**it, "inv_count": it["inv_count"].at[0, :len(inv)].set(1), "ryn": it["ryn"].at[0].set(ryn)}
@@ -68,6 +71,28 @@ def test_potion_below_potion_pct_never_meat():
     assert int(_items(w, KEY)["use_item"][0]) == 1
     w = world([I.ITEM_MEAT, I.ITEM_RED_POTION], hp_pct=P.POTION_PCT + 10)
     assert int(_items(w, KEY)["use_item"][0]) == -1
+
+
+def test_potion_as_soon_as_no_heal_is_wasted():
+    """ro6-balance: above POTION_PCT a bot still drinks once it misses at least the potion's heal."""
+    w = world([I.ITEM_RED_POTION], JOB_SWORDSMAN)
+    st = w["stats"]
+    w["stats"] = {**st, "base_level": st["base_level"].at[0].set(40), "vit": st["vit"].at[0].set(40)}
+    mx = int(ro_stats.derived(w)["max_hp"][0])
+    heal = int(I.HEAL_HP[I.ITEM_RED_POTION])
+    assert mx - heal > mx * P.POTION_PCT // 100 + 1  # the no-waste line sits above POTION_PCT here
+    p = w["players"]
+    w["players"] = {**p, "hp": p["hp"].at[0].set(mx - heal)}
+    assert int(_items(w, KEY)["use_item"][0]) == 0
+    w["players"] = {**p, "hp": p["hp"].at[0].set(mx - heal + 1)}
+    assert int(_items(w, KEY)["use_item"][0]) == -1
+
+
+def test_wants_potions_from_the_price_of_one():
+    w = world([], ryn=int(I.BUY[P.BUY_ITEM]) + P.RYN_RESERVE)
+    assert bool(P.wants_potions(w)[0])
+    w = world([], ryn=int(I.BUY[P.BUY_ITEM]) + P.RYN_RESERVE - 1)
+    assert not bool(P.wants_potions(w)[0])
 
 
 def test_shop_keys_only_when_the_engine_has_them(monkeypatch):

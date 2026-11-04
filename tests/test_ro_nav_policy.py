@@ -177,9 +177,10 @@ def test_resting_bot_on_pz_stands_and_sits():
 def test_bot_inside_a_dungeon_hunts_instead_of_walking_out():
     x0, y0, x1, y1 = dungeon_boxes()[0]
     cx, cy = (x0 + x1) // 2, (y0 + y1) // 2
-    move, _ = run(world((cx, cy), level=20, monsters=[(cx + 3, cy)]), base=W)
+    lv = 3  # a Blobbin is within PREY_LEVEL_GAP of it (ro6-balance: a level-20 bot leaves passive Blobbins alone)
+    move, _ = run(world((cx, cy), level=lv, monsters=[(cx + 3, cy)]), base=W)
     assert int(move[0]) == E  # chases the monster, not the base "walk back to the gate"
-    move, _ = run(world((cx, cy), level=20, monsters=[(cx + 1, cy)]), base=W)
+    move, _ = run(world((cx, cy), level=lv, monsters=[(cx + 1, cy)]), base=W)
     assert int(move[0]) == 0  # adjacent: stand and fight
     move, _ = run(world((cx, cy), level=20), base=W)
     assert 1 <= int(move[0]) <= 8  # nothing near: keeps a wander heading
@@ -298,6 +299,60 @@ def test_ring_by_level_sends_higher_bots_further_out():
     assert int(move[0]) in (NE, E, SE)  # short of the outer ring: still walking out
     move, _ = run(world((10 + hi1 + 3, MAP // 2), level=nav.BAND1_OUTER_LEVEL - 1), base=0)
     assert int(move[0]) in (NW, W, SW)  # beyond the inner band-1 ring: turns back toward the gate
+
+
+def test_ring_index_and_cost_safety_by_level():
+    """ro6-balance: the ring steps out at BAND1_LEVEL, BAND1_OUTER_LEVEL and BAND2_LEVEL (band 2's inner half), and
+    the cost gamble grows with level down to COST_SAFETY_MIN."""
+    from bots.policies import HUNT_RADIUS
+    lv = jnp.asarray([1, nav.BAND1_LEVEL, nav.BAND1_OUTER_LEVEL, nav.BAND2_LEVEL, 99], jnp.int32)
+    assert [int(i) for i in nav.ring_index(lv)] == [0, 1, 2, 3, 3]
+    assert 2 <= nav.BAND1_LEVEL <= 3 < nav.BAND1_OUTER_LEVEL < nav.BAND2_LEVEL
+    assert len(nav.RING_BY_LEVEL) == 4 and nav.RING_BY_LEVEL[3][1] > 2 * HUNT_RADIUS  # reaches band 2
+    cs = [int(c) for c in nav.cost_safety(jnp.arange(1, 40, dtype=jnp.int32))]
+    assert cs[0] == nav.COST_SAFETY_PCT and cs[-1] == nav.COST_SAFETY_MIN
+    assert all(a >= b for a, b in zip(cs, cs[1:])) and cs[5] < cs[0]
+
+
+def _give(w, item, slot=2, count=3):
+    p, it = w["players"], w["items"]
+    w["players"] = {**p, "inv": p["inv"].at[0, slot].set(item)}
+    w["items"] = {**it, "inv_count": it["inv_count"].at[0, slot].set(count)}
+    return w
+
+
+def test_hurt_bot_with_a_potion_keeps_hunting_instead_of_sitting():
+    """ro6-balance: a hurt bot that holds a red potion neither sits nor walks home (the items policy drinks)."""
+    from game.data import items as I
+    w = _give(world((100, 100), hp_pct=nav.RETREAT_PCT - 5, monsters=[(101, 100)]), I.ITEM_RED_POTION)
+    w["monsters"] = {**w["monsters"], "hp": w["monsters"]["hp"].at[0].add(-5)}  # provoked: it hits back
+    assert bool(nav.holds_heal(w)[0])
+    move, sit, attack, _ = _nav(w, KEY, jnp.zeros((MAX_PLAYERS,), jnp.int32))
+    assert not bool(sit[0]) and bool(attack[0])  # fights the provoked Blobbin beside it
+    w = _give(world((100, 100), hp_pct=nav.RETREAT_PCT - 5, monsters=[(101, 100)]), I.ITEM_MEAT)
+    assert not bool(nav.holds_heal(w)[0])  # meat is survival's, never a reason to skip the rest
+    move, sit = run(w)
+    assert bool(sit[0])
+
+
+def test_hurt_bot_that_would_buy_potions_walks_home_instead_of_sitting():
+    w = world((100, MAP // 2), hp_pct=nav.RETREAT_PCT - 5, monsters=[(103, MAP // 2 + 3)])  # a passive Blobbin
+    move, sit = run(w)
+    assert int(move[0]) == 0 and bool(sit[0])  # without the shop wish: field rest
+    shop = jnp.zeros((MAX_PLAYERS,), jnp.bool_).at[0].set(True)
+    move, sit, _, _ = jax.jit(nav.nav_moves)(w, KEY, jnp.zeros((MAX_PLAYERS,), jnp.int32), shop)
+    assert int(move[0]) in (W, NW, SW) and not bool(sit[0])  # down the home field toward x = 10
+
+
+def test_passive_prey_far_below_the_bot_is_left_alone():
+    lv = 1 + nav.PREY_LEVEL_GAP  # Blobbin is level 1
+    w = world((100, 100), level=lv, monsters=[(101, 100)])
+    _, _, attack, fight = _nav(w, KEY, jnp.zeros((MAX_PLAYERS,), jnp.int32))
+    assert not bool(attack[0]) and not bool(fight[0])
+    m = w["monsters"]
+    w["monsters"] = {**m, "hp": m["hp"].at[0].add(-5)}  # provoked: fought back
+    _, _, attack, _ = _nav(w, KEY, jnp.zeros((MAX_PLAYERS,), jnp.int32))
+    assert bool(attack[0])
 
 
 def test_walking_away_prefers_a_zone_portal_tile():

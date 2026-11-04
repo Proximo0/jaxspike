@@ -8,10 +8,11 @@ from game.data.stats import HP_REGEN_SIT_TICKS, HP_REGEN_TICKS
 from game import ro_anim, ro_stats
 from game.state import empty_inputs, make_empty_world
 from game.survival import survival
+from tests.bare_world import bare
 
 
 def _world(hp=100, inv=None, tick=0, dead=False):
-    w = make_empty_world(jax.random.PRNGKey(0))
+    w = bare(make_empty_world(jax.random.PRNGKey(0)))
     p = w["players"]
     p = {**p, "active": p["active"].at[0].set(True), "dead": p["dead"].at[0].set(dead),
          "hp": p["hp"].at[0].set(hp)}

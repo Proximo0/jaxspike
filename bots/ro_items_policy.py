@@ -7,7 +7,8 @@ A living bot, each tick:
 - equips the best weapon its job may wield (items.EQUIP_JOBS, else JOB_WEAPONS, RO pre-renewal classes; score
   ATK, plus MATK for Mages and Acolytes) when it beats what it wears; else the armor piece with the largest DEF gain over what is worn in
   its equip slot (a free slot counts as DEF -1, so any piece fills it); one equip per tick;
-- uses its first healing consumable (never MEAT, survival.py eats that) below POTION_PCT of max_hp; otherwise it
+- uses its first healing consumable (never MEAT, survival.py eats that) below POTION_PCT of max_hp, or as soon as
+  the hp it is missing is at least what that consumable heals (no heal wasted; ro6-balance); otherwise it
   uses a held card that fits a free socket of a worn item (one use_item per tick);
 - refines its worn weapon when it holds that weapon level's ore and the ryn and the next step is still a
   guaranteed one (REFINE_CHANCE == 1000, i.e. below the safe limit);
@@ -29,9 +30,9 @@ try:  # imported here, never inside a traced function: a module's import-time in
 except ImportError:  # pragma: no cover
     ro_shop = None
 
-POTION_PCT = 45
+POTION_PCT = 45         # above bots.ro_nav_policy.RETREAT_PCT: a bot holding potions drinks instead of resting
 POTION_STOCK = 10
-RYN_RESERVE = 200
+RYN_RESERVE = 0         # ro6-balance: was 200, which a bot first held after ~3500 ticks (no potion bought in 1000)
 BUY_ITEM = I.ITEM_RED_POTION
 
 # Weapon classes each job may wield (RO pre-renewal; Novice ... Merchant), index = job id.
@@ -149,7 +150,9 @@ def item_inputs(world, key):
     # --- use_item: heal when hurt, else compound a card that fits -------------------------------------------
     heal = held & (kind == I.KIND_CONSUMABLE) & (I.HEAL_HP[inv] > 0) & (inv != ITEM_MEAT)
     h_slot, h_any = _first(heal)
-    hurt = live & (pl["hp"] * 100 < POTION_PCT * _max_hp(world)) & h_any
+    mx = _max_hp(world)
+    h_amt = I.HEAL_HP[inv[_PIDX, h_slot]]
+    hurt = live & h_any & ((pl["hp"] * 100 < POTION_PCT * mx) | (mx - pl["hp"] >= h_amt))
 
     worn_cards = jnp.take_along_axis(cards, jnp.clip(equip, 0, INV_SLOTS - 1)[:, :, None], axis=1)  # [P, 8, 4]
     socket_ok = jnp.arange(cards.shape[2])[None, None, :] < I.SLOTS[worn_id][:, :, None]

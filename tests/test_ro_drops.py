@@ -8,12 +8,13 @@ from game.config import ITEM_GOLD_COIN, ITEM_NONE, ITEM_SWORD, MAX_DROPS, MAX_MO
 from game.data import drops as D
 from game.data import items as I
 from game.state import empty_inputs, make_empty_world
+from tests.bare_world import bare
 
 POS = (10, 12)
 
 
 def make_world(fields=True, seed=0):
-    w = make_empty_world(jax.random.PRNGKey(seed))
+    w = bare(make_empty_world(jax.random.PRNGKey(seed)))
     w = {**w, "items": ro_items.make_state()}
     if fields:
         w = {**w, "drops": {**w["drops"], **ro_drops.drop_fields()}}

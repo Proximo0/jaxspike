@@ -59,6 +59,11 @@ REST_PCT = 90           # a sitting bot (in town or in a safe field spot) stands
 # that fails the test is left alone even when adjacent (it never starts a fight); a provoked one is fought back.
 MIN_HIT_PCT = 70
 COST_SAFETY_PCT = 45    # was 125 (round 4): below 100 the bot accepts fights expected to cost more than its hp
+# ro6-balance: the gamble grows with base level (COST_SAFETY_PCT at level 1, COST_SAFETY_PER_LEVEL less per level,
+# never below COST_SAFETY_MIN), so a bot that out-levels its prey keeps taking fights that can still go wrong
+# (round 5: deaths fell under 0.3 per 1000 ticks after ~1000 ticks as bots out-levelled their prey).
+COST_SAFETY_PER_LEVEL = 3
+COST_SAFETY_MIN = 20
 FLOOR_PCT = 0           # was 10
 SAFE_DIST = 3           # field rest only when no aggressive or provoked monster is within this many cells
 # Monster swing period the bot's estimate assumes: the engine's (combat.py swings every MONSTER_ATTACK_COOLDOWN
@@ -71,19 +76,48 @@ HEADING_TICKS = 50
 BORED_TICKS = 40        # chase-boredom windows (ticks)
 BORED_PCT = 25          # percent of windows a bot ignores monsters it is not adjacent to
 LEVEL_MARGIN = 2        # never chase a monster more than this many levels above the bot's base level
+PREY_LEVEL_GAP = 4      # ro6-balance: never chase (or start on) a passive monster this many levels below the bot
 GATHER_EVERY = 4        # bots.ro_craft_policy: slot i % 4 == 1 gathers; gatherers never dive
-BAND1_LEVEL = 5         # from this base level a bot hunts out to the inner half of the second field band
+BAND1_LEVEL = 2         # (ro6-balance: was 5) from this base level a bot hunts out to the inner half of the second field band
 # (lo, hi) home-gate walk distances of the hunting ring per level band: below BAND1_LEVEL the ring is field band 0
 # (game/ro_spawns: walk distance < HUNT_RADIUS, Blobbin-class prey; it used to reach 2 * HUNT_RADIUS, half of it in
 # band 1, where the level 9-16 kinds killed level-1 bots); from BAND1_LEVEL band 0's outer half and band 1's inner
 # half (Bramblet / Fiddlehop; the aggressive Pilferbug and Vexblob / Capling live in band 1's outer half).
 # From BAND1_OUTER_LEVEL (ro5-balance) band 1's outer half too: level 6-9 bots on the inner ring killed 6.4 per 1000
 # ticks and died 0.02-0.08 (soak_levels 1 world x 20000 ticks), the inner prey no longer a risk once DEX and STR grow.
-BAND1_OUTER_LEVEL = 7
-RING_BY_LEVEL = ((HUNT_RADIUS // 3, HUNT_RADIUS), (HUNT_RADIUS * 4 // 5, HUNT_RADIUS * 3 // 2),
-                 (HUNT_RADIUS * 5 // 4, HUNT_RADIUS * 2))
+BAND1_OUTER_LEVEL = 5   # ro6-balance: was 7
+# From BAND2_LEVEL (ro6-balance) the ring is band 1's outer half plus band 2's inner half (Gallopeck 19, Snarlfang 25,
+# Sandgulper 26; LEVEL_MARGIN keeps a bot off the ones far above it), so bots keep stepping out as they level.
+BAND2_LEVEL = 17
+# ro6-balance, with the Novice starter kit (Knife + Cotton Shirt): a level-1 bot hunts band 0's outer half out to the
+# edge of band 1, band 1's inner half from BAND1_LEVEL 2 and its outer half from 5 (was 13..40 / 32..60 from 5 /
+# 50..80 from 7: with the Knife, bots out-hit band 0 and killed 6.8-10 per 1000 ticks at 0.05-0.07 deaths).
+RING_BY_LEVEL = ((HUNT_RADIUS // 2, HUNT_RADIUS * 5 // 4), (HUNT_RADIUS, HUNT_RADIUS * 3 // 2),
+                 (HUNT_RADIUS * 3 // 2, HUNT_RADIUS * 2), (HUNT_RADIUS * 7 // 4, HUNT_RADIUS * 3))
 FOLLOW_MIN = 6          # a party member farther than this (manhattan) from its leader walks toward it
 WARP_WAIT_TICKS = 4     # a bot left standing on a warp tile (destination busy) waits all but one tick in four
+
+
+def ring_index(level):
+    """int32 [N]: the RING_BY_LEVEL row for base level [N] (0 below BAND1_LEVEL ... 3 from BAND2_LEVEL)."""
+    return sum((level >= lv).astype(jnp.int32) for lv in (BAND1_LEVEL, BAND1_OUTER_LEVEL, BAND2_LEVEL))
+
+
+def cost_safety(level):
+    """int32 [N]: COST_SAFETY_PCT less COST_SAFETY_PER_LEVEL per base level above 1, at least COST_SAFETY_MIN."""
+    return jnp.clip(COST_SAFETY_PCT - COST_SAFETY_PER_LEVEL * (level - 1), COST_SAFETY_MIN, COST_SAFETY_PCT)
+
+
+def holds_heal(world):
+    """bool [MAX_PLAYERS]: the bot holds a healing consumable that bots.ro_items_policy drinks (never MEAT)."""
+    if "items" not in world:
+        return jnp.zeros((MAX_PLAYERS,), jnp.bool_)
+    from game.config import ITEM_MEAT
+    from game.data import items as I
+    inv = world["players"]["inv"]
+    held = (inv != 0) & (inv != ITEM_MEAT) & (world["items"]["inv_count"] > 0)
+    return jnp.any(held & (I.KIND[inv] == I.KIND_CONSUMABLE) & (I.HEAL_HP[inv] > 0), axis=1)
+
 
 # Dive level per dungeon (index = DUNGEONS index): the Culvert from DUNGEON_MIN_LEVEL (Pilferbug 6, Clackbone 10,
 # Rotling 15, Capling 16), Pinehollow Cave only from 25 (its Soldier Skeletons are level 29 and aggressive).
@@ -95,7 +129,6 @@ _SLOT = jnp.arange(MAX_PLAYERS, dtype=jnp.int32)
 _HOME = _SLOT % len(TOWNS)
 _IS_GATHERER = _SLOT % GATHER_EVERY == 1
 _STEPS = DELTAS[1:]  # [K, 2]
-_RING = jnp.asarray(RING_BY_LEVEL, jnp.int32)  # [3, 2]
 
 
 def _tile_mask(tiles):
@@ -311,7 +344,9 @@ def nav_moves(world, key, base_move, shop=None):
     BOT_CHASE_RANGE by stepping to the free neighbour (no wall, no corner cut, no living player) with the smallest
     manhattan distance to it (equal to the current one allowed, so it sidesteps obstacles), attack it when orthogonally
     adjacent. Only prey the bot can win is chased or hit (prey_cost: hit chance >= MIN_HIT_PCT, expected HP loss x
-    COST_SAFETY_PCT within the hp above FLOOR_PCT; never more than LEVEL_MARGIN levels above the bot); an adjacent
+    cost_safety(level) within the hp above FLOOR_PCT; never more than LEVEL_MARGIN levels above the bot nor, for a
+    passive monster, PREY_LEVEL_GAP or more below it); a bot holding a healing consumable is never hurt here (it
+    drinks, bots.ro_items_policy), and a hurt bot that wants potions walks home to buy instead of sitting; an adjacent
     monster that fails it is hit only once provoked (aggressive, or already damaged). Below RETREAT_PCT a bot sits
     where no provoked or aggressive monster is within SAFE_DIST (outside dungeons) until REST_PCT, else walks home;
     `sit` is the engine's toggle (sent once to sit down, once to stand up). A bot with no such neighbour takes a random free step; one that is "bored" this window (BORED_PCT of
@@ -321,17 +356,21 @@ def nav_moves(world, key, base_move, shop=None):
     pl, mon = world["players"], world["monsters"]
     pos = pl["pos"]
     m = modes(world)
+    # potions instead of rest (ro6-balance): a bot holding a healing consumable is never "hurt" here (it neither sits
+    # in the field nor walks home; bots.ro_items_policy drinks below POTION_PCT, which is above RETREAT_PCT)
+    heal = holds_heal(world)
+    m = {**m, "hurt": m["hurt"] & ~heal}
     level = _base_level(world)
     k_rand, k_bored = jax.random.split(key)
 
     table, _ = build_grid(mon["pos"], mon["active"])
     idx, dist = nearest_in_block(table, pos, mon["pos"])
     mkind = jnp.clip(mon["kind"][idx], 0, MON_LEVEL.shape[0] - 1)
-    weak = MON_LEVEL[mkind] <= level + LEVEL_MARGIN
+    weak = (MON_LEVEL[mkind] <= level + LEVEL_MARGIN) & (MON_LEVEL[mkind] > level - PREY_LEVEL_GAP)
     # prey choice: hittable and affordable from the current hp (prey_cost); provoked monsters are fought back
     hp, mx = pl["hp"].astype(jnp.int32), jnp.maximum(_max_hp(world), 1)
     hit_pct, cost = prey_cost(world, idx)
-    win = (hit_pct >= MIN_HIT_PCT) & (cost * COST_SAFETY_PCT <= hp * 100 - FLOOR_PCT * mx)
+    win = (hit_pct >= MIN_HIT_PCT) & (cost * cost_safety(level) <= hp * 100 - FLOOR_PCT * mx)
     provoked = mon["active"][idx] & (mdata.AGGRO[mkind] | (mon["hp"][idx] < mdata.HP[mkind]))
     near = (dist <= BOT_CHASE_RANGE) & (dist > 0) & weak & win
     fighting = dist <= 2
@@ -340,7 +379,9 @@ def nav_moves(world, key, base_move, shop=None):
     sitting = _sitting(world)
     threat = provoked & (dist <= SAFE_DIST)
     below_rest = m["live"] & (hp * 100 < REST_PCT * mx)
-    field_rest = below_rest & ~m["on_pz"] & ~m["in_dungeon"] & ~threat & (m["hurt"] | sitting)
+    field_rest = below_rest & ~m["on_pz"] & ~m["in_dungeon"] & ~threat & (m["hurt"] | sitting) & ~heal
+    if shop is not None:  # a hurt bot that would buy potions walks home to the shop instead of sitting in the field
+        field_rest = field_rest & ~(shop & m["hurt"])
     resting = m["rest"] | field_rest
 
     tgt, deltas = neighbours(pos)
@@ -378,7 +419,7 @@ def nav_moves(world, key, base_move, shop=None):
     field = world["dist_town"]
     own = field[_HOME, pos[:, 0], pos[:, 1]].astype(jnp.int32)
     nbr = field[_HOME[:, None], tgt[..., 0], tgt[..., 1]].astype(jnp.int32)
-    ring = _RING[(level >= BAND1_LEVEL).astype(jnp.int32) + (level >= BAND1_OUTER_LEVEL).astype(jnp.int32)]  # [N, 2]
+    ring = jnp.asarray(RING_BY_LEVEL, jnp.int32)[ring_index(level)]  # [N, 2]
     ring_lo, ring_hi = ring[:, 0], ring[:, 1]
     toward, can_toward = _pick(nbr, free)
     can_toward = can_toward & (jnp.min(jnp.where(free, nbr, 1 << 30), axis=1) < own)

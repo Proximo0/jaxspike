@@ -8,6 +8,7 @@ from game.data import items as I
 from game.data import skills as S
 from game.data.terrain import T_SHOP
 from game.state import empty_inputs, make_empty_world
+from tests.bare_world import bare
 
 SHOP_TILES, SHOP_TOWN = world_layout.shop_tiles()
 _phase = jax.jit(ro_shop.phase)
@@ -18,7 +19,7 @@ def town_shop(t):
 
 
 def make_world(towns=(0,)):
-    w = make_empty_world(jax.random.PRNGKey(0))
+    w = bare(make_empty_world(jax.random.PRNGKey(0)))
     terrain = w["terrain"]
     for t in towns:
         x, y = town_shop(t)
@@ -108,7 +109,7 @@ def test_dead_or_outside_town_cannot_trade():
     x, y = town_shop(0)
     w = add_player(make_world(), 0, [x, y], ryn=1000, dead=True)
     assert ryn(run(w, buy=I.ITEM_RED_POTION)) == 1000
-    w = make_empty_world(jax.random.PRNGKey(0))
+    w = bare(make_empty_world(jax.random.PRNGKey(0)))
     w = {**w, "terrain": w["terrain"].at[3, 3].set(T_SHOP)}  # a shop tile outside every town box
     w = add_player(w, 0, [3, 3], ryn=1000)
     assert ryn(run(w, buy=I.ITEM_RED_POTION)) == 1000

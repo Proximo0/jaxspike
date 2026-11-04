@@ -60,7 +60,16 @@ from game.config import (
     PLAYER_MAX_HP,
     T_GRASS,
 )
+from game.data.items import EQ_BODY, EQ_WEAPON, ITEM_COTTON_SHIRT, ITEM_KNIFE
 from game.world_layout import TOWNS
+
+STARTER_KIT = (ITEM_KNIFE, ITEM_COTTON_SHIRT)  # RO Novice starter gear (ro6-balance): inventory slots 0 and 1, worn
+
+
+def starter_items(it):
+    """ro_items block with STARTER_KIT worn: one unit in slots 0 and 1, weapon slot -> 0, body slot -> 1."""
+    return {**it, "inv_count": it["inv_count"].at[:, :len(STARTER_KIT)].set(1),
+            "equip": it["equip"].at[:, EQ_WEAPON].set(0).at[:, EQ_BODY].set(1)}
 
 
 def next_key(world):
@@ -118,7 +127,7 @@ def make_empty_world(key):
             "dead": jnp.zeros((MAX_PLAYERS,), jnp.bool_),
             "spawn": jnp.zeros((MAX_PLAYERS, 2), jnp.int32),
             "attack_cd": jnp.zeros((MAX_PLAYERS,), jnp.int32),
-            "inv": jnp.zeros((MAX_PLAYERS, INV_SLOTS), jnp.int32),
+            "inv": jnp.zeros((MAX_PLAYERS, INV_SLOTS), jnp.int32).at[:, :len(STARTER_KIT)].set(jnp.asarray(STARTER_KIT, jnp.int32)),
             "kills": jnp.zeros((MAX_PLAYERS,), jnp.int32),
             "deaths": jnp.zeros((MAX_PLAYERS,), jnp.int32),
         },
@@ -142,7 +151,7 @@ def make_empty_world(key):
         # RO system blocks (docs/ro_contract.md). Nodes and MVPs are placed by bots.runner.make_world_batch.
         "stats": ro_stats.make_state(),
         "skills": ro_skills.make_state(),
-        "items": ro_items.make_state(),
+        "items": starter_items(ro_items.make_state()),  # Novices start with a Knife and a Cotton Shirt worn
         "craft": ro_craft.make_state(),
         "party": ro_party.make_state(),
         "mvp": ro_mvp.make_state(),

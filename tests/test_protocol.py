@@ -194,7 +194,8 @@ def _ro_pull(w, viewers):
 
 def test_snapshot_ro_you_block():
     from game.data import stats as sd
-    w = _world()
+    from tests.bare_world import bare
+    w = bare(_world())
     st, sk, it, cr, pa = w["stats"], w["skills"], w["items"], w["craft"], w["party"]
     st = {**st, "base_level": st["base_level"].at[0].set(5), "job": st["job"].at[0].set(2), "job_level": st["job_level"].at[0].set(3),
           "str": st["str"].at[0].set(9), "stat_points": st["stat_points"].at[0].set(4), "skill_points": st["skill_points"].at[0].set(2),
