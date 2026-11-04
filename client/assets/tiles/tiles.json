@@ -6,7 +6,7 @@
  "terrain_atlas": "res://assets/tiles/terrain.png",
  "props_atlas": "res://assets/tiles/props.png",
  "props_columns": 9,
- "props_rows": 6,
+ "props_rows": 8,
  "mask_bits": {
   "N": 1,
   "E": 2,
@@ -265,8 +265,8 @@
    },
    "stall0": {
     "atlas": [
-     4,
-     0
+     2,
+     6
     ],
     "size": [
      1,
@@ -280,8 +280,8 @@
    },
    "stall1": {
     "atlas": [
-     5,
-     0
+     3,
+     6
     ],
     "size": [
      1,
@@ -295,8 +295,8 @@
    },
    "stall2": {
     "atlas": [
-     6,
-     0
+     4,
+     6
     ],
     "size": [
      1,
@@ -310,8 +310,8 @@
    },
    "stall3": {
     "atlas": [
-     7,
-     0
+     5,
+     6
     ],
     "size": [
      1,
@@ -380,6 +380,36 @@
     "origin": [
      0,
      0
+    ],
+    "base_px": 32
+   },
+   "lamp": {
+    "atlas": [
+     0,
+     6
+    ],
+    "size": [
+     1,
+     2
+    ],
+    "origin": [
+     0,
+     32
+    ],
+    "base_px": 32
+   },
+   "well": {
+    "atlas": [
+     1,
+     6
+    ],
+    "size": [
+     1,
+     2
+    ],
+    "origin": [
+     0,
+     32
     ],
     "base_px": 32
    }
@@ -623,5 +653,49 @@
   "12": [
    0
   ]
- }
+ },
+ "roofs": {
+  "atlas": "res://assets/tiles/roofs.png",
+  "terrain": 6,
+  "size": [
+   1,
+   2
+  ],
+  "origin": [
+   0,
+   32
+  ],
+  "base_px": 32,
+  "columns": 16,
+  "source": "procedural (client/tools/art/gen_roofs.py), CC0",
+  "_doc": "one 64x128 roof tile per wall cell on the y-sorted Props layer, column = 4-bit mask of wall neighbours (mask_bits N E S W)",
+  "features": {
+   "rows": [
+    "plain",
+    "door",
+    "window"
+   ],
+   "every": 3,
+   "_doc": "row 1 door / row 2 window on wall cells whose S side is open and that have wall neighbours W and E (a house front); picked by tile_hash % every: 1 door, 0 window, else plain"
+  }
+ },
+ "rules": [
+  {
+   "prop": "lamp",
+   "on": 1,
+   "near": 3,
+   "every": 6,
+   "_doc": "road cells with a temple-square cell as a 4-neighbour, one every 6 along x",
+   "by_x": true
+  },
+  {
+   "prop": "well",
+   "on": 2,
+   "near": 12,
+   "every": 8,
+   "by_x": true,
+   "_doc": "floor cells next to a shop row, one every 8 along x"
+  }
+ ],
+ "_doc_rules": "rules: data-driven prop placement evaluated by MapRenderer after on_terrain: a cell of terrain `on` with a 4-neighbour of terrain `near` gets `prop` when (by_x ? x : tile_hash(x,y)) % every == 0"
 }

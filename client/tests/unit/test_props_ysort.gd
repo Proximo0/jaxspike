@@ -58,5 +58,64 @@ func test_props_layer_is_y_sorted_with_base_origins() -> void:
 	r.free()
 
 
+func test_roofs_cover_wall_blocks_by_neighbour_mask() -> void:
+	if not FileAccess.file_exists(ViewMath.TILESET_INDEX) or not FileAccess.file_exists("res://assets/tiles/roofs.png"):
+		assert_true(true, "tiles.json / roofs.png not present")
+		return
+	var r := MapRenderer.new()
+	var m := _map(8)
+	for y: int in range(2, 4):  # a 3x2 wall block at (2..4, 2..3)
+		for x: int in range(2, 5):
+			_put(m, x, y, 6)
+	r.build(m)
+	assert_true(r.props_layer != null and r.props_layer.tile_set != null)
+	assert_true(r.props_layer.tile_set.has_source(MapRenderer.ROOF_SOURCE_ID), "roof atlas source")
+	# every wall cell carries a roof tile whose atlas column is its wall-neighbour mask (N1 E2 S4 W8)
+	var top_left: Vector2i = r.props_layer.get_cell_atlas_coords(Vector2i(2, 2))
+	assert_eq(r.props_layer.get_cell_source_id(Vector2i(2, 2)), MapRenderer.ROOF_SOURCE_ID)
+	assert_eq(top_left, Vector2i(2 | 4, 0), "top-left corner: wall to the E and S")
+	assert_eq(r.props_layer.get_cell_atlas_coords(Vector2i(3, 2)), Vector2i(2 | 4 | 8, 0), "top edge")
+	assert_eq(r.props_layer.get_cell_atlas_coords(Vector2i(4, 3)), Vector2i(1 | 8, 0), "bottom-right corner")
+	assert_eq(r.props_layer.get_cell_atlas_coords(Vector2i(3, 3)), Vector2i(1 | 2 | 8, 0), "bottom edge")
+	assert_eq(r.props_layer.get_cell_source_id(Vector2i(5, 2)), -1, "grass has no roof")
+	assert_eq(MapRenderer.wall_mask(m.terrain, m.size, 3, 2, 6), 2 | 4 | 8)
+	assert_eq(MapRenderer.wall_mask(m.terrain, m.size, 0, 0, 6), 0)
+	r.free()
+
+
+func test_roof_feature_rows_and_rule_props() -> void:
+	# house fronts only on a straight south face (S open, W and E wall), picked by hash in 1 of `every`
+	assert_eq(MapRenderer.roof_feature_row(2 | 8, 3, 3, 0), 0, "every 0: plain")
+	assert_eq(MapRenderer.roof_feature_row(2 | 4 | 8, 3, 3, 3), 0, "S wall: no front")
+	assert_eq(MapRenderer.roof_feature_row(2, 3, 3, 3), 0, "a corner gets no front")
+	var seen: Dictionary = {}
+	for x: int in range(40):
+		seen[MapRenderer.roof_feature_row(2 | 8 | 1, x, 7, 3)] = true
+	assert_true(seen.has(1) and seen.has(2), "doors and windows both appear along a long face")
+	if not FileAccess.file_exists(ViewMath.TILESET_INDEX):
+		return
+	var r := MapRenderer.new()
+	var m := _map(12)
+	for x: int in range(12):
+		_put(m, x, 5, 1)  # a road
+		_put(m, x, 4, 3)  # the temple square north of it
+		_put(m, x, 9, 12)  # a shop row
+		_put(m, x, 10, 2)  # floor south of the shops
+	r.build(m)
+	var lamp: Vector2i = MapRenderer._vec2i((r._index["props"]["cells"]["lamp"] as Dictionary)["atlas"])
+	var well: Vector2i = MapRenderer._vec2i((r._index["props"]["cells"]["well"] as Dictionary)["atlas"])
+	var lamps: int = 0
+	var wells: int = 0
+	for x: int in range(12):
+		if r.props_layer.get_cell_atlas_coords(Vector2i(x, 5)) == lamp:
+			lamps += 1
+		if r.props_layer.get_cell_atlas_coords(Vector2i(x, 10)) == well:
+			wells += 1
+	assert_eq(lamps, 2, "lamps every 6 along x at x = 0 and 6")
+	assert_eq(wells, 2, "wells every 8 along x at x = 0 and 8")
+	assert_eq(r.props_layer.get_cell_source_id(Vector2i(0, 0)), -1, "grass away from everything stays bare")
+	r.free()
+
+
 func _put(m: MapData, x: int, y: int, t: int) -> void:
 	m.terrain[y * m.size + x] = t

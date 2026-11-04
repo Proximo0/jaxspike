@@ -147,10 +147,66 @@ func _make_tileset(index: Dictionary) -> bool:
 ## front. The tile's y_sort_origin is the prop's `base_px` (tiles.json, px below the base cell's centre) minus the
 ## entity feet offset, because an entity node sits at its tile centre with the feet EntitySprite.FEET_Y lower.
 const TERRAIN_Z: int = -1
+## Roofs (round 4, ro3-art): the big decor wall blocks read as stone slabs, so every wall cell also gets a roof
+## tile on the Props layer (tiles.json "roofs": a 16-column atlas of 1x2 tiles, column = 4-bit mask of wall
+## neighbours N1 E2 S4 W8, same bits as tiles.json mask_bits), lifted above the wall and y-sorted by the wall's base.
+const ROOF_SOURCE_ID: int = 1
+
+var roof_terrain: int = -1  ## terrain id that gets roofs (-1: no roofs atlas)
+var roof_feature_every: int = 0  ## tiles.json roofs.features.every (0: plain roofs only)
+var _rules: Array[Dictionary] = []  ## prepared tiles.json "rules" rows: {on, near, every, by_x, atlas}
 
 
 static func prop_sort_origin(base_px: int, atlas_cell_px: int) -> int:
 	return base_px - int(round(EntitySprite.FEET_Y * float(atlas_cell_px)))
+
+
+## Roof atlas row for a wall cell: a house front (1 door, 2 window) goes on cells whose S side is open with wall
+## neighbours W and E (a straight south face), one in `every` by tile_hash; everything else is the plain row 0.
+static func roof_feature_row(mask: int, x: int, y: int, every: int) -> int:
+	if every <= 0 or mask & 4 or not (mask & 2 and mask & 8):
+		return 0
+	var pick: int = posmod(ViewMath.tile_hash(x, y) >> 5, every)
+	if pick == 1:
+		return 1
+	if pick == 0:
+		return 2
+	return 0
+
+
+## tiles.json "rules" (data-driven placement, evaluated after on_terrain props): a cell of terrain `on` with a
+## 4-neighbour of terrain `near` gets `prop` when (by_x ? x : tile_hash) % every == 0. Returns the prop's atlas
+## coords or (-1, -1). `_rules` is prepared by _make_props from the index.
+func rule_prop(terrain: PackedByteArray, size: int, x: int, y: int, t: int) -> Vector2i:
+	for r: Dictionary in _rules:
+		if int(r["on"]) != t:
+			continue
+		var near: int = int(r["near"])
+		var touches: bool = (y > 0 and terrain[(y - 1) * size + x] == near) \
+				or (x < size - 1 and terrain[y * size + x + 1] == near) \
+				or (y < size - 1 and terrain[(y + 1) * size + x] == near) \
+				or (x > 0 and terrain[y * size + x - 1] == near)
+		if not touches:
+			continue
+		var every: int = maxi(int(r["every"]), 1)
+		var pick: int = x if bool(r["by_x"]) else int(ViewMath.tile_hash(x, y) >> 7)
+		if posmod(pick, every) == 0:
+			return r["atlas"]
+	return Vector2i(-1, -1)
+
+
+## 4-bit mask of the neighbours of (x, y) that are `wall_id`: N 1, E 2, S 4, W 8 (off-map counts as not wall).
+static func wall_mask(terrain: PackedByteArray, size: int, x: int, y: int, wall_id: int) -> int:
+	var m: int = 0
+	if y > 0 and terrain[(y - 1) * size + x] == wall_id:
+		m |= 1
+	if x < size - 1 and terrain[y * size + x + 1] == wall_id:
+		m |= 2
+	if y < size - 1 and terrain[(y + 1) * size + x] == wall_id:
+		m |= 4
+	if x > 0 and terrain[y * size + x - 1] == wall_id:
+		m |= 8
+	return m
 
 
 func _make_props(index: Dictionary) -> void:
@@ -185,6 +241,39 @@ func _make_props(index: Dictionary) -> void:
 		td.texture_origin = _vec2i(cell.get("origin", [0, 0]))
 		td.y_sort_origin = prop_sort_origin(int(cell.get("base_px", cell_px / 2)), cell_px)
 	ts.add_source(src, SOURCE_ID)
+	roof_terrain = -1
+	var roofs: Dictionary = index.get("roofs", {})
+	var rtex: Texture2D = _texture(str(roofs.get("atlas", "")))
+	if rtex != null:
+		var rs := TileSetAtlasSource.new()
+		rs.texture = rtex
+		rs.texture_region_size = Vector2i(cell_px, cell_px)
+		var rsz: Vector2i = _vec2i(roofs.get("size", [1, 2]))
+		var rorg: Vector2i = _vec2i(roofs.get("origin", [0, 32]))
+		var rbase: int = int(roofs.get("base_px", cell_px / 2))
+		var made: int = 0
+		for c: int in range(int(roofs.get("columns", 16))):
+			var at := Vector2i(c, 0)
+			if not rs.has_room_for_tile(at, rsz, 1, Vector2i.ZERO, 1):
+				continue
+			rs.create_tile(at, rsz)
+			var rtd: TileData = rs.get_tile_data(at, 0)
+			rtd.texture_origin = rorg
+			rtd.y_sort_origin = prop_sort_origin(rbase, cell_px)
+			made += 1
+		if made == 16:
+			ts.add_source(rs, ROOF_SOURCE_ID)
+			roof_terrain = int(roofs.get("terrain", 6))
+			var feats: Dictionary = roofs.get("features", {})
+			roof_feature_every = int(feats.get("every", 0)) if (feats.get("rows", []) as Array).size() >= 3 else 0
+	_rules.clear()
+	for r: Variant in index.get("rules", []):
+		var rd: Dictionary = r
+		var pname: String = str(rd.get("prop", ""))
+		if not cells.has(pname):
+			continue
+		_rules.append({"on": int(rd.get("on", -1)), "near": int(rd.get("near", -1)), "every": int(rd.get("every", 1)),
+				"by_x": bool(rd.get("by_x", false)), "atlas": _vec2i((cells[pname] as Dictionary).get("atlas", [0, 0]))})
 	props_layer.tile_set = ts
 
 
@@ -258,6 +347,15 @@ func _fill_tileset(map: MapData, index: Dictionary) -> void:
 					var v: int = ViewMath.prop_variant(x, y, list.size(), shop_by_x and t == SHOP_ID)
 					props_layer.set_cell(cell, SOURCE_ID, list[v])
 					prop_tiles += 1
+				elif t == roof_terrain:
+					var mask: int = wall_mask(terrain, size, x, y, t)
+					props_layer.set_cell(cell, ROOF_SOURCE_ID, Vector2i(mask, roof_feature_row(mask, x, y, roof_feature_every)))
+					prop_tiles += 1
+				else:
+					var rp: Vector2i = rule_prop(terrain, size, x, y, t)
+					if rp.x >= 0:
+						props_layer.set_cell(cell, SOURCE_ID, rp)
+						prop_tiles += 1
 	if not with_props:
 		return
 	var centres: Dictionary = props.get("block_center", {})
