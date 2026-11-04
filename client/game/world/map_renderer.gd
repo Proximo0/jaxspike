@@ -156,8 +156,12 @@ var roof_terrain: int = -1  ## terrain id that gets roofs (-1: no roofs atlas)
 var roof_feature_every: int = 0  ## tiles.json roofs.features.every (0: plain roofs only)
 var roof_row_cells: int = 2  ## atlas cell rows per roof tile (its size.y): feature row r is at atlas row r * this
 var roof_max_block: int = 0  ## tiles.json roofs.max_block: roofs only on wall blocks up to this wide and deep (0: all)
+var roof_styles: int = 1  ## tiles.json roofs.styles count (tile red, slate blue, thatch)
+var roof_feature_rows: int = 1  ## feature rows per style (plain, door, window)
+var roof_style_by_hash: bool = false  ## roofs.style_mode "hash": one style per house from its corner hash
 var _rules: Array[Dictionary] = []  ## prepared tiles.json "rules" rows: {on, near, every, by_x, atlas}
 var _rules_by_terrain: Array = []  ## TERRAIN_IDS arrays of those rows, indexed by `on` (fast per-cell check)
+var _rule_packs: Array[PackedInt32Array] = []  ## per terrain: [near, every, by_x, atlas_x, atlas_y] * n (the hot path)
 var _rule_flags: PackedByteArray = PackedByteArray()  ## TERRAIN_IDS bytes: 1 when that terrain has a rule
 
 
@@ -182,26 +186,69 @@ static func roof_feature_row(mask: int, x: int, y: int, every: int) -> int:
 ## 4-neighbour of terrain `near` gets `prop` when (by_x ? x : tile_hash) % every == 0. Returns the prop's atlas
 ## coords or (-1, -1). `_rules` is prepared by _make_props from the index.
 func rule_prop(terrain: PackedByteArray, size: int, x: int, y: int, t: int) -> Vector2i:
-	if t < 0 or t >= _rules_by_terrain.size():
+	if t < 0 or t >= _rule_packs.size():
 		return Vector2i(-1, -1)
-	var rules_here: Array = _rules_by_terrain[t]  # empty for every terrain without a rule: one index per bare cell
-	for r: Dictionary in rules_here:
-		var near: int = int(r["near"])
-		var touches: bool = (y > 0 and terrain[(y - 1) * size + x] == near) \
+	# rules of this terrain packed as [near, every, by_x, atlas_x, atlas_y] * n: the cheap spacing test runs first
+	# (most cells fail it), the four neighbour reads only for candidates, the hash at most once per cell
+	var pack: PackedInt32Array = _rule_packs[t]
+	var n: int = pack.size() / 5
+	var hashed: int = -1
+	for i: int in range(n):
+		var base: int = i * 5
+		var every: int = pack[base + 1]
+		var pick: int = x
+		if pack[base + 2] == 0:
+			if hashed < 0:
+				hashed = cell_hash(x, y)
+			pick = hashed
+		if posmod(pick, every) != 0:
+			continue
+		var near: int = pack[base]
+		if (y > 0 and terrain[(y - 1) * size + x] == near) \
 				or (x < size - 1 and terrain[y * size + x + 1] == near) \
 				or (y < size - 1 and terrain[(y + 1) * size + x] == near) \
-				or (x > 0 and terrain[y * size + x - 1] == near)
-		if not touches:
-			continue
-		var every: int = maxi(int(r["every"]), 1)
-		var pick: int = x if bool(r["by_x"]) else int(ViewMath.tile_hash(x, y) >> 7)
-		if posmod(pick, every) == 0:
-			return r["atlas"]
+				or (x > 0 and terrain[y * size + x - 1] == near):
+			return Vector2i(pack[base + 3], pack[base + 4])
 	return Vector2i(-1, -1)
 
 
 ## True when the wall block through (x, y) is at most `max_block` cells wide and deep (its horizontal and vertical
 ## runs of `wall_id`); a bounded scan, at most 4 * max_block reads per wall cell. 0 or less: every block fits.
+## A cheap deterministic per-cell hash for prop rules and roof styles (no call into ViewMath on the hot path):
+## two large odd multipliers mixed and folded to a non-negative int.
+static func cell_hash(x: int, y: int) -> int:
+	var h: int = (x * 73856093) ^ (y * 19349663) ^ ((x + y) * 83492791)
+	h = (h ^ (h >> 13)) * 1274126177
+	return (h ^ (h >> 16)) & 0x7FFFFFFF
+
+
+## Top-left corner of the wall block through (x, y): walk left along the row, then up along that column, each
+## bounded by `max_block` (0: unbounded) so the scan stays cheap. Every cell of one rectangular block agrees.
+static func block_origin(terrain: PackedByteArray, size: int, x: int, y: int, wall_id: int, max_block: int) -> Vector2i:
+	var limit: int = max_block if max_block > 0 else size
+	var ox: int = x
+	var steps: int = 0
+	while ox > 0 and steps < limit and terrain[y * size + ox - 1] == wall_id:
+		ox -= 1
+		steps += 1
+	var oy: int = y
+	steps = 0
+	while oy > 0 and steps < limit and terrain[(oy - 1) * size + ox] == wall_id:
+		oy -= 1
+		steps += 1
+	return Vector2i(ox, oy)
+
+
+## Roof style index 0..styles-1 for a house: by tile_hash of the block's top-left corner when `by_hash`, else 0
+## (tiles.json roofs.style_mode "hash" / absent). One style per house, stable across rebuilds.
+static func roof_style(terrain: PackedByteArray, size: int, x: int, y: int, wall_id: int, max_block: int,
+		styles: int, by_hash: bool) -> int:
+	if styles <= 1 or not by_hash:
+		return 0
+	var o: Vector2i = block_origin(terrain, size, x, y, wall_id, max_block)
+	return posmod(cell_hash(o.x, o.y) >> 3, styles)
+
+
 static func block_fits(terrain: PackedByteArray, size: int, x: int, y: int, wall_id: int, max_block: int) -> bool:
 	if max_block <= 0:
 		return true
@@ -287,9 +334,10 @@ func _make_props(index: Dictionary) -> void:
 		var made: int = 0
 		var feats: Dictionary = roofs.get("features", {})
 		var feat_rows: int = maxi(1, (feats.get("rows", ["plain"]) as Array).size())
-		for fr: int in range(feat_rows):
+		var n_styles: int = maxi(1, (roofs.get("styles", ["tile_red"]) as Array).size())
+		for fr: int in range(feat_rows * n_styles):  # style s, feature f -> tile row s * feat_rows + f
 			for c: int in range(int(roofs.get("columns", 16))):
-				var at := Vector2i(c, fr * rsz.y)  # a 1x2 tile spans two atlas cells: feature row r sits at cell row r*2
+				var at := Vector2i(c, fr * rsz.y)  # a 1x2 tile spans two atlas cells: tile row r sits at cell row r*2
 				if not rs.has_room_for_tile(at, rsz, 1, Vector2i.ZERO, 1):
 					continue
 				rs.create_tile(at, rsz)
@@ -304,12 +352,17 @@ func _make_props(index: Dictionary) -> void:
 			roof_feature_every = int(feats.get("every", 0)) if feat_rows >= 3 else 0
 			roof_row_cells = rsz.y
 			roof_max_block = int(roofs.get("max_block", 0))
+			roof_styles = n_styles
+			roof_feature_rows = feat_rows
+			roof_style_by_hash = str(roofs.get("style_mode", "fixed")) == "hash"
 	_rules.clear()
 	_rules_by_terrain.clear()
+	_rule_packs.clear()
 	_rule_flags.resize(TERRAIN_IDS)
 	_rule_flags.fill(0)
 	for t: int in range(TERRAIN_IDS):
 		_rules_by_terrain.append([])
+		_rule_packs.append(PackedInt32Array())
 	for r: Variant in index.get("rules", []):
 		var rd: Dictionary = r
 		var pname: String = str(rd.get("prop", ""))
@@ -320,6 +373,9 @@ func _make_props(index: Dictionary) -> void:
 				"by_x": bool(rd.get("by_x", false)), "atlas": _vec2i((cells[pname] as Dictionary).get("atlas", [0, 0]))}
 		_rules.append(row)
 		(_rules_by_terrain[on] as Array).append(row)
+		var at2: Vector2i = row["atlas"]
+		_rule_packs[on].append_array(PackedInt32Array([int(row["near"]), maxi(int(row["every"]), 1),
+				1 if bool(row["by_x"]) else 0, at2.x, at2.y]))
 		_rule_flags[on] = 1
 	props_layer.tile_set = ts
 
@@ -397,7 +453,8 @@ func _fill_tileset(map: MapData, index: Dictionary) -> void:
 				elif t == roof_terrain and block_fits(terrain, size, x, y, t, roof_max_block):
 					var mask: int = wall_mask(terrain, size, x, y, t)
 					props_layer.set_cell(cell, ROOF_SOURCE_ID,
-							Vector2i(mask, roof_feature_row(mask, x, y, roof_feature_every) * roof_row_cells))
+							Vector2i(mask, (roof_style(terrain, size, x, y, t, roof_max_block, roof_styles, roof_style_by_hash)
+									* roof_feature_rows + roof_feature_row(mask, x, y, roof_feature_every)) * roof_row_cells))
 					prop_tiles += 1
 				elif _rule_flags[t] == 1:  # only terrains with a rule pay the neighbour check
 					var rp: Vector2i = rule_prop(terrain, size, x, y, t)

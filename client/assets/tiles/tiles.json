@@ -6,7 +6,7 @@
  "terrain_atlas": "res://assets/tiles/terrain.png",
  "props_atlas": "res://assets/tiles/props.png",
  "props_columns": 9,
- "props_rows": 8,
+ "props_rows": 10,
  "mask_bits": {
   "N": 1,
   "E": 2,
@@ -412,6 +412,141 @@
      32
     ],
     "base_px": 32
+   },
+   "crate": {
+    "atlas": [
+     6,
+     6
+    ],
+    "size": [
+     1,
+     2
+    ],
+    "origin": [
+     0,
+     32
+    ],
+    "base_px": 32
+   },
+   "barrel": {
+    "atlas": [
+     7,
+     6
+    ],
+    "size": [
+     1,
+     2
+    ],
+    "origin": [
+     0,
+     32
+    ],
+    "base_px": 32
+   },
+   "awning": {
+    "atlas": [
+     8,
+     6
+    ],
+    "size": [
+     1,
+     2
+    ],
+    "origin": [
+     0,
+     32
+    ],
+    "base_px": 32
+   },
+   "signpost": {
+    "atlas": [
+     0,
+     8
+    ],
+    "size": [
+     1,
+     2
+    ],
+    "origin": [
+     0,
+     32
+    ],
+    "base_px": 32
+   },
+   "lantern_post": {
+    "atlas": [
+     1,
+     8
+    ],
+    "size": [
+     1,
+     2
+    ],
+    "origin": [
+     0,
+     32
+    ],
+    "base_px": 32
+   },
+   "flower_box": {
+    "atlas": [
+     2,
+     8
+    ],
+    "size": [
+     1,
+     2
+    ],
+    "origin": [
+     0,
+     32
+    ],
+    "base_px": 32
+   },
+   "bench": {
+    "atlas": [
+     3,
+     8
+    ],
+    "size": [
+     1,
+     2
+    ],
+    "origin": [
+     0,
+     32
+    ],
+    "base_px": 32
+   },
+   "fence": {
+    "atlas": [
+     4,
+     8
+    ],
+    "size": [
+     1,
+     2
+    ],
+    "origin": [
+     0,
+     32
+    ],
+    "base_px": 32
+   },
+   "fence_post": {
+    "atlas": [
+     5,
+     8
+    ],
+    "size": [
+     1,
+     2
+    ],
+    "origin": [
+     0,
+     32
+    ],
+    "base_px": 32
    }
   },
   "on_terrain": {
@@ -679,7 +814,14 @@
    "_doc": "row 1 door / row 2 window on wall cells whose S side is open and that have wall neighbours W and E (a house front); picked by tile_hash % every: 1 door, 0 window, else plain"
   },
   "max_block": 6,
-  "_doc_max_block": "roofs (and door/window fronts) only on wall blocks up to max_block tiles wide and deep; bigger decor rects keep the plain wall until map_gen splits them into houses"
+  "_doc_max_block": "roofs (and door/window fronts) only on wall blocks up to max_block tiles wide and deep; bigger decor rects keep the plain wall until map_gen splits them into houses",
+  "styles": [
+   "tile_red",
+   "slate_blue",
+   "thatch"
+  ],
+  "style_mode": "hash",
+  "_doc_styles": "atlas rows per style = features.rows (3): style s feature f is tile row s*3+f (each 2 atlas cells tall); style_mode 'hash' picks the style per house from tile_hash of the block's top-left corner, absent or 'fixed' = style 0 (current maps unchanged)"
  },
  "rules": [
   {
@@ -697,7 +839,64 @@
    "every": 8,
    "by_x": true,
    "_doc": "floor cells next to a shop row, one every 8 along x"
+  },
+  {
+   "prop": "crate",
+   "on": 2,
+   "near": 12,
+   "every": 5,
+   "by_x": true,
+   "_doc": "floor by a shop row, one every 5 along x (offset by the well rule: first match wins)"
+  },
+  {
+   "prop": "barrel",
+   "on": 2,
+   "near": 6,
+   "every": 7,
+   "by_x": true,
+   "_doc": "floor next to a wall, one every 7 along x"
+  },
+  {
+   "prop": "bench",
+   "on": 2,
+   "near": 3,
+   "every": 9,
+   "by_x": true,
+   "_doc": "floor beside the temple square, one every 9 along x"
+  },
+  {
+   "prop": "signpost",
+   "on": 1,
+   "near": 0,
+   "every": 23,
+   "by_x": false,
+   "_doc": "road beside grass (town edge), one in 23 by hash"
+  },
+  {
+   "prop": "fence_post",
+   "on": 1,
+   "near": 0,
+   "every": 4,
+   "by_x": true,
+   "_doc": "road cells beside grass (town edges), one every 4 along x; rules never sit on grass (175k cells) for build time"
+  },
+  {
+   "prop": "flower_box",
+   "on": 2,
+   "near": 6,
+   "every": 7,
+   "by_x": false,
+   "_doc": "floor next to a wall, one in 7 by hash (house fronts)"
+  },
+  {
+   "prop": "lantern_post",
+   "on": 2,
+   "near": 1,
+   "every": 13,
+   "by_x": false,
+   "_doc": "floor beside a road, one in 13 by hash"
   }
  ],
- "_doc_rules": "rules: data-driven prop placement evaluated by MapRenderer after on_terrain: a cell of terrain `on` with a 4-neighbour of terrain `near` gets `prop` when (by_x ? x : tile_hash(x,y)) % every == 0"
+ "_doc_rules": "rules: data-driven prop placement evaluated by MapRenderer after on_terrain: a cell of terrain `on` with a 4-neighbour of terrain `near` gets `prop` when (by_x ? x : tile_hash(x,y)) % every == 0; never put a rule on terrain 0 (grass): every grass cell would pay the neighbour check (about +250 ms on the 512x512 map)",
+ "props_extra_row": 6
 }

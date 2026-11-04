@@ -5,7 +5,9 @@ mask_bits): edges get eaves and a highlight ridge, free corners round off, a chi
 MapRenderer places them on the y-sorted Props layer (sort origin = the wall cell's bottom) so characters walk
 behind a building they stand north of and in front of one they stand south of.
 
-    python client/tools/art/gen_roofs.py [--out client/assets/tiles/roofs.png] [--style terracotta|slate]
+    python client/tools/art/gen_roofs.py [--out client/assets/tiles/roofs.png]
+
+Three styles (tile red, slate blue, thatch) x three feature rows (plain, door, window) = 9 rows of 16 masks.
 
 Writes <out> (16 x 1 tiles of 64x128) and prints one line. Procedural, CC0.
 """
@@ -22,9 +24,11 @@ LIFT = 44  # px the roof plane sits above the wall cell's top (the wall face sho
 OUTLINE = (45, 30, 40, 255)
 
 STYLES = {
-    "terracotta": dict(base=(214, 106, 72), light=(240, 150, 110), dark=(150, 66, 50), ridge=(250, 200, 160), eave=(90, 40, 35)),
-    "slate": dict(base=(96, 110, 140), light=(140, 155, 185), dark=(60, 70, 95), ridge=(200, 210, 230), eave=(40, 45, 60)),
+    "terracotta": dict(base=(214, 106, 72), light=(240, 150, 110), dark=(150, 66, 50), ridge=(250, 200, 160), eave=(90, 40, 35), course=10, stagger=True),
+    "slate": dict(base=(96, 110, 140), light=(140, 155, 185), dark=(60, 70, 95), ridge=(200, 210, 230), eave=(40, 45, 60), course=8, stagger=True),
+    "thatch": dict(base=(205, 170, 95), light=(235, 205, 130), dark=(150, 115, 55), ridge=(240, 220, 160), eave=(110, 80, 40), course=6, stagger=False),
 }
+STYLE_ORDER = ["terracotta", "slate", "thatch"]  # roofs.styles index 0..2 (tile red, slate blue, thatch)
 N, E, S, W = 1, 2, 4, 8
 
 
@@ -38,21 +42,33 @@ def draw_tile(mask, st, s):
     lw = max(2, 3 * s)
     # roof plane: base fill with tile rows (horizontal courses) and a slight gradient top->bottom
     d.rectangle((0, top, W_, bot), fill=st["base"])
-    course = 10 * s
+    course = st.get("course", 10) * s
     y = top + course
     while y < bot:
         d.line((0, y, W_, y), fill=st["dark"], width=max(1, s))
         y += course
-    # staggered tile seams
-    y = top
-    row = 0
-    while y < bot:
-        x = (row % 2) * course
-        while x < W_:
-            d.line((x, y, x, min(y + course, bot)), fill=st["dark"], width=max(1, s))
-            x += course * 2
-        y += course
-        row += 1
+    if st.get("stagger", True):
+        # staggered tile seams
+        y = top
+        row = 0
+        while y < bot:
+            x = (row % 2) * course
+            while x < W_:
+                d.line((x, y, x, min(y + course, bot)), fill=st["dark"], width=max(1, s))
+                x += course * 2
+            y += course
+            row += 1
+    else:
+        # thatch: short diagonal strokes per course
+        y = top
+        k = 0
+        while y < bot:
+            x = (k % 3) * 4 * s
+            while x < W_:
+                d.line((x, y + course - s, x + 3 * s, y + 2 * s), fill=st["light"], width=max(1, s))
+                x += 9 * s
+            y += course
+            k += 1
     # highlights near the top of the plane (sun from the upper left)
     d.rectangle((0, top, W_, top + 6 * s), fill=st["light"])
     # edges: where no neighbour continues the roof
@@ -111,22 +127,23 @@ def draw_feature(img, feature, s):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=DEFAULT_OUT)
-    ap.add_argument("--style", default="terracotta", choices=list(STYLES))
     ap.add_argument("--ss", type=int, default=2)
     args = ap.parse_args()
-    st = STYLES[args.style]
     features = ["plain", "door", "window"]
-    sheet = Image.new("RGBA", (CELL * 16, TILE_H * len(features)), (0, 0, 0, 0))
-    for r, feature in enumerate(features):
-        for mask in range(16):
-            big = draw_tile(mask, st, args.ss)
-            if feature != "plain" and not mask & S:
-                big = draw_feature(big, feature, args.ss)
-            tile = big.resize((CELL, TILE_H), Image.LANCZOS)
-            sheet.paste(tile, (mask * CELL, r * TILE_H), tile)
+    # rows: style 0 features 0..2, style 1 features 0..2, style 2 features 0..2 (9 rows of 128 px)
+    sheet = Image.new("RGBA", (CELL * 16, TILE_H * len(features) * len(STYLE_ORDER)), (0, 0, 0, 0))
+    for si, sname in enumerate(STYLE_ORDER):
+        st = STYLES[sname]
+        for r, feature in enumerate(features):
+            for mask in range(16):
+                big = draw_tile(mask, st, args.ss)
+                if feature != "plain" and not mask & S:
+                    big = draw_feature(big, feature, args.ss)
+                tile = big.resize((CELL, TILE_H), Image.LANCZOS)
+                sheet.paste(tile, (mask * CELL, (si * len(features) + r) * TILE_H), tile)
     os.makedirs(os.path.dirname(args.out), exist_ok=True)
     sheet.save(args.out, optimize=True)
-    print("ROOFS written=%s variants=16x%d tile=%dx%d lift=%d" % (args.out, len(features), CELL, TILE_H, LIFT))
+    print("ROOFS written=%s styles=%d features=%d variants=16 tile=%dx%d lift=%d" % (args.out, len(STYLE_ORDER), len(features), CELL, TILE_H, LIFT))
 
 
 if __name__ == "__main__":
