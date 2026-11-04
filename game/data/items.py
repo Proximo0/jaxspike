@@ -356,7 +356,7 @@ def _icon(r):
     if kind == KIND_CONSUMABLE:
         return "item.potion_red"
     words = set(name.replace("-", " ").split())
-    if any(w in words or (" " in w and w in name) for w in _ORE_WORDS):  # whole words: "spore" is not "ore"
+    if any(w in words or (" " in w and w in name) for w in _ORE_WORDS):  # whole words: "mushroom cap" is not "ore"
         return "item.ore"
     return "item.etc"
 

@@ -79,7 +79,7 @@ func run() -> Array:
 			and inv_panel.slot_buttons[0].text == "4" and inv_panel.ryn_label.text == "Ryn 1234",
 			"%s %s" % [inv_panel.slot_buttons[0].text, inv_panel.ryn_label.text]))
 	rows.append(row("inv_equip_marker", inv_panel.slot_buttons[1].text.begins_with("E")
-			and inv_panel.equip_buttons[0].text == "Weapon: Sword" and inv_panel.equip_buttons.size() == 8,
+			and inv_panel.equip_buttons[0].text == "Weapon: +2 Sword" and inv_panel.equip_buttons.size() == 8,  # ro5-items: refine shown
 			inv_panel.equip_buttons[0].text))
 	rows.append(row("inv_icon_fallback", inv_panel.slot_buttons[2].icon != null, "craft item icon"))
 	rows.append(row("storage_hidden_until_sent", not inv_panel.storage_box.visible, ""))

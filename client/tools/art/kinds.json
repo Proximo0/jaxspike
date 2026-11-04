@@ -195,7 +195,7 @@
     "cast": "Spellcast_Long"
    },
    "bone_scales": {
-    "head": 1.45,
+    "head": 1.25,
     "handslot.r": 1.35,
     "handslot.l": 1.35,
     "hand.r": 1.15,

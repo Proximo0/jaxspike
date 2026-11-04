@@ -96,8 +96,8 @@ def test_kill_pays_the_damage_credit_holder_only():
     w = _credit(_die_monster(w, kind=0), 0, 1)  # slot 1 holds the cumulative-damage credit; slot 0 stands adjacent
     w = _setp(w, 0, kills=1)  # players.kills no longer decides the payout
     out = _run(w)
-    assert _st(out, "base_exp", 1) == S.MONSTER_BASE_EXP[0]
-    assert _st(out, "job_exp", 1) == S.MONSTER_JOB_EXP[0]
+    assert _st(out, "base_exp", 1) == int(S.MONSTER_BASE_EXP_J[0])
+    assert _st(out, "job_exp", 1) == int(S.MONSTER_JOB_EXP_J[0])
     assert _st(out, "base_exp", 0) == 0 and _st(out, "job_exp", 0) == 0
     assert _st(out, "kills_seen", 0) == 1
 
@@ -106,8 +106,8 @@ def test_ranged_kill_pays_from_far_away():
     w = _veteran(_world(active=(3,)), 3)
     w = _credit(_die_monster(w, pos=(200, 200), kind=0), 0, 3)  # corpse 190 cells away: a bolt or an arrow
     out = _run(w)
-    assert _st(out, "base_exp", 3) == S.MONSTER_BASE_EXP[0]
-    assert _st(out, "job_exp", 3) == S.MONSTER_JOB_EXP[0]
+    assert _st(out, "base_exp", 3) == int(S.MONSTER_BASE_EXP_J[0])
+    assert _st(out, "job_exp", 3) == int(S.MONSTER_JOB_EXP_J[0])
 
 
 def test_credit_to_logged_out_player_pays_nobody():
@@ -121,8 +121,8 @@ def test_orc_pays_orc_exp():
     w = _veteran(_world(), 0)
     w = _credit(_die_monster(w, kind=1), 0, 0)
     out = _run(w)
-    assert _st(out, "base_exp") == S.MONSTER_BASE_EXP[1]
-    assert _st(out, "job_exp") == S.MONSTER_JOB_EXP[1]
+    assert _st(out, "base_exp") == int(S.MONSTER_BASE_EXP_J[1])
+    assert _st(out, "job_exp") == int(S.MONSTER_JOB_EXP_J[1])
 
 
 def test_party_members_in_the_same_zone_share_with_bonus():
@@ -133,8 +133,8 @@ def test_party_members_in_the_same_zone_share_with_bonus():
     pt = {**pt, "party_id": pt["party_id"].at[0].set(0).at[1].set(0), "member_count": pt["member_count"].at[0].set(2)}
     w = {**w, "party": pt}
     out = _run(w)
-    base = S.MONSTER_BASE_EXP[1] * 110 // 100
-    job = S.MONSTER_JOB_EXP[1] * 110 // 100
+    base = int(S.MONSTER_BASE_EXP_J[1]) * 110 // 100
+    job = int(S.MONSTER_JOB_EXP_J[1]) * 110 // 100
     assert _st(out, "base_exp", 0) == base // 2 + base % 2 and _st(out, "base_exp", 1) == base // 2
     assert _st(out, "job_exp", 0) == job // 2 + job % 2 and _st(out, "job_exp", 1) == job // 2
 

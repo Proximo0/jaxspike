@@ -191,7 +191,7 @@ def test_hurt_gatherer_uses_percent_of_derived_max_hp():
     w = make_world((C0, C0), nodes=[(0, C.NODE_COPPER, C0 + 1, C0)], fields={0: (C0 + 1, C0)})
     mx = int(ro_stats.derived(w)["max_hp"][G])
     pl = w["players"]
-    low = {**w, "players": {**pl, "hp": pl["hp"].at[G].set(mx * 40 // 100)}}
+    low = {**w, "players": {**pl, "hp": pl["hp"].at[G].set(mx * 10 // 100)}}  # under RETREAT_PCT (15% since round 5)
     out = run(low)
     assert not bool(out["gather"][G]) and not bool(out["craft_busy"][G])
     full = {**w, "players": {**pl, "hp": pl["hp"].at[G].set(mx)}}
