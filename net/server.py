@@ -52,8 +52,9 @@ from game.ro_move import LEGACY_TO_RO  # noqa: E402
 from game.state import empty_inputs, next_key  # noqa: E402
 from game.step import step  # noqa: E402
 from game.view import changed_mask, entity_table, view_update  # noqa: E402
-from game.world_layout import TOWNS, temple_tiles, town_boxes  # noqa: E402
+from game.world_layout import TOWN_NAMES, TOWNS, temple_tiles, town_boxes  # noqa: E402
 from net import characters  # noqa: E402
+from net import cheats as cheat_ops  # noqa: E402  (playtest cheats, --cheats)
 from net.accounts import AccountStore  # noqa: E402
 from net.cards import card_events, card_messages  # noqa: E402  (ro4-cards)
 from net.chat import ChatRouter  # noqa: E402
@@ -88,6 +89,7 @@ _SLOT_ROWS = {"stats": None, "skills": None, "items": None, "craft": ("level", "
 _RO_INPUT_KEYS = tuple(k for k in empty_inputs() if k not in ("move", "attack", "eat"))
 MAX_CHAT_PER_TICK = 256
 MAX_OUTBOX = 128  # queued extra messages (chat, mvp) per client while a snapshot send is in flight
+MAX_CHEATS_PER_TICK = 64  # queued cheat ops applied before the next tick (net/cheats.py)
 
 
 def _ro_blocks(world) -> dict:
@@ -197,7 +199,8 @@ if "pvp" not in _NONE_INPUTS:  # ro4-pvp: PK toggle, until game/state.py carries
 _RO_INPUT_KEYS = tuple(_RO_INPUT_KEYS) + tuple(k for k in ("sit", "teleport", "pvp") if k not in _RO_INPUT_KEYS)
 _TOWN_BOXES = np.asarray(town_boxes())
 _RO_MESSAGES = frozenset(("allot", "job", "skill", "learn", "use_item", "equip", "refine", "drop", "gather", "craft",
-                          "party", "chat", "storage", "save", "buy", "sell", "sit", "teleport", "pvp", "target"))
+                          "party", "chat", "storage", "save", "buy", "sell", "sit", "teleport", "pvp", "target",
+                          "cheat"))
 PARTY_OP = {"create": 1, "leave": 2, "invite": 3, "accept": 4}
 
 
@@ -230,8 +233,12 @@ class Client:
 
 class GameServer:
     def __init__(self, seed: int, chars_dir: Path, tick_ms: int = TICK_MS, max_clients: int = MAX_PLAYERS,
-                 require_password: bool = False, stats_every: int = 100, pipeline: bool = True):
+                 require_password: bool = False, stats_every: int = 100, pipeline: bool = True,
+                 cheats: bool = False):
         self.seed = seed
+        self.cheats = cheats  # playtest cheat messages allowed (--cheats); off: refused with a notice
+        self.cheat_queue: list[tuple] = []  # (slot, validated cheat msg), applied before the next tick
+        self.godmode: set[int] = set()  # slots whose hp/sp are refilled before every tick
         self.pipeline = pipeline  # _tick_loop overlaps the device tick with the previous tick's snapshots
         self._inflight: tuple | None = None  # (pull on device, viewer, chat) of the dispatched, uncollected tick
         self.stats_every = stats_every  # ticks between "max tick duration" log lines
@@ -305,6 +312,10 @@ class GameServer:
         self._fresh = _fresh_blocks()
         _reset_rows(self.world, self._fresh, 0, 0, 0)  # compile
         self._warm_login()
+        if self.cheats:  # compile the cheat writer and the god-mode heal now, not on the first cheat
+            cheat_ops.apply(self.world, 0, 0, np.zeros(cheat_ops.N_ARGS, np.int32))
+            cheat_ops.heal_mask(self.world, np.zeros(MAX_PLAYERS, bool))
+            log.warning("CHEATS ARE ON (--cheats): playtest only")
         self.welcome_static = build_welcome_static()
         self.last_event_head = int(self.world["mvp"]["event_head"])
         self.chars_dir.mkdir(parents=True, exist_ok=True)
@@ -551,6 +562,8 @@ class GameServer:
                   self.last_storage):
             d.pop(slot, None)
         self.chat_msgs = [m for m in self.chat_msgs if m["slot"] != slot]
+        self.godmode.discard(slot)
+        self.cheat_queue = [c for c in self.cheat_queue if c[0] != slot]
         self.storage_ops = [o for o in self.storage_ops if o[0] != slot]
         c = self.conn.pop(slot, None)
         if c is not None:
@@ -581,6 +594,7 @@ class GameServer:
         """Gather the humans' inputs and call the jitted tick. Returns at once: XLA computes the tick on its own
         threads (no GIL) until _collect pulls the results."""
         self._process_storage()
+        self._process_cheats()
         pos = self.pos_host
         hmask = np.zeros(MAX_PLAYERS, bool)
         hmove = np.zeros(MAX_PLAYERS, np.int32)
@@ -679,6 +693,51 @@ class GameServer:
                 self._storage_move(slot, op, idx)
             except Exception:
                 log.exception("storage move failed for slot %d", slot)
+
+    def _process_cheats(self) -> None:
+        """Apply the queued cheats (one jitted net.cheats.apply call each) and the god-mode refill, before the tick."""
+        ops, self.cheat_queue = self.cheat_queue, []
+        for slot, msg in ops:
+            if self.owner[slot] in (None, "bot"):
+                continue
+            try:
+                text = self._apply_cheat(slot, msg)
+            except Exception:
+                log.exception("cheat failed for slot %d: %s", slot, msg)
+                text = "cheat failed"
+            prev = self.notice.get(slot)
+            self.notice[slot] = f"{prev}; {text}" if prev else text  # several cheats in one tick: one joined notice
+        if self.godmode:
+            mask = np.zeros(MAX_PLAYERS, bool)
+            mask[list(self.godmode)] = True
+            self.world = cheat_ops.heal_mask(self.world, mask)
+
+    def _apply_cheat(self, slot: int, msg: dict) -> str:
+        """One cheat for `slot`; returns the notice the player sees."""
+        op, name = msg["op"], self.owner[slot]
+        log.info("cheat %s slot %d: %s", name, slot, {k: v for k, v in msg.items() if k != "t"})
+        if op == "godmode":
+            (self.godmode.add if msg["on"] else self.godmode.discard)(slot)
+            return "god mode on" if msg["on"] else "god mode off"
+        tile = None
+        if op == "teleport":
+            tile = self._free_temple_tile(msg["town"])
+            self.path[slot].clear()
+            self.pending[slot] = None
+        code, args = cheat_ops.args_of(msg, tile)
+        self.world = cheat_ops.apply(self.world, slot, code, args)
+        if op == "teleport":
+            self.pos_host[slot] = np.asarray(tile, np.int32)
+            return f"teleported to {TOWN_NAMES[msg['town']]}"
+        if op == "level":
+            st = self.world["stats"]
+            return f"level {int(st['base_level'][slot])} / job {int(st['job_level'][slot])}"
+        if op == "ryn":
+            return f"ryn {int(self.world['items']['ryn'][slot]):,}"
+        if op == "item":
+            return f"gave {msg['count']} x {item_data.DISPLAY_NAMES[msg['item']]}" + (
+                f" +{msg['refine']}" if msg["refine"] else "")
+        return {"heal": "fully healed", "kit": "gear kit given and worn", "allskills": "all skills learned"}[op]
 
     def _storage_move(self, slot: int, op: str, idx: int) -> None:
         """Move one unit between inventory slot / storage slot `idx`. A refused move changes nothing.
@@ -1036,6 +1095,12 @@ class GameServer:
             pend["target"][slot] = msg["target"]
             pend["skill"][slot] = 0
             pend["party"][slot] = 0
+        elif t == "cheat":  # playtest cheats (net/cheats.py), queued for the next tick
+            if not self.cheats:
+                self.notice[slot] = "cheats are off"
+                log.info("cheat refused (cheats are off) %s slot %d: %s", self.owner[slot], slot, msg["op"])
+            elif len(self.cheat_queue) < MAX_CHEATS_PER_TICK:
+                self.cheat_queue.append((slot, msg))
 
 
 def bench_ticks(seed: int, n: int) -> None:
@@ -1072,6 +1137,8 @@ def main() -> None:
                     help="jax backend; gpu sets JAX_PLATFORMS=cuda and the 80%% memory cap (run in WSL)")
     ap.add_argument("--stats-every", type=int, default=100, help="ticks between tick-duration log lines")
     ap.add_argument("--no-pipeline", action="store_true", help="run each tick start to end (no device overlap)")
+    ap.add_argument("--cheats", action="store_true",
+                    help="playtest cheat messages (level, ryn, items, gear kit, teleport, god mode); off by default")
     ap.add_argument("--bench-ticks", type=int, default=0,
                     help="no sockets: time N ticks with every slot a viewer, print p50/p95 ms, exit")
     args = ap.parse_args()
@@ -1082,7 +1149,7 @@ def main() -> None:
 
     async def run() -> None:
         server = GameServer(args.seed, Path(args.chars), args.tick_ms, require_password=args.require_password,
-                            stats_every=args.stats_every, pipeline=not args.no_pipeline)
+                            stats_every=args.stats_every, pipeline=not args.no_pipeline, cheats=args.cheats)
         await server.start(args.host, args.port)
         stop = asyncio.Event()
         try:

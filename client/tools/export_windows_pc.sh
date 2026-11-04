@@ -66,7 +66,10 @@ Jaxspike client (Windows). Start the server first, from the repository:
     venv\Scripts\python.exe -m net.server --host 0.0.0.0 --port 8765
 Then run Jaxspike.exe, type a name (and a password to create an account), host and port, Connect.
 Keys: WASD move, left click walk, Space attack, E eat, C status, K skills, I inventory, R craft, P party,
-Enter chat, 1-9 skill bar, F1 overlay, F2 tuning, F3 flight recorder, F10 frame stamp, Esc back to login.
+Enter chat, 1-9 skill bar, F1 overlay, F2 tuning, F3 flight recorder, F5 cheats, F10 frame stamp, Esc back to login.
+Playtest cheats (levels, ryn, items, gear kit, teleport, god mode; F5 opens the panel): start the server with
+--cheats added, e.g.  venv\Scripts\python.exe -m net.server --host 0.0.0.0 --port 8765 --cheats
+Without it every cheat is refused with "cheats are off".
 EOT
 rm -f "$ZIP_OUT"
 python - "$(win "$EXE_DIR")" "$(win "$ZIP_OUT")" <<'EOF2' || fail "zip not produced"

@@ -112,6 +112,37 @@ def _validate_ro(t, msg: dict) -> dict | None:
     if t == "target":  # ro5-pvp2: lock a duel target (a player entity id); a monster id or your own id clears it
         ok = _is_int(msg.get("target")) and 0 <= msg["target"] < N_ENTITIES
         return {"t": t, "target": msg["target"]} if ok else None
+    if t == "cheat":  # playtest cheats (server --cheats, net/cheats.py); the server refuses them when the flag is off
+        return _validate_cheat(msg)
+    return None
+
+
+CHEAT_OPS = ("level", "ryn", "item", "heal", "teleport", "kit", "allskills", "godmode")
+
+
+def _validate_cheat(msg: dict) -> dict | None:
+    """{"t": "cheat", "op": ...} with the op's fields in range; None otherwise."""
+    op = msg.get("op")
+    ints = lambda *ks: all(_is_int(msg.get(k)) for k in ks)
+    if op == "level":  # absolute levels, 0 = keep
+        ok = ints("base", "job") and 0 <= msg["base"] <= 99 and 0 <= msg["job"] <= 50
+        return {"t": "cheat", "op": op, "base": msg["base"], "job": msg["job"]} if ok else None
+    if op == "ryn":
+        ok = ints("amount") and abs(msg["amount"]) <= item_data.MAX_RYN
+        return {"t": "cheat", "op": op, "amount": msg["amount"]} if ok else None
+    if op == "item":
+        ok = ints("item", "count", "refine") and 0 < msg["item"] < item_data.N_ITEMS \
+            and item_data.NAMES[msg["item"]] != "" and 1 <= msg["count"] <= item_data.MAX_STACK \
+            and 0 <= msg["refine"] <= item_data.MAX_REFINE
+        return {"t": "cheat", "op": op, "item": msg["item"], "count": msg["count"], "refine": msg["refine"]} if ok \
+            else None
+    if op == "teleport":
+        ok = ints("town") and 0 <= msg["town"] < len(world_layout.TOWNS)
+        return {"t": "cheat", "op": op, "town": msg["town"]} if ok else None
+    if op == "godmode":
+        return {"t": "cheat", "op": op, "on": msg["on"]} if isinstance(msg.get("on"), bool) else None
+    if op in ("heal", "kit", "allskills"):
+        return {"t": "cheat", "op": op}
     return None
 
 

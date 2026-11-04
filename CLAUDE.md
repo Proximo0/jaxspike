@@ -19,7 +19,8 @@ Godot only draws, takes input and shows panels. Every contract brief restates th
 - GPU runs: only in WSL with `~/jaxgpu/bin/python` and
   `XLA_PYTHON_CLIENT_PREALLOCATE=false XLA_PYTHON_CLIENT_MEM_FRACTION=0.6` (60% cap, never above: the user runs
   their own things beside Claude's).
-- Server: `venv\Scripts\python.exe -m net.server`; load bench: `bench/server_load.py --embedded --clients 200`.
+- Server: `venv\Scripts\python.exe -m net.server` (add `--cheats` for playtest cheats: F5 panel in the client);
+  load bench: `bench/server_load.py --embedded --clients 200`.
 
 ## Commands (client, from `client/`)
 - `tools/check_all.sh` (unit, sims, lint, bot and lab when they exist), ends `CHECK_ALL PASS`.
