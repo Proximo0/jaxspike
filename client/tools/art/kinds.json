@@ -9,7 +9,8 @@
   "`folder` is the output dir under client/assets/anim/ (docs/naming.md original monster names; the key stays the engine id).",
   "Licences: see `licenses.json` next to this file; every source here is CC0.",
   "Quaternius's atlas is a muted palette: those kinds get brightness 1.35 and a tint above 1.0 on the hue they should read as (tints multiply before the cel ramp, values over 1 lighten).",
-  "Chibi: `bone_scales` scales pose bones (head, hands); `face` puts an anime face decal (gen_faces.py style) on the `target` mesh, parented to `bone`; `squash` bounces blobs in idle/walk; `outline_rel`, `specular`, `rim` shape the ink and the cel look."
+  "Chibi: `bone_scales` scales pose bones (head, hands); `face` puts an anime face decal (gen_faces.py style) on the `target` mesh, parented to `bone`; `squash` bounces blobs in idle/walk; `outline_rel`, `specular`, `rim` shape the ink and the cel look.",
+  "`dirs` 8 draws all 8 directions (no mirrored rows, the weapon stays in the right hand); 5 draws S..N and the client mirrors 5..7."
  ],
  "source_root": "D:/jaxspike-art/src",
  "defaults": {
@@ -50,7 +51,8 @@
   "specular": 0.22,
   "specular_at": 0.96,
   "rim": 0.18,
-  "rim_at": 0.16
+  "rim_at": 0.16,
+  "dirs": 8
  },
  "_paths": {
   "adv": "kaykit_adv/KayKit-Character-Pack-Adventures-1.0-main/addons/kaykit_character_pack_adventures/Characters/gltf",
@@ -99,7 +101,8 @@
     "size": 0.36,
     "up": 0.5,
     "lift": 0.07,
-    "offset": 0.02
+    "offset": 0.02,
+    "aspect": 1.35
    },
    "zoom": 1.1
   },
@@ -141,9 +144,25 @@
     "size": 0.36,
     "up": 0.5,
     "lift": 0.07,
-    "offset": 0.02
+    "offset": 0.02,
+    "aspect": 1.35
    },
-   "zoom": 1.1
+   "zoom": 1.1,
+   "hair": {
+    "style": "spiky",
+    "color": [
+     0.2,
+     0.12,
+     0.08
+    ],
+    "cover": 0.18,
+    "spike": 0.32,
+    "spikes": 12,
+    "seed": 7,
+    "target": "Knight_Head$",
+    "bone": "head",
+    "offset": 0.16
+   }
   },
   "mage": {
    "role": "job",
@@ -182,9 +201,23 @@
     "size": 0.36,
     "up": 0.5,
     "lift": 0.07,
-    "offset": 0.02
+    "offset": 0.02,
+    "aspect": 1.35
    },
-   "zoom": 1.1
+   "zoom": 1.1,
+   "hair": {
+    "style": "long",
+    "color": [
+     0.35,
+     0.15,
+     0.5
+    ],
+    "cover": 0.3,
+    "long": 0.45,
+    "seed": 2,
+    "target": "Mage_Head$",
+    "bone": "head"
+   }
   },
   "archer": {
    "role": "job",
@@ -228,7 +261,8 @@
     "size": 0.36,
     "up": 0.5,
     "lift": 0.07,
-    "offset": 0.02
+    "offset": 0.02,
+    "aspect": 1.35
    },
    "zoom": 1.1
   },
@@ -274,7 +308,8 @@
     "size": 0.36,
     "up": 0.5,
     "lift": 0.07,
-    "offset": 0.02
+    "offset": 0.02,
+    "aspect": 1.35
    },
    "zoom": 1.1
   },
@@ -321,9 +356,25 @@
     "size": 0.36,
     "up": 0.5,
     "lift": 0.07,
-    "offset": 0.02
+    "offset": 0.02,
+    "aspect": 1.35
    },
-   "zoom": 1.1
+   "zoom": 1.1,
+   "hair": {
+    "style": "messy",
+    "color": [
+     0.7,
+     0.15,
+     0.12
+    ],
+    "cover": 0.25,
+    "spike": 0.3,
+    "seed": 11,
+    "target": "Rogue_Head$",
+    "bone": "head",
+    "offset": 0.06,
+    "front_cut": 0.4
+   }
   },
   "merchant": {
    "role": "job",
@@ -367,7 +418,8 @@
     "size": 0.36,
     "up": 0.5,
     "lift": 0.07,
-    "offset": 0.02
+    "offset": 0.02,
+    "aspect": 1.35
    },
    "zoom": 1.1
   },
@@ -411,7 +463,9 @@
     "size": 0.62,
     "up": 0.5,
     "lift": 0.22
-   }
+   },
+   "portrait_zoom": 0.85,
+   "portrait_bottom": -40
   },
   "grukk_brute": {
    "folder": "grukk_brute",
@@ -486,18 +540,10 @@
    ],
    "squash": 0.07,
    "hide": [
-    "^Icosphere",
-    "\\.00\\d$"
+    "^Icosphere"
    ],
-   "face": {
-    "style": "blob_happy",
-    "bone": "Head",
-    "target": "_Blob$",
-    "size": 0.4,
-    "up": 0.5,
-    "lift": 0.3,
-    "offset": 0.03
-   }
+   "portrait_zoom": 0.85,
+   "portrait_bottom": -40
   },
   "moonbun": {
    "folder": "moonbun",
@@ -578,7 +624,9 @@
     "size": 0.62,
     "up": 0.5,
     "lift": 0.22
-   }
+   },
+   "portrait_zoom": 0.85,
+   "portrait_bottom": -40
   },
   "vexblob": {
    "folder": "vexblob",
@@ -604,23 +652,16 @@
     0.7
    ],
    "lift": [
-    0.15,
-    0.3,
-    0.1
+    0.1,
+    0.25,
+    0.08
    ],
    "squash": 0.07,
    "hide": [
-    "^Icosphere",
-    "\\.00\\d$"
+    "^Icosphere"
    ],
-   "face": {
-    "style": "blob_happy",
-    "bone": "Head",
-    "target": "_Blob$",
-    "size": 0.42,
-    "up": 0.5,
-    "lift": 0.3
-   }
+   "portrait_zoom": 0.85,
+   "portrait_bottom": -40
   },
   "bramblet": {
    "folder": "bramblet",
@@ -691,17 +732,10 @@
    ],
    "squash": 0.07,
    "hide": [
-    "^Icosphere",
-    "\\.00\\d$"
+    "^Icosphere"
    ],
-   "face": {
-    "style": "blob_happy",
-    "bone": "Head",
-    "target": "_Blob$",
-    "size": 0.42,
-    "up": 0.5,
-    "lift": 0.3
-   }
+   "portrait_zoom": 0.85,
+   "portrait_bottom": -40
   },
   "capling": {
    "folder": "capling",
@@ -743,7 +777,9 @@
     "size": 0.62,
     "up": 0.5,
     "lift": 0.22
-   }
+   },
+   "portrait_zoom": 0.85,
+   "portrait_bottom": -40
   },
   "pilferbug": {
    "folder": "pilferbug",
@@ -845,7 +881,9 @@
    "squash": 0.07,
    "hide": [
     "^Icosphere"
-   ]
+   ],
+   "portrait_zoom": 0.85,
+   "portrait_bottom": -40
   },
   "clackbone": {
    "folder": "clackbone",
@@ -1137,7 +1175,9 @@
    "squash": 0.07,
    "hide": [
     "^Icosphere"
-   ]
+   ],
+   "portrait_zoom": 0.85,
+   "portrait_bottom": -40
   }
  },
  "faces_dir": "D:/jaxspike-art/faces"

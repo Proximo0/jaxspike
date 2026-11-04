@@ -1595,6 +1595,18 @@
   "anim.monster.19": {
    "sheet": "res://assets/anim/scorchstripe/act.json",
    "anim": "idle"
+  },
+  "fx.cast_circle": {
+   "path": "res://assets/anim/fx/cast_circle.png"
+  },
+  "fx.hit_spark": {
+   "path": "res://assets/anim/fx/hit_spark.png"
+  },
+  "fx.level_up": {
+   "path": "res://assets/anim/fx/level_up.png"
+  },
+  "fx.heal": {
+   "path": "res://assets/anim/fx/heal.png"
   }
  }
 }

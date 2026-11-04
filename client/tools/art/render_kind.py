@@ -147,19 +147,21 @@ def shrink(img, ss):
     return out
 
 
-def make_act(kind, fw, fh, anchor, is_player, source, folder=None):
-    """The act.json dict (round2 contract 1.4) for a kind: 5 drawn rows, mirrored 5..7, atk_frame 3 of 6.
-    `folder` is the dir name under assets/anim (the kind's original name from docs/naming.md; default = kind)."""
+def make_act(kind, fw, fh, anchor, is_player, source, folder=None, rows=5):
+    """The act.json dict (round2 contract 1.4) for a kind: 5 drawn rows with 5..7 mirrored, or all 8 rows drawn
+    (no mirror: the weapon stays in the right hand), atk_frame 3 of 6. `folder` is the dir name under assets/anim."""
     folder = folder or kind
+    mirror = rows < 8
     act = {
         "kind": folder, "scale": DRAW_SCALE, "frame_w": fw, "frame_h": fh, "anchor": [int(anchor[0]), int(anchor[1])],
-        "atk_frame": ATK_FRAME, "rows": 5, "directions": DIRECTIONS, "mirror_rows": {"5": 3, "6": 2, "7": 1},
+        "atk_frame": ATK_FRAME, "rows": rows, "directions": DIRECTIONS,
+        "mirror_rows": {"5": 3, "6": 2, "7": 1} if mirror else {},
         "actions": {}, "source": source,
     }
     for a in (PLAYER_ACTIONS if is_player else MONSTER_ACTIONS):
         n, delay, loop = CLIP[a]
         entry = {"file": a + ".png", "image": "res://assets/anim/%s/%s.png" % (folder, a), "row0": 0, "frames": n,
-                 "delay_ms": delay, "mirror": True, "loop": loop}
+                 "delay_ms": delay, "mirror": mirror, "loop": loop}
         if a == "attack":
             entry["atk_frame"] = ATK_FRAME
         act["actions"][a] = entry
@@ -185,13 +187,14 @@ def compose(kind, job, work, out_dir, ss, is_player, partial=False):
     folder = job.get("folder", kind)
     kdir = os.path.join(out_dir, folder)
     os.makedirs(kdir, exist_ok=True)
-    act = make_act(kind, fw, fh, anchor, is_player, "client/tools/art render_kind.py (%s)" % job["source"], folder)
+    rows = int(job.get("dirs", 5))
+    act = make_act(kind, fw, fh, anchor, is_player, "client/tools/art render_kind.py (%s)" % job["source"], folder, rows)
     total_bytes = 0
     missing = 0
     for a in act["actions"]:
         n = CLIP[a][0]
-        sheet = Image.new("RGBA", (fw * n, fh * 5), (0, 0, 0, 0))
-        for d in range(5):
+        sheet = Image.new("RGBA", (fw * n, fh * rows), (0, 0, 0, 0))
+        for d in range(rows):
             for i in range(n):
                 p = os.path.join(work, "%s_d%d_f%02d.png" % (a, d, i))
                 if not os.path.isfile(p):
@@ -233,10 +236,11 @@ def review(kind, out_dir, is_player, folder=None):
         sheet = Image.open(os.path.join(kdir, a + ".png")).convert("RGBA")
         y0 = 24 + r * (fh_ * z + 4)
         d.text((6, y0 + fh_ * z // 2), a, fill=(255, 255, 255, 255))
+        rows = int(act.get("rows", 5))
         for c in range(8):
-            row = c if c < 5 else {5: 3, 6: 2, 7: 1}[c]
+            row = c if c < rows else {5: 3, 6: 2, 7: 1}[c]
             fr = sheet.crop((0, row * fh_, fw, (row + 1) * fh_))
-            if c >= 5:
+            if c >= rows:
                 fr = fr.transpose(Image.FLIP_LEFT_RIGHT)
             fr = fr.resize((fw * z, fh_ * z), Image.NEAREST)
             img.paste(fr, (label_w + c * fw * z, y0), fr)
@@ -259,7 +263,7 @@ def contact(kind, out_dir, work_root, is_player, folder=None):
     for r, a in enumerate(names):
         sheet = Image.open(os.path.join(kdir, a + ".png")).convert("RGBA")
         n = act["actions"][a]["frames"]
-        for d in range(5):
+        for d in range(min(5, int(act.get("rows", 5)))):
             fr = sheet.crop((0, d * fh_, fw, (d + 1) * fh_))
             img.paste(fr, (d * fw, r * fh_), fr)
         for i in range(n):
@@ -287,7 +291,37 @@ def main():
     ap.add_argument("--partial", action="store_true", help="compose even when frames are missing (blank cells)")
     ap.add_argument("--act-only", default="", metavar="DIR",
                     help="write only act.json per kind into DIR/<kind>/ (no Blender, no PNGs); a dry run")
+    ap.add_argument("--portrait", action="store_true",
+                    help="render a 3/4 bust close-up per kind (256x256 RGBA, same look) to --portrait-dir")
+    ap.add_argument("--portrait-dir", default="D:/jaxspike-art/portraits")
     args = ap.parse_args()
+    if args.portrait:
+        blender = find_blender(args.blender)
+        man = load_manifest()
+        kinds = list(args.kind)
+        for k, spec in man["kinds"].items():
+            role = spec.get("role", "job")
+            if args.all or (args.jobs and role == "job") or (args.monsters and role == "monster"):
+                if k not in kinds:
+                    kinds.append(k)
+        os.makedirs(args.portrait_dir, exist_ok=True)
+        for kind in kinds:
+            spec = man["kinds"][kind]
+            work = os.path.join(args.work, "_portrait", kind)
+            job = build_job(kind, spec, man, work, args.ss)
+            idle = spec["clips"]["idle"]
+            job["actions"] = {"idle": {"clip": idle["clip"] if isinstance(idle, dict) else idle, "frames": 1, "loop": True,
+                                       "hit": None, "span": [0.0, 1.0]}}
+            job.update({"frame": [256, 256], "dirs": 1, "yaw": float(spec.get("portrait_yaw", 35.0)),
+                        "zoom": float(spec.get("portrait_zoom", 1.35)), "margin_bottom": float(spec.get("portrait_bottom", -120.0)),
+                        "margin_top": 10, "elev_deg": float(spec.get("portrait_elev", 20.0)), "squash": 0.0})
+            secs = run_blender(blender, job, work)
+            fr = shrink(Image.open(os.path.join(work, "idle_d0_f00.png")).convert("RGBA"), args.ss)
+            out = os.path.join(args.portrait_dir, job.get("folder", kind) + ".png")
+            fr.save(out, optimize=True)
+            print("portrait=%s render_s=%.0f file=%s" % (kind, secs, out))
+        print("RENDER_PORTRAITS done kinds=%d dir=%s" % (len(kinds), args.portrait_dir))
+        return
     man = load_manifest()
     kinds = list(args.kind)
     for k, spec in man["kinds"].items():
@@ -305,7 +339,8 @@ def main():
             kdir = os.path.join(args.act_only, job.get("folder", kind))
             os.makedirs(kdir, exist_ok=True)
             act = make_act(kind, job["frame"][0], job["frame"][1], default_anchor(job), is_player,
-                           "client/tools/art render_kind.py (%s)" % job["source"], job.get("folder", kind))
+                           "client/tools/art render_kind.py (%s)" % job["source"], job.get("folder", kind),
+                           int(job.get("dirs", 5)))
             with open(os.path.join(kdir, "act.json"), "w", encoding="utf-8") as fh:
                 json.dump(act, fh, indent=1)
             print("kind=%s act=%s frame=%dx%d actions=%d" % (kind, os.path.join(kdir, "act.json"), job["frame"][0],

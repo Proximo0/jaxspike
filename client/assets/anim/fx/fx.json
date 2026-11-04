@@ -1,0 +1,58 @@
+{
+ "version": 1,
+ "scale": 0.5,
+ "effects": {
+  "cast_circle": {
+   "file": "cast_circle.png",
+   "image": "res://assets/anim/fx/cast_circle.png",
+   "frame_w": 128,
+   "frame_h": 128,
+   "frames": 8,
+   "delay_ms": 90,
+   "loop": true,
+   "anchor": [
+    64,
+    79
+   ]
+  },
+  "hit_spark": {
+   "file": "hit_spark.png",
+   "image": "res://assets/anim/fx/hit_spark.png",
+   "frame_w": 128,
+   "frame_h": 128,
+   "frames": 6,
+   "delay_ms": 60,
+   "loop": false,
+   "anchor": [
+    64,
+    64
+   ]
+  },
+  "level_up": {
+   "file": "level_up.png",
+   "image": "res://assets/anim/fx/level_up.png",
+   "frame_w": 128,
+   "frame_h": 128,
+   "frames": 10,
+   "delay_ms": 80,
+   "loop": false,
+   "anchor": [
+    64,
+    115
+   ]
+  },
+  "heal": {
+   "file": "heal.png",
+   "image": "res://assets/anim/fx/heal.png",
+   "frame_w": 128,
+   "frame_h": 128,
+   "frames": 8,
+   "delay_ms": 80,
+   "loop": false,
+   "anchor": [
+    64,
+    70
+   ]
+  }
+ }
+}

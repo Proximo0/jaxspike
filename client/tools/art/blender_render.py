@@ -170,6 +170,8 @@ def make_face(spec):
     head, tail = bw
     centre = head + (tail - head) * float(spec.get("up", 0.5))
     size = float(spec.get("size", 0.22)) * height
+    aspect = float(spec.get("aspect", 1.0))  # > 1: wider plane, the eyes wrap round the cheeks (side views)
+    wx = size * aspect
     # the plane starts in front of the target's bounding box; shrinkwrap pulls it onto the surface
     dg2 = bpy.context.evaluated_depsgraph_get()
     ev = target.evaluated_get(dg2)
@@ -177,7 +179,7 @@ def make_face(spec):
     me = bpy.data.meshes.new("jx_face_mesh")
     bm = bmesh.new()
     n = 12
-    verts = [[bm.verts.new((-size / 2 + size * i / n, 0.0, -size / 2 + size * j / n)) for i in range(n + 1)] for j in range(n + 1)]
+    verts = [[bm.verts.new((-wx / 2 + wx * i / n, 0.0, -size / 2 + size * j / n)) for i in range(n + 1)] for j in range(n + 1)]
     for j in range(n):
         for i in range(n):
             bm.faces.new((verts[j][i], verts[j][i + 1], verts[j + 1][i + 1], verts[j + 1][i]))
@@ -185,7 +187,7 @@ def make_face(spec):
     for f in bm.faces:
         for lp in f.loops:
             co = lp.vert.co
-            lp[uv_layer].uv = ((co.x + size / 2) / size, (co.z + size / 2) / size)
+            lp[uv_layer].uv = ((co.x + wx / 2) / wx, (co.z + size / 2) / size)
     bm.to_mesh(me)
     bm.free()
     for p in me.polygons:
@@ -423,6 +425,118 @@ for m in kept:
         mod.material_offset = len(m.data.materials) - 1
         mod.material_offset_rim = len(m.data.materials) - 1
 
+def make_hair(spec):
+    """A procedural anime hair cap: a sphere around the (chibi-scaled) head shrink-wrapped onto it and baked, the
+    lower part cut away (less in front so the face shows, with a zigzag fringe when `bangs`), then styled:
+    `spiky` pushes seeded top vertices outward, `messy` jitters many, `long` pulls the back vertices down,
+    `bob` keeps a smooth lower cover. Parented to the head bone, toon-shaded and inked like the body.
+    spec: {"style", "color" [r,g,b], "target" regex, "bone", "cover" 0..1, "spike", "seed", "bangs", "long"}."""
+    import bmesh
+    import random
+    bone = spec.get("bone", "head")
+    tgt_re = re.compile(spec.get("target", ".*"))
+    target = next((o for o in kept if tgt_re.search(o.name)), None)
+    if target is None or rig is None or rig.pose.bones.get(bone) is None:
+        log("hair: no target/bone", spec.get("target"), bone)
+        return None
+    dg2 = bpy.context.evaluated_depsgraph_get()
+    ev = target.evaluated_get(dg2)
+    pts = [ev.matrix_world @ v.co for v in ev.data.vertices]
+    lo = Vector((min(p.x for p in pts), min(p.y for p in pts), min(p.z for p in pts)))
+    hi = Vector((max(p.x for p in pts), max(p.y for p in pts), max(p.z for p in pts)))
+    c = (lo + hi) / 2
+    ext = (hi - lo) / 2
+    r = max(ext.x, ext.y, ext.z)
+    # an ellipsoid over the head's bounding box (a shrink-wrap would land under a model's own hair shell: KayKit
+    # heads carry one, so the cap must sit outside the whole head volume)
+    grow = 1.0 + float(spec.get("offset", 0.08))
+    baked = bpy.data.meshes.new("jx_hair_mesh")
+    bm = bmesh.new()
+    bmesh.ops.create_uvsphere(bm, u_segments=28, v_segments=18, radius=1.0)
+    for v in bm.verts:
+        v.co = Vector((c.x + v.co.x * ext.x * grow, c.y + v.co.y * ext.y * grow, c.z + v.co.z * ext.z * grow))
+    bm.to_mesh(baked)
+    bm.free()
+    obj = bpy.data.objects.new("jx_hair", baked)
+    scene.collection.objects.link(obj)
+    # cut: keep the upper part; the front is cut higher so the face shows (zigzag fringe = bangs)
+    rnd = random.Random(int(spec.get("seed", 1)))
+    cover = float(spec.get("cover", 0.25))
+    bangs = bool(spec.get("bangs", True))
+    bm = bmesh.new()
+    bm.from_mesh(baked)
+    bm.verts.ensure_lookup_table()
+    doomed = []
+    for v in bm.verts:
+        d = v.co - c
+        zn = d.z / r
+        front = -d.y / r  # +1 at the face
+        limit = -cover
+        if front > 0.15:
+            fringe = 0.12 * math.sin(d.x / r * 9.0) if bangs else 0.0
+            limit = float(spec.get("front_cut", 0.28)) + 0.3 * front + fringe
+        if zn < limit:
+            doomed.append(v)
+    bmesh.ops.delete(bm, geom=doomed, context="VERTS")
+    style = spec.get("style", "spiky")
+    spike = float(spec.get("spike", 0.3)) * r
+    tops = [v for v in bm.verts if (v.co.z - c.z) / r > 0.45]
+    if style == "spiky":
+        for v in rnd.sample(tops, min(len(tops), int(spec.get("spikes", 9)))):
+            nrm = v.normal if v.normal.length > 0 else Vector((0, 0, 1))
+            v.co += nrm * spike
+            for e in v.link_edges:  # the neighbours come along, so a spike is a tuft, not a needle
+                o = e.other_vert(v)
+                o.co += nrm * spike * 0.45
+    elif style == "messy":
+        for v in bm.verts:
+            if (v.co.z - c.z) / r > 0.1 and rnd.random() < 0.35:
+                v.co += v.normal * spike * rnd.uniform(0.2, 0.8)
+    elif style == "long":
+        drop = float(spec.get("long", 0.9)) * r
+        for v in bm.verts:
+            d = v.co - c
+            if d.y / r > 0.25 or abs(d.x) / r > 0.75:  # back and sides hang down
+                v.co.z -= drop * max(0.0, 0.35 - d.z / r) * 2.0
+    bm.normal_update()
+    bm.to_mesh(baked)
+    bm.free()
+    for p in baked.polygons:
+        p.use_smooth = True
+    col = spec.get("color", [0.35, 0.2, 0.1])
+    mat = bpy.data.materials.new("jx_hair_mat")
+    bsdf = mat.node_tree.nodes.get("Principled BSDF")
+    if bsdf:
+        bsdf.inputs["Base Color"].default_value = (float(col[0]), float(col[1]), float(col[2]), 1.0)
+    baked.materials.append(mat)
+    obj.parent = rig
+    obj.parent_type = "BONE"
+    obj.parent_bone = bone
+    obj.matrix_world = Matrix.Identity(4)
+    log("hair", style, "on", target.name, "verts", len(baked.vertices), "r", round(r, 3))
+    return obj
+
+
+HAIR = JOB.get("hair")
+if HAIR and rig is not None:
+    try:
+        hair_obj = make_hair(HAIR)
+        if hair_obj is not None:
+            kept.append(hair_obj)
+            for slot in hair_obj.material_slots:
+                toonify(slot.material)
+            if OUTLINE > 0:
+                hair_obj.data.materials.append(outline_mat)
+                hm = hair_obj.modifiers.new("jx_outline", "SOLIDIFY")
+                hm.thickness = -OUTLINE
+                hm.offset = 1.0
+                hm.use_flip_normals = True
+                hm.use_rim = False
+                hm.material_offset = len(hair_obj.data.materials) - 1
+                hm.material_offset_rim = len(hair_obj.data.materials) - 1
+    except Exception as exc:  # noqa: BLE001
+        log("hair failed:", repr(exc))
+
 FACE = JOB.get("face")
 face_obj = None
 if FACE and rig is not None:
@@ -542,10 +656,14 @@ def sample_times(n, f0, f1, loop, hit, span):
 out_dir = JOB["out"]
 total = 0
 for aname, spec in JOB["actions"].items():
-    act = set_action(spec["clip"])
-    f0, f1 = act.frame_range
-    frames = sample_times(int(spec["frames"]), f0, f1, bool(spec.get("loop", False)), spec.get("hit"),
-                          spec.get("span", [0.0, 1.0]))
+    if spec.get("clip") and rig is not None:
+        act = set_action(spec["clip"])
+        f0, f1 = act.frame_range
+        frames = sample_times(int(spec["frames"]), f0, f1, bool(spec.get("loop", False)), spec.get("hit"),
+                              spec.get("span", [0.0, 1.0]))
+    else:
+        # static model (props, tiles, a card portrait of the rest pose): one frame per direction, no clip
+        frames = [0.0] * max(1, int(spec.get("frames", 1)))
     squash = float(JOB.get("squash", 0.0)) if aname in ("idle", "walk") else 0.0
     for d in range(N_DIRS):
         # direction 0 faces the camera (-Y is toward the camera, glTF +Z forward becomes Blender -Y)

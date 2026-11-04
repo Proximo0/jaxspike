@@ -55,8 +55,12 @@ def check_kind(kdir, kind, min_px, problems):
         problems.append("%s: anchor %s outside the frame" % (kind, anchor))
     if int(act.get("atk_frame", -1)) != 3 or int(act["actions"].get("attack", {}).get("frames", 0)) != 6:
         problems.append("%s: atk_frame must be 3 of 6" % kind)
-    if int(act.get("rows", 0)) != 5 or act.get("mirror_rows") != {"5": 3, "6": 2, "7": 1}:
-        problems.append("%s: rows/mirror_rows" % kind)
+    rows = int(act.get("rows", 0))
+    if rows == 5:
+        if act.get("mirror_rows") != {"5": 3, "6": 2, "7": 1}:
+            problems.append("%s: 5 rows need mirror_rows 5..7 -> 3..1" % kind)
+    elif rows != 8:
+        problems.append("%s: rows must be 5 (mirrored) or 8 (all drawn), got %d" % (kind, rows))
     for a in want:
         e = act["actions"].get(a)
         if e is None:
@@ -70,13 +74,13 @@ def check_kind(kdir, kind, min_px, problems):
             continue
         img = Image.open(png)
         n = int(e["frames"])
-        if img.size != (fw * n, fh_ * 5):
-            problems.append("%s.%s: png %s, want %s" % (kind, a, img.size, (fw * n, fh_ * 5)))
+        if img.size != (fw * n, fh_ * rows):
+            problems.append("%s.%s: png %s, want %s" % (kind, a, img.size, (fw * n, fh_ * rows)))
             continue
         if img.mode == "P" and not img.info.get("transparency"):
             problems.append("%s.%s: palette png without alpha" % (kind, a))
         img = img.convert("RGBA")
-        for d in range(5):
+        for d in range(rows):
             if opaque_count(frame(img, fw, fh_, d, 0)) < MIN_OPAQUE:
                 problems.append("%s.%s: direction %d frame 0 near empty" % (kind, a, d))
         if a in MOTION:

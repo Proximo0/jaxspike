@@ -55,5 +55,31 @@ renders are original work derived from CC0 sources and are dedicated CC0 1.0 as 
 | KayKit Character Pack: Skeletons 1.0 | Kay Lousberg | https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Skeletons-1.0 | CC0 1.0 | monsters 12 skeleton (Minion), 15 soldier_skeleton (Warrior), 17 mummy (Mage, tinted) |
 | Ultimate Monsters pack (Oct 2022) | Quaternius (quaternius.com) | https://quaternius.com/packs/ultimatemonsters.html | CC0 1.0 (License.txt in the pack) | the other 17 monsters: Blob/PinkBlob (blobbin, emberblob), GreenBlob (vexblob), GreenSpikyBlob (wrigglet), Alien (fiddlehop), Mushnub (capling), Dog (snarlfang), Cat (scorchstripe); Big/Orc (grukk_brute), Bunny (moonbun), Cactoro (bramblet), Tribal (rotling), Birb (gallopeck), Fish (sandgulper), Yeti (grumblebear); Flying/Armabee (pilferbug), Armabee_Evolved (gildscarab) |
 
+Effect sprites `client/assets/anim/fx/` (cast_circle, hit_spark, level_up, heal + `fx.json`) are generated
+procedurally by `client/tools/art/gen_effects.py` (Pillow, fixed seeds, no source images): project-original, CC0.
+
 Evaluated and not used this round: Universal LPC Spritesheet Generator (CC-BY-SA 3.0 / GPL 3.0 mixed, 4 directions,
 pixel art, no diagonals); Mixamo (needs an Adobe account); VRoid sample models (need a VRoid Hub account).
+
+## Terrain tileset and map props (round 4, team ro4-tiles, `client/assets/tiles/`)
+
+| File | Source | License | Contents |
+|---|---|---|---|
+| `client/assets/tiles/terrain.png` | generated procedurally by `client/tools/art/tiles/gen_tiles.py` (Pillow, fixed seeds, no source images, no models) | CC0 1.0, project-original | 13 terrain columns x 16 rows of 64 px cells: grass (8 variants), road / temple / water / wall (16-tile 4-neighbour blob sets), floor (4), tree base, rock (3 boulder variants), warp, waybell, station, cave (4), shop |
+| `client/assets/tiles/props.png` | same script | CC0 1.0, project-original | trees (3), Waybell bell post, market stalls (4 awning colours), temple fountain (4x4 cells), furnace and cooking fire (for crafting nodes 406/407) |
+| `client/assets/tiles/tiles.json` | same script | CC0 1.0 | atlas index read by `client/game/world/map_renderer.gd` |
+
+Every tile is drawn procedurally in the character sheets' cel look (light from the upper left, three flat tones,
+white highlight spot, near-black ink outline). No third-party model, texture or game asset is used; nothing is
+ripped from RO or any other game. Rebuild: `python client/tools/art/tiles/gen_tiles.py`.
+
+## Card art (round 4, team ro4-cards, `client/assets/cards/`)
+
+| File | Source | License | Contents |
+|---|---|---|---|
+| `client/assets/cards/<monster>.png` (27 cards, 192x256 RGBA) | composed by `client/tools/cards/compose_cards.py` (Pillow, no fonts, no source images besides the portraits below) | CC0 1.0, project-original | a framed card per card item: gold frame (rose-gold with gems on the two MVP cards), a sunburst window tinted from the monster's own colours, the portrait, a plate with the socket-type gem and rarity stars |
+| portraits inside the 20 monster cards | the round-3 chibi renders in `client/assets/anim/<monster>/idle.png` (SW frame) or the art pipeline's `render_kind.py --portrait` close-ups, both made from the CC0 models listed in the round-3 section above | CC0 1.0 | the monster portrait |
+| the 7 card-only cards (cocoonling, antlet, buzzeye, peepit, croakle, needlebuzz, cragwing) | same script, a drawn silhouette and question mark | CC0 1.0, project-original | "not found in Aurelune" mystery art |
+
+No text is baked into the cards (the client draws names), so no font licence applies. Nothing is taken from RO or
+any other game. Rebuild: `python client/tools/cards/compose_cards.py` (from `client/`).

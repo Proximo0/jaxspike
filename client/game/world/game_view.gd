@@ -20,6 +20,7 @@ var ui_layer: CanvasLayer = null
 var panels: Array[Node] = []  ## every RO panel: bind(session) / set_welcome(msg) / on_message(msg) where defined
 var skill_bar: SkillBar = null
 var target_ring: TargetRing = null
+var fx_layer: FxLayer = null  ## cast circles, hit sparks, level-up and heal effects from the animation state
 var audio: FeelAudio = null
 
 ## Placeholder layout on the 1920x1080 canvas: status left under the HUD, inventory right, others centre.
@@ -39,6 +40,12 @@ func start(s: NetSession) -> void:
 	map_drawn = false
 	entity_layer.store = s.store
 	entity_layer.own_id = -1
+	if fx_layer == null:
+		fx_layer = FxLayer.new()
+		fx_layer.z_index = 20  # above entities (z 2..10); damage numbers (z 50) are children of EntityLayer
+		add_child(fx_layer)
+		move_child(fx_layer, entity_layer.get_index() + 1)  # a sibling of EntityLayer: same coordinate space
+	fx_layer.bind(s, entity_layer)
 	player_input.session = s
 	player_input.camera = camera
 	if not player_input.quit_requested.is_connected(_on_quit):

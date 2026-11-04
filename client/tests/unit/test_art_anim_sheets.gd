@@ -103,7 +103,10 @@ func test_act_files_match_pngs() -> void:
 			assert_true(frames >= MIN_FRAMES and frames <= MAX_FRAMES, "%s.%s: frames %d" % [kind, a, frames])
 			assert_true(int(e.get("delay_ms", 0)) > 0, "%s.%s: delay" % [kind, a])
 			assert_eq(int(e.get("row0", -1)), 0, "%s.%s: row0" % [kind, a])
-			assert_true(bool(e.get("mirror", false)), "%s.%s: mirror" % [kind, a])
+			# 5 drawn rows are mirrored for 5..7; 8 drawn rows (round 3 chibi sheets) carry every direction
+			var rows: int = int(act.get("rows", DRAWN_ROWS))
+			assert_true(rows == DRAWN_ROWS or rows == 8, "%s.%s: rows %d" % [kind, a, rows])
+			assert_eq(bool(e.get("mirror", false)), rows == DRAWN_ROWS, "%s.%s: mirror" % [kind, a])
 			var png_path: String = reg.png_of(AssetSlots.anim_key(kind, a))
 			assert_eq(String(e.get("image", "")), png_path, "%s.%s: image" % [kind, a])
 			assert_eq(png_path, act_path.get_base_dir().path_join(String(e.get("file", ""))), "%s.%s" % [kind, a])
@@ -112,7 +115,7 @@ func test_act_files_match_pngs() -> void:
 			if img == null:
 				continue
 			assert_eq(img.get_width(), fw * frames, "%s.%s: width" % [kind, a])
-			assert_eq(img.get_height(), fh * DRAWN_ROWS, "%s.%s: height" % [kind, a])
+			assert_eq(img.get_height(), fh * rows, "%s.%s: height" % [kind, a])
 
 
 ## The act json of a kind through the registry (round 3: monster folders carry docs/naming.md names, the keys
@@ -132,7 +135,7 @@ func test_every_kind_draws_something_in_every_direction() -> void:
 		assert_true(img != null and not act.is_empty(), kind)
 		if img == null or act.is_empty():
 			continue
-		for row: int in range(DRAWN_ROWS):
+		for row: int in range(int(act.get("rows", DRAWN_ROWS))):
 			var f: Image = _frame(img, int(act["frame_w"]), int(act["frame_h"]), row, 0)
 			assert_true(_opaque_count(f) >= MIN_OPAQUE_PX, "%s row %d is near empty" % [kind, row])
 
