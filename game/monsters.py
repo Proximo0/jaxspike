@@ -43,10 +43,16 @@ def monster_ai(world):
     world, legacy = ro_move.attach(world)  # no-op on worlds that carry the block
     world = ro_monster_modes.on_deaths(world)  # per-kind respawn timers, looted items fall where a monster died
     movers = world["monsters"]["active"]  # monsters respawning this tick do not move yet
-    m = _respawn(world["monsters"], _occupancy(world))
-    world = {**world, "monsters": m}  # occupancy includes monsters revived this tick
-    world, path_dir = ro_monster_modes.decide(world, movers, _occupancy(world))
-    # ro-move owns the step application below: the decision above only writes move.path_dir.
+    occ = _occupancy(world)
+    m = _respawn(world["monsters"], occ)
+    world = {**world, "monsters": m}
+    # Occupancy includes monsters revived this tick: one scatter of the revived spawn tiles instead of a rebuild
+    # (ro4-perf); a revived monster's spawn tile was free, so nothing else changes.
+    revived = m["active"] & ~movers
+    occ = occ.at[m["spawn"][:, 0], m["spawn"][:, 1]].max(revived)
+    world, path_dir = ro_monster_modes.decide(world, movers, occ)
+    # ro-move owns the step application below: the decision above only writes move.path_dir. decide moves nobody,
+    # so occ is still the start-of-step occupancy the step needs (walls and pz block monsters there anyway).
     world = ro_move.want_monsters(world, path_dir)
-    world = ro_move.step_entities(world, "monsters")
+    world = ro_move.step_entities(world, "monsters", occ)
     return ro_move.detach(world, legacy)

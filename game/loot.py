@@ -29,9 +29,11 @@ def _spawn_drops(world):
     leaves its ryn on the ground as GOLD_COIN (ro_drops.place_drops), which pickup turns into ryn.
     """
     sub, world = next_key(world)
-    items, counts, ryn = ro_drops.roll_drops(world, sub)
-    died = world["monsters"]["died"]
-    killer = killer_of(world)
+    m = world["monsters"]
+    # ro4-perf: only the died slots (compacted to ro_drops.MAX_DEATHS rows, slot order) are rolled and placed.
+    rows, died = ro_drops.compact_died(m["died"])
+    items, counts, ryn = ro_drops.roll_rows(m["kind"][rows], rows, sub)
+    killer = killer_of(world)[rows]
     credited = died & (killer >= 0)
     if "items" in world:
         it = world["items"]
@@ -40,7 +42,7 @@ def _spawn_drops(world):
         new_ryn = jnp.minimum(it["ryn"] + jnp.minimum(gain, item_data.MAX_RYN), item_data.MAX_RYN)
         world = {**world, "items": {**it, "ryn": new_ryn}}
         ryn = jnp.where(credited, 0, ryn)
-    return ro_drops.place_drops(world, items, counts, ryn)
+    return ro_drops.place_rows(world, m["pos"][rows], died, items, counts, ryn)
 
 
 def _pickup(world):

@@ -6,6 +6,7 @@ import numpy as np
 from bots import ro_nav_policy as nav
 from game import ro_stats
 from game.config import MAP, MAX_PLAYERS
+from game.data.monsters import HP as MON_HP, KIND_BY_NAME
 from game.map_gen import DIST_UNREACHABLE
 from game.state import make_empty_world
 from game.world_layout import dungeon_boxes, dungeon_pads, portal_warp_tiles
@@ -20,10 +21,12 @@ def _cheb(x, y):
     return jnp.maximum(jnp.abs(xs - x), jnp.abs(ys - y))
 
 
-def world(pos, level=1, hp_pct=100, slot=0, field=True, pz=(), monsters=()):
-    """One active player at `pos` with the given base level and HP percent of its derived max."""
+def world(pos, level=1, hp_pct=100, slot=0, field=True, pz=(), monsters=(), kinds=None):
+    """One active player at `pos` with the given base level and HP percent of its derived max, with the stats
+    bots.ro_stats_policy allots a fresh Novice's 48 points to (STR 18, VIT 4)."""
     w = make_empty_world(KEY)
-    st = {**w["stats"], "base_level": w["stats"]["base_level"].at[slot].set(level)}
+    st = {**w["stats"], "base_level": w["stats"]["base_level"].at[slot].set(level),
+          "str": w["stats"]["str"].at[slot].set(18), "vit": w["stats"]["vit"].at[slot].set(4)}
     w = {**w, "stats": st}
     p = w["players"]
     p = {**p, "pos": p["pos"].at[slot].set(jnp.array(pos, jnp.int32)), "active": p["active"].at[slot].set(True)}
@@ -35,7 +38,9 @@ def world(pos, level=1, hp_pct=100, slot=0, field=True, pz=(), monsters=()):
     if monsters:
         m = w["monsters"]
         for i, (x, y) in enumerate(monsters):
-            m = {**m, "pos": m["pos"].at[i].set(jnp.array([x, y])), "active": m["active"].at[i].set(True)}
+            k = 0 if kinds is None else kinds[i]
+            m = {**m, "pos": m["pos"].at[i].set(jnp.array([x, y])), "active": m["active"].at[i].set(True),
+                 "kind": m["kind"].at[i].set(k), "hp": m["hp"].at[i].set(int(MON_HP[k]))}  # full hp: not provoked
         w["monsters"] = m
     if field:
         w["dist_dungeon"] = jnp.stack([_cheb(int(x), int(y)) for x, y in ENT]).astype(jnp.int16)
@@ -110,9 +115,56 @@ def test_bot_below_dive_pct_does_not_dive():
 
 
 def test_hurt_bot_walks_home_even_at_high_level():
+    """Hurt with an aggressive monster close by: no field rest, walk home."""
     x, y = ENT[0]
-    move, _ = run(world((x + 40, y + 40), level=30, hp_pct=nav.RETREAT_PCT - 5), base=E)
-    assert int(move[0]) in (W, NW, SW)  # down the home field toward x = 10
+    bug = KIND_BY_NAME["Pilferbug"]
+    move, sit = run(world((x + 40, y + 40), level=30, hp_pct=nav.RETREAT_PCT - 5, monsters=[(x + 42, y + 40)],
+                          kinds=[bug]), base=E)
+    assert int(move[0]) in (W, NW, SW) and not bool(sit[0])  # down the home field toward x = 10
+
+
+def test_hurt_bot_sits_in_a_safe_field_spot_and_stands_when_rested():
+    from game import ro_anim
+    w = world((100, 100), hp_pct=nav.RETREAT_PCT - 5, monsters=[(101, 100)])  # a passive Blobbin at full hp
+    move, sit, attack, _ = _nav(w, KEY, jnp.zeros((MAX_PLAYERS,), jnp.int32))
+    assert int(move[0]) == 0 and bool(sit[0]) and not bool(attack[0])  # sits down (the input is a toggle)
+    a = w["anim"]
+    w["anim"] = {**a, "action": a["action"].at[0].set(ro_anim.SIT)}
+    move, sit = run(w)
+    assert int(move[0]) == 0 and not bool(sit[0])  # already sitting: no toggle, stays down
+    p = w["players"]
+    mx = int(ro_stats.derived(w)["max_hp"][0])
+    w["players"] = {**p, "hp": p["hp"].at[0].set(mx * (nav.RETREAT_PCT + 10) // 100)}
+    move, sit = run(w)
+    assert int(move[0]) == 0 and not bool(sit[0])  # above RETREAT_PCT but below REST_PCT: keeps sitting
+    w["players"] = {**p, "hp": p["hp"].at[0].set(mx)}
+    move, sit = run(w)
+    assert bool(sit[0])  # rested: stands up (toggle) and hunts
+
+
+def test_prey_choice_by_hit_and_cost():
+    """A fresh Novice chases a Blobbin but not a Fiddlehop (VIT 18 eats its 19 ATK) beside it; an adjacent passive
+    Fiddlehop is left alone, a provoked one is fought back."""
+    hop = KIND_BY_NAME["Fiddlehop"]
+    lv = 7  # within LEVEL_MARGIN of the level-9 Fiddlehop: only the cost test keeps the bot off it
+    w = world((100, 100), level=lv, monsters=[(104, 100)], kinds=[hop])
+    _, _, attack, fight = _nav(w, KEY, jnp.zeros((MAX_PLAYERS,), jnp.int32))
+    assert not bool(fight[0]) and not bool(attack[0])
+    hit, cost = nav.prey_cost(w, jnp.zeros((MAX_PLAYERS,), jnp.int32))
+    assert int(cost[0]) > int(ro_stats.derived(w)["max_hp"][0])  # cannot be won from full hp
+    w = world((100, 100), monsters=[(104, 100)])
+    mx = int(ro_stats.derived(w)["max_hp"][0])
+    hit, cost = nav.prey_cost(w, jnp.zeros((MAX_PLAYERS,), jnp.int32))
+    assert int(hit[0]) == 80 and 0 < int(cost[0]) * nav.COST_SAFETY_PCT < (100 - nav.FLOOR_PCT) * mx
+    _, _, _, fight = _nav(w, KEY, jnp.zeros((MAX_PLAYERS,), jnp.int32))
+    assert bool(fight[0])
+    w = world((100, 100), level=lv, monsters=[(101, 100)], kinds=[hop])
+    _, _, attack, _ = _nav(w, KEY, jnp.zeros((MAX_PLAYERS,), jnp.int32))
+    assert not bool(attack[0])
+    m = w["monsters"]
+    w["monsters"] = {**m, "hp": m["hp"].at[0].add(-10)}
+    _, _, attack, _ = _nav(w, KEY, jnp.zeros((MAX_PLAYERS,), jnp.int32))
+    assert bool(attack[0])
 
 
 def test_resting_bot_on_pz_stands_and_sits():

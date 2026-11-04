@@ -41,6 +41,8 @@ N_MONSTER_KINDS = len(MONSTER_HP)
 MONSTER_DAMAGE = _RO_DMG  # per-kind max hit; (3, 9) for the first two kinds, as tuned
 
 DROP_TTL = 200            # ticks before a ground item disappears
+EXP_RATE = 1  # exp multiplier at payout (classic 1x; 2-5 for a faster server), read by game/data/stats.py
+MAX_DEATHS_PER_TICK = 128  # died monsters rolled for drops per world-tick (game/ro_drops.MAX_DEATHS); the rest drop nothing
 
 # Loot roll: a uniform u in [0, 1) is compared against these cumulative thresholds in order.
 # coin 40%, meat 25%, sword 1%, nothing otherwise (34%).

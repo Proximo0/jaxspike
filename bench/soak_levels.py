@@ -22,7 +22,7 @@ sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[1]
 from bench.soak_check import check_invariants  # noqa: E402
 from bots import ro_nav_policy as nav  # noqa: E402
 from bots.ro_policies import ro_bot_inputs  # noqa: E402
-from bots.runner import POP_PLAYERS, make_world_batch  # noqa: E402
+from bots.runner import POP_MONSTERS, POP_PLAYERS, make_world_batch  # noqa: E402
 from game import ro_spawns  # noqa: E402
 from game.config import TICK_MS  # noqa: E402
 from game.data.skills import N_JOBS  # noqa: E402
@@ -75,14 +75,20 @@ def zone_census(worlds):
     return np.asarray(jax.vmap(one)(worlds).sum(0))
 
 
-def main(batch=2, chunks=20, ticks=250, seed=0, dungeons=True, zones=False):
+def main(batch=2, chunks=20, ticks=250, seed=0, dungeons=True, zones=False, density=False):
     print("platform:", jax.devices()[0].platform, flush=True)
     t0 = time.perf_counter()
-    worlds = make_world_batch(seed, batch)
-    if dungeons:
+    worlds = make_world_batch(seed, batch)  # the runner adds world["dist_dungeon"] already
+    if not dungeons:
+        worlds = {k: v for k, v in worlds.items() if k != "dist_dungeon"}
+    elif "dist_dungeon" not in worlds:
         worlds = {**worlds, "dist_dungeon": jax.lax.map(nav.dungeon_fields, worlds["terrain"])}
+    if density:  # the runner placement line (ro_spawns.spawn_tiles) until bots/runner.py has it
+        keys = jax.random.split(jax.random.PRNGKey(seed + 7919), batch)
+        worlds = jax.vmap(lambda w, k: ro_spawns.repopulate(w, k, POP_MONSTERS))(worlds, keys)
     jax.block_until_ready(worlds)
-    print(f"built {batch} worlds in {time.perf_counter() - t0:.1f}s (dungeon fields: {dungeons})", flush=True)
+    print(f"built {batch} worlds in {time.perf_counter() - t0:.1f}s (dungeon fields: {dungeons}, "
+          f"spawn density: {density})", flush=True)
 
     n = POP_PLAYERS
     first_base10 = np.full((batch, n), -1)
@@ -186,5 +192,7 @@ if __name__ == "__main__":
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--no-dungeons", action="store_true", help="leave world['dist_dungeon'] out: bots never dive")
     ap.add_argument("--zones", action="store_true", help="also print living bots per RO zone after each chunk")
+    ap.add_argument("--density", action="store_true",
+                    help="re-place the monsters with game/ro_spawns.spawn_tiles (band density) after the runner")
     a = ap.parse_args()
-    main(a.batch, a.chunks, a.ticks, a.seed, not a.no_dungeons, a.zones)
+    main(a.batch, a.chunks, a.ticks, a.seed, not a.no_dungeons, a.zones, a.density)

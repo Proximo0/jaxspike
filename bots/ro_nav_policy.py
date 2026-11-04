@@ -4,9 +4,10 @@ party following. Pure, read-only.
 Modes are derived from the world every tick (no bot state):
 - hunting: wall- and crowd-aware chase and the attack flag (see nav_moves); this replaces the base policy's chase,
   whose absolute HUNT_RETREAT_HP no longer fits derived max_hp (a level-1 Novice has 41);
-- hurt (hp below RETREAT_PCT of derived max_hp): walk home along the warp-aware home-gate field (inside a dungeon
-  that field leads through the exit warp, from another zone through its portal);
-- resting (on a protection zone below REST_PCT): stand still and sit when the engine has a sit input;
+- hurt (hp below RETREAT_PCT of derived max_hp): sit down where it is safe (field rest, ro4-balance), else walk
+  home along the warp-aware home-gate field (inside a dungeon that field leads through the exit warp, from another
+  zone through its portal);
+- resting (on a protection zone below REST_PCT, or sitting in the field below REST_PCT): stand still and sit;
 - diving (base level >= the dungeon's DUNGEON_DIVE_LEVEL, healthy, not a gatherer): walk down the nearest eligible
   dungeon's entrance field to its entrance warp; inside a dungeon, hunt (chase within BOT_CHASE_RANGE, else keep a
   wander heading) instead of the base policy's "too far from the gate, walk back";
@@ -29,7 +30,8 @@ import numpy as np
 
 from bots.policies import HUNT_RADIUS
 from bots.ro_party_policy import leader_of
-from game.config import MAP, MAX_PLAYERS
+from game.config import MAP, MAX_PLAYERS, MONSTER_ATTACK_COOLDOWN
+from game.data import monsters as mdata
 from game.data.monsters import LEVEL as MON_LEVEL
 from game.data.terrain import T_WARP
 from game.map_gen import DIST_UNREACHABLE, _shift_min, blocking, warp_table
@@ -44,8 +46,19 @@ except ImportError:  # pragma: no cover - legacy 4-direction engine
 
 DELTAS = jnp.asarray(_DELTAS_T, jnp.int32)  # [K + 1, 2], code 0 = stay
 N_DIRS = len(_DELTAS_T) - 1
-RETREAT_PCT = 50        # walk home below this percent of max_hp
-REST_PCT = 70           # on a protection zone below this percent: stand still (and sit)
+RETREAT_PCT = 55        # below this percent of max_hp: stop hunting (sit where it is safe, else walk home)
+REST_PCT = 90           # a sitting bot (in town or in a safe field spot) stands up at this percent
+# Prey choice (ro4-balance, "fight what you can hit"): the nearest monster is chased and hit only when the bot's
+# hit chance on it (80 + HIT - (level + AGI), combat.hit_percent_player) is at least MIN_HIT_PCT and the HP the bot
+# expects to lose killing it, times COST_SAFETY_PCT / 100, leaves it above FLOOR_PCT of max_hp. A passive monster
+# that fails the test is left alone even when adjacent (it never starts a fight); a provoked one is fought back.
+MIN_HIT_PCT = 70
+COST_SAFETY_PCT = 125
+FLOOR_PCT = 10
+SAFE_DIST = 3           # field rest only when no aggressive or provoked monster is within this many cells
+# Monster swing period the bot's estimate assumes: the engine's (combat.py swings every MONSTER_ATTACK_COOLDOWN
+# ticks); switch to max(1, (mdata.ADELAY_MS + TICK_MS // 2) // TICK_MS) per kind together with combat.
+MON_SWING_TICKS = jnp.full(mdata.LEVEL.shape, MONSTER_ATTACK_COOLDOWN, jnp.int32)
 DIVE_PCT = 70           # leave for a dungeon only at or above this percent (= REST_PCT: rested bots dive)
 DUNGEON_MIN_LEVEL = 10  # base level from which bots walk into the easiest dungeon (Culvert monsters are level 6-16)
 BOT_CHASE_RANGE = 6     # same bound as bots.policies (3x3 spatial cells)
@@ -54,9 +67,12 @@ BORED_TICKS = 40        # chase-boredom windows (ticks)
 BORED_PCT = 25          # percent of windows a bot ignores monsters it is not adjacent to
 LEVEL_MARGIN = 2        # never chase a monster more than this many levels above the bot's base level
 GATHER_EVERY = 4        # bots.ro_craft_policy: slot i % 4 == 1 gathers; gatherers never dive
-BAND1_LEVEL = 5         # from this base level a bot hunts in the second field band (zone portals on the way)
-# (lo, hi) home-gate walk distances of the hunting ring per level band: below BAND1_LEVEL, from it.
-RING_BY_LEVEL = ((HUNT_RADIUS // 2, 2 * HUNT_RADIUS), (HUNT_RADIUS, 2 * HUNT_RADIUS))
+BAND1_LEVEL = 5         # from this base level a bot hunts out to the inner half of the second field band
+# (lo, hi) home-gate walk distances of the hunting ring per level band: below BAND1_LEVEL the ring is field band 0
+# (game/ro_spawns: walk distance < HUNT_RADIUS, Blobbin-class prey; it used to reach 2 * HUNT_RADIUS, half of it in
+# band 1, where the level 9-16 kinds killed level-1 bots); from BAND1_LEVEL band 0's outer half and band 1's inner
+# half (Bramblet / Fiddlehop; the aggressive Pilferbug and Vexblob / Capling live in band 1's outer half).
+RING_BY_LEVEL = ((HUNT_RADIUS // 3, HUNT_RADIUS), (HUNT_RADIUS * 4 // 5, HUNT_RADIUS * 3 // 2))
 FOLLOW_MIN = 6          # a party member farther than this (manhattan) from its leader walks toward it
 WARP_WAIT_TICKS = 4     # a bot left standing on a warp tile (destination busy) waits all but one tick in four
 
@@ -201,6 +217,47 @@ def _base_level(world):
     return jnp.ones((MAX_PLAYERS,), jnp.int32)
 
 
+def _sitting(world):
+    """bool [MAX_PLAYERS]: the anim action is SIT (the sit input toggles it; no anim block: nobody sits)."""
+    if "anim" not in world:
+        return jnp.zeros((MAX_PLAYERS,), jnp.bool_)
+    from game.ro_anim import SIT
+    return world["anim"]["action"][:MAX_PLAYERS].astype(jnp.int32) == SIT
+
+
+def prey_cost(world, idx):
+    """(hit_pct, cost) int32 [MAX_PLAYERS] against monster idx [MAX_PLAYERS] (each bot's nearest monster):
+    the bot's chance in percent to hit it (combat: clip(80 + HIT - (level + AGI), 5, 95)) and the HP it expects to
+    lose killing it from its current hp: swings = ceil(hp_left / dmg) * 100 / hit_pct at derived aspd_ticks, the
+    monster swinging every MON_SWING_TICKS with clip(80 + level + DEX - FLEE, 5, 95) for its mean ATK less the
+    bot's armour (hard DEF percent, then VIT flat), plus one swing for the opening. Buffs and elements are left out."""
+    from game import ro_stats
+    mon = world["monsters"]
+    kind = jnp.clip(mon["kind"][idx], 0, mdata.LEVEL.shape[0] - 1)
+    if "stats" in world:
+        d = ro_stats.derived(world)
+        atk, hit, flee, soft, aspd = d["atk"], d["hit"], d["flee"], d["def"], d["aspd_ticks"]
+    else:  # pragma: no cover - worlds without the stats block (legacy tests)
+        one = jnp.ones((MAX_PLAYERS,), jnp.int32)
+        atk, hit, flee, soft, aspd = one * 10, one, one, one * 0, one * 10
+    hard = jnp.zeros((MAX_PLAYERS,), jnp.int32)
+    if "items" in world:
+        from game import ro_items
+        eq = ro_items.equipped(world)
+        atk = atk + eq["weapon_atk"]
+        hard = jnp.clip(eq["armor_def"], 0, 80)
+    hit_pct = jnp.clip(80 + hit - (mdata.LEVEL[kind] + mdata.AGI[kind]), 5, 95)
+    dmg = jnp.maximum(atk * (100 - jnp.clip(mdata.DEF[kind], 0, 80)) // 100 - mdata.VIT[kind], 1)
+    hp_left = jnp.maximum(mon["hp"][idx], 1)
+    hits = (jnp.minimum(hp_left, 1 << 20) + dmg - 1) // dmg
+    swings = jnp.minimum((hits * 100 + hit_pct - 1) // hit_pct, 1000)  # int32-safe
+    ticks = swings * jnp.clip(aspd, 1, 100)
+    m_hit = jnp.clip(80 + mdata.LEVEL[kind] + mdata.DEX[kind] - flee, 5, 95)
+    m_dmg = jnp.maximum((mdata.ATK_MIN[kind] + mdata.ATK_MAX[kind]) // 2 * (100 - hard) // 100 - soft, 1)
+    cost = (ticks // MON_SWING_TICKS[kind] + 1) * m_hit * m_dmg // 100
+    return hit_pct.astype(jnp.int32), cost.astype(jnp.int32)
+
+
 def modes(world):
     """Per-player masks the composed policy uses: hurt, rest, in_dungeon, dive (all bool [MAX_PLAYERS])."""
     pl = world["players"]
@@ -244,8 +301,11 @@ def nav_moves(world, key, base_move, shop=None):
     Hunting (every live bot that is not hurt, not on a protection zone): chase the nearest monster within
     BOT_CHASE_RANGE by stepping to the free neighbour (no wall, no corner cut, no living player) with the smallest
     manhattan distance to it (equal to the current one allowed, so it sidesteps obstacles), attack it when orthogonally
-    adjacent. Monsters more than LEVEL_MARGIN levels above the bot are left alone unless adjacent (no level-1 bot pulls
-    a Sandgulper). A bot with no such neighbour takes a random free step; one that is "bored" this window (BORED_PCT of
+    adjacent. Only prey the bot can win is chased or hit (prey_cost: hit chance >= MIN_HIT_PCT, expected HP loss x
+    COST_SAFETY_PCT within the hp above FLOOR_PCT; never more than LEVEL_MARGIN levels above the bot); an adjacent
+    monster that fails it is hit only once provoked (aggressive, or already damaged). Below RETREAT_PCT a bot sits
+    where no provoked or aggressive monster is within SAFE_DIST (outside dungeons) until REST_PCT, else walks home;
+    `sit` is the engine's toggle (sent once to sit down, once to stand up). A bot with no such neighbour takes a random free step; one that is "bored" this window (BORED_PCT of
     (slot, tick // BORED_TICKS) windows) keeps its roam move: that breaks the stateless chase loops at tree lines and
     around monsters other bots surround. A heading step into a blocked tile is replaced by a random free one.
     """
@@ -257,9 +317,22 @@ def nav_moves(world, key, base_move, shop=None):
 
     table, _ = build_grid(mon["pos"], mon["active"])
     idx, dist = nearest_in_block(table, pos, mon["pos"])
-    weak = MON_LEVEL[jnp.clip(mon["kind"][idx], 0, MON_LEVEL.shape[0] - 1)] <= level + LEVEL_MARGIN
-    near = (dist <= BOT_CHASE_RANGE) & (dist > 0) & weak
+    mkind = jnp.clip(mon["kind"][idx], 0, MON_LEVEL.shape[0] - 1)
+    weak = MON_LEVEL[mkind] <= level + LEVEL_MARGIN
+    # prey choice: hittable and affordable from the current hp (prey_cost); provoked monsters are fought back
+    hp, mx = pl["hp"].astype(jnp.int32), jnp.maximum(_max_hp(world), 1)
+    hit_pct, cost = prey_cost(world, idx)
+    win = (hit_pct >= MIN_HIT_PCT) & (cost * COST_SAFETY_PCT <= hp * 100 - FLOOR_PCT * mx)
+    provoked = mon["active"][idx] & (mdata.AGGRO[mkind] | (mon["hp"][idx] < mdata.HP[mkind]))
+    near = (dist <= BOT_CHASE_RANGE) & (dist > 0) & weak & win
     fighting = dist <= 2
+    # field rest (sit where it is safe instead of walking home): no aggressive / provoked monster close, not in a
+    # dungeon; a bot starts below RETREAT_PCT and keeps sitting (the anim SIT action is its memory) until REST_PCT
+    sitting = _sitting(world)
+    threat = provoked & (dist <= SAFE_DIST)
+    below_rest = m["live"] & (hp * 100 < REST_PCT * mx)
+    field_rest = below_rest & ~m["on_pz"] & ~m["in_dungeon"] & ~threat & (m["hurt"] | sitting)
+    resting = m["rest"] | field_rest
 
     tgt, deltas = neighbours(pos)
     free_all = ~blocked(world, pos, deltas) & ~_occupied(world, tgt)
@@ -283,8 +356,10 @@ def nav_moves(world, key, base_move, shop=None):
     heading = unblock(heading)
     k_b = jax.random.fold_in(jax.random.PRNGKey(11), world["tick"] // BORED_TICKS)
     bored = jax.random.uniform(k_b, (MAX_PLAYERS,)) * 100 < BORED_PCT
-    able = m["live"] & ~m["hurt"] & ~m["on_pz"]
-    adjacent = able & (dist == 1)
+    able = m["live"] & ~m["hurt"] & ~m["on_pz"] & ~field_rest
+    # a hurt bot next to a provoked monster it can still afford finishes it instead of turning its back on it
+    finish = m["live"] & m["hurt"] & ~m["on_pz"] & (dist == 1) & provoked & win & weak
+    adjacent = (able & (dist == 1) & ((win & weak) | provoked)) | finish
     chasing = able & near & ~bored & can_chase
 
     home, can_home = home_step(world)
@@ -334,8 +409,8 @@ def nav_moves(world, key, base_move, shop=None):
     move = jnp.where(able & near & ~bored & ~can_chase, rand_mv, move)  # boxed in: jiggle free
     move = jnp.where(chasing, chase_mv, move)
     move = jnp.where(adjacent, 0, move)
-    move = jnp.where(m["hurt"] & ~m["on_pz"] & can_home, home, move)
-    move = jnp.where(m["rest"], 0, move)  # a hurt bot that reached town rests too
+    move = jnp.where(m["hurt"] & ~m["on_pz"] & ~field_rest & ~finish & can_home, home, move)  # unsafe: walk home
+    move = jnp.where(resting, 0, move)  # a hurt bot that reached town rests too
     if shop is not None:
         goal = SHOP_OF_TOWN[_HOME]
         cheb = jnp.max(jnp.abs(tgt - goal[:, None, :]), axis=2)
@@ -346,4 +421,8 @@ def nav_moves(world, key, base_move, shop=None):
     on_warp = world["terrain"][pos[:, 0], pos[:, 1]] == T_WARP
     move = jnp.where(on_warp & (world["tick"] % WARP_WAIT_TICKS != 0), 0, move)
     move = jnp.where(m["live"], move, 0).astype(jnp.int32)
-    return move, m["rest"], adjacent, chasing | adjacent
+    # the engine's sit input is a toggle (game/survival.py): sit down once when resting starts, stand up once when it
+    # ends while still sitting (sending it every resting tick, as before, stood the bot up every other tick)
+    resting = resting & (move == 0)
+    sit = m["live"] & (resting != sitting)
+    return move, sit, adjacent, chasing | adjacent

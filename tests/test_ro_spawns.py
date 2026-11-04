@@ -129,14 +129,36 @@ def test_spawn_tiles_distinct_weighted_and_jittable():
 
 def test_kind_mix_weights():
     plan = np.asarray(ro_spawns.spawn_plan(_terrain, _fields))
-    pos = _tiles(WALK & (plan == 1), 4000, 11)
-    kinds = np.asarray(ro_spawns.kinds_for(WORLD, pos, jax.random.PRNGKey(2)))
-    count = np.bincount(kinds, minlength=len(K))
-    mix = ro_spawns.SPAWN_MIX[1]
-    total = sum(mix.values())
-    for name, w in mix.items():
-        assert abs(count[K[name]] / len(pos) - w / total) < 0.04, (name, count[K[name]] / len(pos), w / total)
-    assert count[K["Bramblet"]] > 2 * count[K["Vexblob"]]
+    for band in (0, 1):
+        sel = np.argwhere(WALK & (plan == band))
+        half = np.asarray(ro_spawns.half_of(WORLD, jnp.asarray(sel, jnp.int32)))
+        for s in range(ro_spawns.N_SUB):
+            xy = sel[half == s]
+            assert len(xy) > 500, (band, s, len(xy))
+            pos = jnp.asarray(xy[np.random.default_rng(11).choice(len(xy), min(4000, len(xy)), replace=False)])
+            kinds = np.asarray(ro_spawns.kinds_for(WORLD, pos, jax.random.PRNGKey(2 + s)))
+            count = np.bincount(kinds, minlength=len(K))
+            mix = ro_spawns.SPAWN_MIX[band][s]
+            total = sum(mix.values())
+            for name in FIELD_BANDS[band][2]:
+                want = mix.get(name, 0) / total
+                assert abs(count[K[name]] / len(pos) - want) < 0.04, (band, s, name, count[K[name]] / len(pos), want)
+
+
+def test_mix_steps_up_with_distance_and_novice_prey_is_hittable():
+    """The inner half of band 0 is mostly prey a fresh Novice (HIT 2) hits 80%+ of the time and that cannot one-shot
+    40 hp; the aggressive and level 14+ band-1 kinds only spawn in band 1's outer half."""
+    from game.data import monsters as md
+    inner0 = ro_spawns.SPAWN_MIX[0][0]
+    hit80 = sum(w for n, w in inner0.items() if 80 + 2 - (int(md.LEVEL[K[n]]) + int(md.AGI[K[n]])) >= 80)
+    assert hit80 / sum(inner0.values()) >= 0.5
+    for band0 in ro_spawns.SPAWN_MIX[0]:
+        assert all(int(md.ATK_MAX[K[n]]) < 40 for n in band0)
+    for n in ro_spawns.SPAWN_MIX[1][0]:
+        assert not bool(md.AGGRO[K[n]]) and int(md.LEVEL[K[n]]) < 14
+    level = lambda mix: sum(int(md.LEVEL[K[n]]) * w for n, w in mix.items()) / sum(mix.values())
+    rows = [m for band in ro_spawns.SPAWN_MIX for m in band]
+    assert all(level(a) < level(b) for a, b in zip(rows, rows[1:]))
 
 
 def test_repopulate_sets_the_first_n_slots():

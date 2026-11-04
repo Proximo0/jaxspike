@@ -128,3 +128,17 @@ WANDER_MAX_MS = 5000
 WANDER_MIN_CELLS = 1
 WANDER_MAX_CELLS = 5
 WANDER_BOX = 6  # chebyshev cells from the spawn a wander goal may reach
+
+# Attack delay per kind (ro4-balance): rAthena pre-re mob_db AttackDelay in ms (the time between two swings), from
+# the RO counterparts (Poring 1872, Fabre 1672, Lunatic 1456, Drops 1372, ... ro-fidelity may correct a value).
+# combat.py still swings every config.MONSTER_ATTACK_COOLDOWN ticks (8 = 800 ms, ~2.3x faster than a Poring);
+# the line for combat (ro4-balance hand-back) swings every max(1, (ADELAY_MS + TICK_MS // 2) // TICK_MS) ticks.
+# Kept in ms: game/config.py imports this module, so TICK_MS cannot be read here.
+_ADELAY_MS = {
+    "Blobbin": 1872, "Grukk Brute": 1864, "Wrigglet": 1672, "Moonbun": 1456, "Emberblob": 1372, "Vexblob": 1672,
+    "Bramblet": 1672, "Fiddlehop": 1864, "Capling": 1872, "Pilferbug": 1288, "Rotling": 2612, "Snarlfang": 1054,
+    "Clackbone": 2228, "Gallopeck": 1564, "Sandgulper": 1480, "Clackbone Guard": 2276, "Grumblebear": 1260,
+    "Tombwrap": 1772, "Gildscarab": 768, "Scorchstripe": 872,
+}
+assert set(_ADELAY_MS) == set(NAMES)
+ADELAY_MS = jnp.asarray([_ADELAY_MS[n] for n in NAMES], jnp.int32)

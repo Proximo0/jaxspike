@@ -7,8 +7,12 @@ Balance lives here as data (docs/round3_contract.md: never by softening the RO f
   is small: at weight 1 everywhere it held 74 of 1024 monsters per world for 128 bots (2026-11-02 CPU soak), and
   the bots went looking in band 1, where Vexblob, Capling, Fiddlehop and Pilferbug killed level-1 Novices (deaths 4.0
   per 1000 bot-ticks there against 0.44 in band 0).
-- SPAWN_MIX: per-band kind weights (the kinds themselves stay world_layout.FIELD_BANDS). Band 1 leans on Bramblet
-  and Fiddlehop; Vexblob (59-72 ATK one-shots a 40 hp Novice) and the aggressive Pilferbug are rarer.
+- SPAWN_MIX: kind weights per band and per half of the band (inner = nearer the gate, outer = farther), so the mix
+  steps up with walking distance from town (ro4-balance); the kinds themselves stay world_layout.FIELD_BANDS. The
+  inner half of band 0 is mostly Blobbin, the only band-0 kind a fresh Novice (HIT 2) hits 80% of the time
+  (combat: 80 + HIT - (level + AGI)); Wrigglet 78%, Moonbun / Emberblob 76% join further out. No band-0 kind can
+  one-shot 40 hp (max ATK 13). Band 1's inner half is Bramblet / Fiddlehop (passive), the aggressive Pilferbug and
+  the level 14-16 Vexblob / Capling only in its outer half.
 """
 import jax
 import jax.numpy as jnp
@@ -40,30 +44,48 @@ BAND_DENSITY = (6.0, 1.5, 0.55)
 DUNGEON_DENSITY = 1.0
 assert len(BAND_DENSITY) == N_BANDS
 
-# Kind weights per band, by name (every name must be in that band's FIELD_BANDS list; missing names weigh 0).
+# Kind weights per band, (inner half, outer half), by name (every name must be in that band's FIELD_BANDS list;
+# missing names weigh 0). Tuned 2026-11-03 (ro4-balance).
 SPAWN_MIX = (
-    {"Blobbin": 30, "Wrigglet": 25, "Moonbun": 25, "Emberblob": 20},
-    {"Bramblet": 35, "Fiddlehop": 30, "Capling": 15, "Pilferbug": 12, "Vexblob": 8},
-    {"Snarlfang": 25, "Gallopeck": 25, "Sandgulper": 20, "Grumblebear": 15, "Grukk Brute": 15},
+    ({"Blobbin": 60, "Wrigglet": 25, "Moonbun": 15},
+     {"Blobbin": 25, "Wrigglet": 25, "Moonbun": 25, "Emberblob": 25}),
+    ({"Bramblet": 60, "Fiddlehop": 40},
+     {"Bramblet": 20, "Fiddlehop": 25, "Pilferbug": 25, "Capling": 15, "Vexblob": 15}),
+    ({"Snarlfang": 35, "Gallopeck": 35, "Sandgulper": 30},
+     {"Snarlfang": 15, "Gallopeck": 15, "Sandgulper": 20, "Grumblebear": 25, "Grukk Brute": 25}),
 )
-assert len(SPAWN_MIX) == N_BANDS
+N_SUB = 2
+assert len(SPAWN_MIX) == N_BANDS and all(len(m) == N_SUB for m in SPAWN_MIX)
 
 
 def _mix_table():
-    """float32 [N_BANDS, W] cumulative kind weights (ending at 1.0) in BAND_KINDS order, padded with 1.0."""
+    """float32 [N_BANDS * N_SUB, W] cumulative kind weights (ending at 1.0) in BAND_KINDS order, padded with 1.0;
+    row band * N_SUB + half."""
     width = BAND_KINDS.shape[1]
-    out = np.ones((N_BANDS, width), np.float32)
+    out = np.ones((N_BANDS * N_SUB, width), np.float32)
     for b, (lo, hi, names) in enumerate(FIELD_BANDS):
-        w = np.array([float(SPAWN_MIX[b].get(n, 0.0)) for n in names], np.float64)
-        assert set(SPAWN_MIX[b]) <= set(names) and w.sum() > 0, (b, SPAWN_MIX[b])
-        out[b, : len(names)] = np.cumsum(w / w.sum())
-        out[b, len(names) - 1] = 1.0
+        for s in range(N_SUB):
+            mix = SPAWN_MIX[b][s]
+            w = np.array([float(mix.get(n, 0.0)) for n in names], np.float64)
+            assert set(mix) <= set(names) and w.sum() > 0, (b, s, mix)
+            out[b * N_SUB + s, : len(names)] = np.cumsum(w / w.sum())
+            out[b * N_SUB + s, len(names) - 1] = 1.0
     return jnp.asarray(out)
 
 
 BAND_MIX_CUM = _mix_table()
 DUNGEON_MVP = jnp.asarray([KIND_BY_NAME[d[5]] for d in DUNGEONS], jnp.int32)
 _BAND_EDGES = tuple(float(b[1]) * MAP for b in FIELD_BANDS[:-1])   # upper edge of every band but the last
+# Inner / outer split of each band: its middle; the open last band splits one band-1 width past its lower edge.
+_W1 = float(FIELD_BANDS[1][1] - FIELD_BANDS[1][0]) if N_BANDS > 1 else 0.08
+_SPLITS = tuple((float(lo) + min(float(hi) - float(lo), 2 * _W1) / 2) * MAP for lo, hi, _ in FIELD_BANDS)
+
+
+def half_of(world, pos):
+    """int32 [n]: 0 in the inner half of the position's field band, 1 in the outer half (unreachable = outer)."""
+    d = world["dist_town"].min(axis=0)[pos[:, 0], pos[:, 1]].astype(jnp.int32)
+    split = jnp.asarray(_SPLITS, jnp.float32)[_band_of_dist(d)]
+    return (d >= split).astype(jnp.int32)
 
 
 def _band_of_dist(d):
@@ -83,13 +105,14 @@ def kinds_for(world, pos, key):
     """Return int32 [n] monster kinds for pos [n, 2]; the first position in each dungeon is its MVP."""
     n = pos.shape[0]
     band = band_of(world, pos)
+    row = band * N_SUB + half_of(world, pos)
     dun = world_layout.dungeon_index(pos)
     inside = dun >= 0
     k_dun, k_band = jax.random.split(key)
     count = DUNGEON_COUNT[jnp.maximum(dun, 0)]
     pick = jax.random.randint(k_dun, (n,), 0, count)   # array maxval: uniform over the real dungeon kinds
     u = jax.random.uniform(k_band, (n,))
-    band_pick = jnp.minimum((u[:, None] >= BAND_MIX_CUM[band]).sum(axis=1), BAND_COUNT[band] - 1)  # weighted
+    band_pick = jnp.minimum((u[:, None] >= BAND_MIX_CUM[row]).sum(axis=1), BAND_COUNT[band] - 1)  # weighted
     kind = jnp.where(inside, DUNGEON_KINDS[jnp.maximum(dun, 0), pick], BAND_KINDS[band, band_pick])
     for k in range(N_DUNGEONS):
         in_k = dun == k

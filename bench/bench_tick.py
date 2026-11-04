@@ -80,7 +80,7 @@ def _time(fn, args, calls, warm):
         jax.block_until_ready(fn(*args))
         if i >= warm:
             ts.append((time.perf_counter() - t0) * 1000)
-    return float(np.percentile(ts, 50)), float(np.percentile(ts, 95))
+    return float(np.percentile(ts, 50)), float(np.min(ts))  # p50, min (min is steadier on a busy box)
 
 
 def main():
@@ -91,7 +91,12 @@ def main():
     ap.add_argument("--calls", type=int, default=30)
     ap.add_argument("--warm", type=int, default=5, help="untimed calls per phase after compile")
     ap.add_argument("--no-prefix", action="store_true", help="skip the prefix-delta column (faster)")
+    ap.add_argument("--only", default="", help="comma list of phases to time alone (default all; the step is "
+                                                "always timed; implies --no-prefix)")
+    ap.add_argument("--no-step", action="store_true", help="skip timing the whole step")
     args = ap.parse_args()
+    if args.only:
+        args.no_prefix = True
 
     import jax
     from game.state import next_key
@@ -115,7 +120,10 @@ def main():
     ident = jax.jit(jax.vmap(lambda w, i: w["tick"]))
     base_p50, _ = _time(ident, (worlds, inputs), args.calls, args.warm)
 
+    only = {s.strip() for s in args.only.split(",") if s.strip()}
     for name, fn in phases:
+        if only and name not in only:
+            continue
         paths = _changed_paths(fn, world1, inputs1)
         if paths:
             alone = jax.jit(jax.vmap(lambda w, i, fn=fn, paths=paths: _pick(fn(w, i), paths)))
@@ -135,11 +143,12 @@ def main():
             p50, _ = _time(jax.jit(jax.vmap(trunc)), (worlds, inputs), args.calls, args.warm)
             prefix.append(p50 - prev)
             prev = p50
-    step_p50, step_p95 = _time(jax.jit(jax.vmap(step)), (worlds, inputs), args.calls, args.warm)
+    step_p50, step_p95 = (float("nan"), float("nan")) if args.no_step else _time(
+        jax.jit(jax.vmap(step)), (worlds, inputs), args.calls, args.warm)
 
     print(f"platform={jax.default_backend()} batch={B} warm_ticks={args.warm_ticks} calls={args.calls} "
           f"dispatch baseline {base_p50:.2f} ms")
-    head = f"{'phase':10s} | {'alone p50':>9s} | {'alone p95':>9s} | {'per world':>9s}"
+    head = f"{'phase':10s} | {'alone p50':>9s} | {'alone min':>9s} | {'per world':>9s}"
     head += f" | {'prefix d':>9s}" if prefix else ""
     head += " | leaves"
     print(head)
@@ -150,7 +159,8 @@ def main():
         line += f" | {prefix[i]:9.2f}" if prefix else ""
         print(line + f" | {n}")
     print(f"{'sum alone':10s} | {sum_alone:9.2f} | {'':9s} | {sum_alone / B:9.3f}")
-    print(f"{'step':10s} | {step_p50:9.2f} | {step_p95:9.2f} | {step_p50 / B:9.3f}   ms per world-tick")
+    print(f"{'step':10s} | {step_p50:9.2f} | {step_p95:9.2f} | {step_p50 / B:9.3f}   ms per world-tick "
+          f"(min {step_p95 / B:.3f})")
 
 
 if __name__ == "__main__":

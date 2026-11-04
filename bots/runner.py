@@ -3,7 +3,6 @@ import jax
 import jax.numpy as jnp
 
 from game.config import (
-    GATE_APRON_TILES,
     ITEM_NONE,
     MAP,
     MAX_MONSTERS,
@@ -43,8 +42,7 @@ def spawn_population(world, key):
     key, k_kind = jax.random.split(key)
     i = jnp.arange(POP_PLAYERS)
     ppos = temple_tiles()[i % nt, i // nt]
-    gate_dist = world["dist_town"].min(axis=0)  # walking distance to the nearest gate
-    mpos = _distinct_tiles((world["walls"] == 0) & ~world["pz"] & (gate_dist > GATE_APRON_TILES), key, POP_MONSTERS)
+    mpos = ro_spawns.spawn_tiles(world, key, POP_MONSTERS)  # ro4-balance: band density and mix by distance from town
     kind = ro_spawns.kinds_for(world, mpos, k_kind).astype(jnp.int32)
     hp = jnp.asarray(MONSTER_HP, jnp.int32)[kind]
 

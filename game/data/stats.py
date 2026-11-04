@@ -119,8 +119,12 @@ JOB_ASPD_BASE_J = jnp.asarray(JOB_ASPD_BASE, jnp.int32)
 from game.data.monsters import MONSTERS as _MONSTERS  # noqa: E402
 MONSTER_BASE_EXP = tuple(m.base_exp for m in _MONSTERS)
 MONSTER_JOB_EXP = tuple(m.job_exp for m in _MONSTERS)
-MONSTER_BASE_EXP_J = jnp.asarray(MONSTER_BASE_EXP, jnp.int32)
-MONSTER_JOB_EXP_J = jnp.asarray(MONSTER_JOB_EXP, jnp.int32)
+# EXP_RATE (ro4-balance): the server's exp multiplier, game/config.py `EXP_RATE = 1` (classic 1x; 2-5 for a faster
+# server). The tables above stay the RO numbers; only the payout arrays the tick reads (ro_stats) are scaled.
+from game import config as _config  # noqa: E402
+EXP_RATE = int(getattr(_config, "EXP_RATE", 1))
+MONSTER_BASE_EXP_J = jnp.asarray(MONSTER_BASE_EXP, jnp.int32) * EXP_RATE
+MONSTER_JOB_EXP_J = jnp.asarray(MONSTER_JOB_EXP, jnp.int32) * EXP_RATE
 
 # STAT_POINTS_PER_LEVEL: indexed by the base level just reached, status points gained (plain points). RO pre-re
 # (rAthena pc_gets_status_point: (old_level + 15) / 5); 48 start + levels 2..99 = 1273 points at 99.

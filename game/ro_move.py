@@ -117,24 +117,57 @@ def _occupied(target_flat, occupant_flat):
     n_occ = occupant_flat.shape[0]
     keys = jnp.concatenate([occupant_flat, target_flat])
     is_occ = jnp.concatenate([jnp.ones((n_occ,), jnp.bool_), jnp.zeros((target_flat.shape[0],), jnp.bool_)])
-    order = jnp.argsort(keys * 2 + (~is_occ).astype(jnp.int32))
-    k_sorted = keys[order]
-    occ_sorted = is_occ[order]
+    k2, order = _sort_with_index(keys * 2 + (~is_occ).astype(jnp.int32))
+    k_sorted = k2 // 2
+    occ_sorted = (k2 % 2) == 0
     latest_occ = jax.lax.cummax(jnp.where(occ_sorted, k_sorted, -1), axis=0)
     hit_sorted = ~occ_sorted & (latest_occ == k_sorted)
-    return hit_sorted[jnp.argsort(order)][n_occ:]  # argsort inverts the permutation without a scatter
+    return _unsort(hit_sorted, order)[n_occ:]
+
+
+def _sort_with_index(keys):
+    """(sorted keys, permutation): one stable two-operand sort (ties keep index order)."""
+    idx = jnp.arange(keys.shape[0], dtype=jnp.int32)
+    return jax.lax.sort((keys, idx), num_keys=1, is_stable=True)
+
+
+def _unsort(vals_sorted, order):
+    """Values back in input order: one scatter of n (ro4-perf; was a second argsort of the permutation)."""
+    return jnp.zeros_like(vals_sorted).at[order].set(vals_sorted, unique_indices=True)
 
 
 def _first_claims(keys):
     """True for the lowest index among equal keys (keys == _NO_TILE never win). Stable sort keeps index order."""
-    order = jnp.argsort(keys, stable=True)
-    k = keys[order]
+    k, order = _sort_with_index(keys)
     first = jnp.concatenate([jnp.array([True]), k[1:] != k[:-1]]) & (k < _NO_TILE)
-    return first[jnp.argsort(order)]
+    return _unsort(first, order)
 
 
-def step_entities(world, group=None):
-    """Advance accumulators and take at most one step per entity of `group` ("players", "monsters" or None = all)."""
+def _claim(target_flat, occupant_flat):
+    """bool: target i wins its tile (no occupant on it, lowest index among the targets that want it).
+
+    _occupied + _first_claims fused into one stable sort of occupants and targets (ro4-perf): occupants sort before
+    targets of the same tile, so a target wins when no occupant precedes it in its run and the element before it is
+    not a target of the same tile. Same answer as `_first_claims(where(~_occupied(t, o), t, _NO_TILE))`: every
+    target of a tile shares that tile's occupied flag. Targets equal to _NO_TILE never win.
+    """
+    n_occ = occupant_flat.shape[0]
+    keys = jnp.concatenate([occupant_flat * 2, target_flat * 2 + 1])
+    k2, order = _sort_with_index(keys)
+    k, is_tgt = k2 // 2, (k2 % 2) == 1
+    latest_occ = jax.lax.cummax(jnp.where(is_tgt, -1, k), axis=0)
+    prev_tgt_same = jnp.concatenate([jnp.array([False]), is_tgt[:-1] & (k[:-1] == k[1:])])
+    won = is_tgt & (latest_occ != k) & ~prev_tgt_same & (k < _NO_TILE)
+    return _unsort(won, order)[n_occ:]
+
+
+def step_entities(world, group=None, occ=None):
+    """Advance accumulators and take at most one step per entity of `group` ("players", "monsters" or None = all).
+
+    occ: optional bool [MAP, MAP], True on every tile a living entity stands on at the start of this step; walls
+    may be True too, and protection-zone tiles for the monsters group (they block the same steps). game/monsters.py
+    passes the table it already built; without it the occupancy comes from one sort of the entity tiles.
+    """
     mv, p, m = world["move"], world["players"], world["monsters"]
     grp = _IS_PLAYER if group == "players" else ~_IS_PLAYER if group == "monsters" else jnp.ones((N_ENT,), bool)
     pos = jnp.concatenate([p["pos"], m["pos"]])
@@ -165,9 +198,16 @@ def step_entities(world, group=None):
     free = (walls[tc[:, 0], tc[:, 1]] == 0) & (~diag | (side_x & side_y))
     free = free & (_IS_PLAYER | ~world["pz"][tc[:, 0], tc[:, 1]])  # monsters never enter protection zones
     tflat = tc[:, 0] * MAP + tc[:, 1]
-    occupied = _occupied(tflat, jnp.where(alive, pos[:, 0] * MAP + pos[:, 1], _NO_TILE))
-    attempt = ready & in_bounds & free & ~occupied
-    won = _first_claims(jnp.where(attempt, tflat, _NO_TILE))
+    attempt = ready & in_bounds & free
+    # Only the group's rows can attempt (ready needs grp), so only they enter the claim sort (ro4-perf): the
+    # players' step sorts 512 targets instead of 4608, the monsters' 4096.
+    lo, hi = (0, MAX_PLAYERS) if group == "players" else (MAX_PLAYERS, N_ENT) if group == "monsters" else (0, N_ENT)
+    t_grp = jnp.where(attempt, tflat, _NO_TILE)[lo:hi]
+    if occ is not None:  # caller's start-of-step occupancy table: one gather instead of the occupant sort
+        won_grp = _first_claims(jnp.where(occ[tc[lo:hi, 0], tc[lo:hi, 1]], _NO_TILE, t_grp))
+    else:
+        won_grp = _claim(t_grp, jnp.where(alive, pos[:, 0] * MAP + pos[:, 1], _NO_TILE))
+    won = jnp.zeros((N_ENT,), jnp.bool_).at[lo:hi].set(won_grp) if (lo, hi) != (0, N_ENT) else won_grp
 
     new_pos = jnp.where(won[:, None], target, pos)
     acc = jnp.where(won, acc - cost, jnp.minimum(acc, cost))

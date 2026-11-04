@@ -2,6 +2,7 @@
 import jax
 import jax.numpy as jnp
 
+from game import config as _config
 from game.config import DROP_TTL, ITEM_NONE, MAP, MAX_DROPS, MAX_MONSTERS, MAX_PLAYERS
 from game.data import items as item_data
 from game.data.drops import (
@@ -15,22 +16,52 @@ from game.data.drops import (
 )
 
 
-def roll_drops(world, key):
-    """Roll every drop entry for every monster slot (the caller masks by died).
+# Deaths whose drops are rolled per world-tick (ro4-perf): the died monsters are compacted to this many rows before
+# rolling and placing, instead of rolling all MAX_MONSTERS rows every tick. Deaths past the cap in one tick drop
+# nothing. The lead mirrors it into config.MAX_DEATHS_PER_TICK.
+MAX_DEATHS = int(getattr(_config, "MAX_DEATHS_PER_TICK", 128))
 
-    Returns (items, counts) int32 [MAX_MONSTERS, DROPS_PER_KIND] (0 where the roll failed or the entry is
-    unused) and ryn int32 [MAX_MONSTERS], uniform inclusive in the kind's range. Chances are per 10000.
+
+def roll_rows(kind, rows, key):
+    """Roll the drop table for monster slots `rows` (int32 [R]) of kinds `kind` (int32 [R]).
+
+    Each slot's roll comes from its own key, fold_in(key, slot), so a slot rolls the same whichever rows are rolled
+    with it: roll_drops (all slots) and the compacted loot path agree row for row. One random.bits draw per row:
+    DROPS_PER_KIND uniforms (24 bits each) then the ryn draw (modulo the kind's range, bias < 2^-16).
+    Returns (items, counts) int32 [R, DROPS_PER_KIND] (0 where the roll failed or the entry is unused), ryn [R].
     """
-    k_drop, k_ryn = jax.random.split(key)
-    kind = jnp.clip(world["monsters"]["kind"], 0, N_DROP_KINDS - 1)
-    u = jax.random.uniform(k_drop, (MAX_MONSTERS, DROPS_PER_KIND))
+    kind = jnp.clip(kind, 0, N_DROP_KINDS - 1)
+    bits = jax.vmap(lambda r: jax.random.bits(jax.random.fold_in(key, r), (DROPS_PER_KIND + 1,)))(rows)
+    u = (bits[:, :DROPS_PER_KIND] >> 8).astype(jnp.float32) * (1.0 / (1 << 24))
     item = DROP_ITEM[kind]
     hit = (u * 10000.0 < DROP_CHANCE[kind]) & (item != 0)
     items = jnp.where(hit, item, 0).astype(jnp.int32)
     counts = jnp.where(hit, DROP_COUNT[kind], 0).astype(jnp.int32)
     lo, hi = RYN_MIN[kind], RYN_MAX[kind]
-    ryn = jax.random.randint(k_ryn, (MAX_MONSTERS,), lo, hi + 1, jnp.int32)
+    span = jnp.maximum(hi - lo + 1, 1).astype(jnp.uint32)
+    ryn = (lo + (bits[:, DROPS_PER_KIND] % span).astype(jnp.int32)).astype(jnp.int32)
     return items, counts, ryn
+
+
+def roll_drops(world, key):
+    """Roll every drop entry for every monster slot (the caller masks by died).
+
+    Returns (items, counts) int32 [MAX_MONSTERS, DROPS_PER_KIND] (0 where the roll failed or the entry is
+    unused) and ryn int32 [MAX_MONSTERS], uniform inclusive in the kind's range. Chances are per 10000.
+    Row m equals what the compacted loot path rolls for monster m with the same key (roll_rows).
+    """
+    return roll_rows(world["monsters"]["kind"], jnp.arange(MAX_MONSTERS, dtype=jnp.int32), key)
+
+
+def compact_died(died, cap=None):
+    """(rows int32 [cap], valid bool [cap]): the first `cap` died monster slots in index order (padding rows are
+    slot 0 with valid False). cumsum rank + one scatter, fixed shape."""
+    cap = MAX_DEATHS if cap is None else cap
+    rank = jnp.cumsum(died) - 1
+    rows = jnp.full((cap,), MAX_MONSTERS, jnp.int32).at[jnp.where(died, rank, cap)].set(
+        jnp.arange(died.shape[0], dtype=jnp.int32), mode="drop")
+    valid = rows < MAX_MONSTERS
+    return jnp.where(valid, rows, 0), valid
 
 
 def drop_fields():
@@ -50,16 +81,26 @@ def place_drops(world, items, counts, ryn):
     the drops block has "count" the slot stores the rolled count (the coin: the full ryn, RYN_PER_COIN = 1) and
     refine/cards 0; without the fields every drop is one unit.
     """
-    mons, drops = world["monsters"], world["drops"]
+    mons = world["monsters"]
+    return place_rows(world, mons["pos"], mons["died"], items, counts, ryn)
+
+
+def place_rows(world, pos, valid, items, counts, ryn):
+    """place_drops over R given rows: pos int32 [R, 2], valid bool [R], items/counts [R, DROPS_PER_KIND], ryn [R].
+
+    Rows are ranked in order (row-major, table entries then the coin), so compacted died rows in slot order place
+    exactly as the full [MAX_MONSTERS] call would.
+    """
+    drops = world["drops"]
     per = DROPS_PER_KIND + 1
     coin_count = jnp.maximum(1, ryn // item_data.RYN_PER_COIN).astype(jnp.int32)
     coin_item = jnp.where(ryn > 0, item_data.ITEM_GOLD_COIN, 0).astype(jnp.int32)
-    all_items = jnp.concatenate([items, coin_item[:, None]], axis=1)  # [M, per]
-    all_counts = jnp.concatenate([counts, coin_count[:, None]], axis=1)  # [M, per]
-    n = MAX_MONSTERS * per
+    all_items = jnp.concatenate([items, coin_item[:, None]], axis=1)  # [R, per]
+    all_counts = jnp.concatenate([counts, coin_count[:, None]], axis=1)  # [R, per]
+    n = valid.shape[0] * per
     flat_item = all_items.reshape(n)
-    flat_pos = jnp.repeat(mons["pos"], per, axis=0)
-    spawn = jnp.repeat(mons["died"], per) & (flat_item != 0)
+    flat_pos = jnp.repeat(pos, per, axis=0)
+    spawn = jnp.repeat(valid, per) & (flat_item != 0)
 
     c_rank = jnp.cumsum(spawn) - 1
     free = ~drops["active"]
@@ -97,12 +138,13 @@ def pickup(world):
     didx = jnp.arange(MAX_DROPS, dtype=jnp.int32)
     pidx = jnp.arange(MAX_PLAYERS, dtype=jnp.int32)
 
-    dtile = drops["pos"][:, 0] * MAP + drops["pos"][:, 1]
-    tile_min = jnp.full((MAP * MAP,), MAX_DROPS, jnp.int32).at[
-        jnp.where(drops["active"], dtile, MAP * MAP)
-    ].min(didx, mode="drop")
+    # Lowest active drop on each player's tile by one sort of the drop tiles + a binary search (ro4-perf: was a
+    # MAP x MAP scatter-min table per world). The stable sort keeps index order, so the first hit is the lowest.
+    dtile = jnp.where(drops["active"], drops["pos"][:, 0] * MAP + drops["pos"][:, 1], MAP * MAP)
+    st, sidx = jax.lax.sort((dtile, didx), num_keys=1, is_stable=True)
     ptile = jnp.clip(players["pos"][:, 0], 0, MAP - 1) * MAP + jnp.clip(players["pos"][:, 1], 0, MAP - 1)
-    cand = tile_min[ptile]
+    at = jnp.minimum(jnp.searchsorted(st, ptile, side="left"), MAX_DROPS - 1)
+    cand = jnp.where(st[at] == ptile, sidx[at], MAX_DROPS)
 
     empty = inv == ITEM_NONE
     has_empty = empty.any(axis=1)
