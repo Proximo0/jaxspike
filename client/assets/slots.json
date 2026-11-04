@@ -1469,6 +1469,9 @@
   },
   "fx.heal": {
    "path": "res://assets/anim/fx/heal.png"
+  },
+  "item.etc": {
+   "path": "res://assets/icons/etc.png"
   }
  }
 }

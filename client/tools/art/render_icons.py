@@ -28,19 +28,19 @@ SKEL = SRC + "/kaykit_skel/KayKit-Character-Pack-Skeletons-1.0-main/addons/kayki
 
 # name -> (source glb, show regex list, yaw, elev, tint)
 MESH_ICONS = {
-    "sword": (ADV + "Knight.glb", ["^1H_Sword$"], 40, 20, None),
-    "dagger": (ADV + "Rogue.glb", ["^Knife$"], 40, 20, None),
-    "bow": (ADV + "Rogue.glb", ["^2H_Crossbow$"], 30, 25, [0.9, 0.75, 0.55]),
-    "staff": (ADV + "Mage.glb", ["^2H_Staff$"], 30, 20, None),
+    "sword": (ADV + "Knight.glb", ["^1H_Sword$"], 45, 12, None),
+    "dagger": (ADV + "Rogue.glb", ["^Knife$"], 45, 12, None),
+    "bow": (ADV + "Rogue.glb", ["^2H_Crossbow$"], 45, 30, [0.9, 0.75, 0.55]),
+    "staff": (ADV + "Mage.glb", ["^2H_Staff$"], 45, 12, None),
     "mace": (SKEL + "Skeleton_Warrior.glb", ["^Skeleton_Warrior_"], 30, 20, None),  # replaced below if an axe-like mesh is better
-    "axe": (ADV + "Barbarian.glb", ["^1H_Axe$"], 40, 20, None),
+    "axe": (ADV + "Barbarian.glb", ["^1H_Axe$"], 45, 12, None),
     "shield": (ADV + "Knight.glb", ["^Round_Shield$"], 20, 15, None),
     "hat": (ADV + "Mage.glb", ["^Mage_Hat$"], 30, 25, None),
     "garment": (ADV + "Knight.glb", ["^Knight_Cape$"], 30, 20, [1.0, 0.5, 0.5]),
     "armor": (ADV + "Knight.glb", ["^Knight_Body$"], 30, 20, None),
     "boots": (ADV + "Barbarian.glb", ["^Barbarian_LegLeft$", "^Barbarian_LegRight$"], 30, 25, [0.8, 0.6, 0.4]),
 }
-MESH_ICONS["mace"] = (ADV + "Mage.glb", ["^1H_Wand$"], 40, 20, [0.75, 0.75, 0.8])
+MESH_ICONS["mace"] = (ADV + "Mage.glb", ["^1H_Wand$"], 45, 12, [0.75, 0.75, 0.8])
 
 
 def blender_icon(name, size, ss):
@@ -56,16 +56,18 @@ def blender_icon(name, size, ss):
     if tint:
         job["tint"] = tint
     rk.run_blender(rk.find_blender(""), job, work)
-    fr = rk.shrink(Image.open(os.path.join(work, "idle_d0_f00.png")).convert("RGBA"), ss)
-    # centre the drawn pixels in the icon
-    bbox = fr.getbbox()
+    big = Image.open(os.path.join(work, "idle_d0_f00.png")).convert("RGBA")
+    # crop the drawn pixels on the supersampled render, fit them into the icon (pad 2 px at 1x), then shrink
+    bbox = big.getbbox()
+    full = size * ss
+    pad = 2 * ss
+    canvas = Image.new("RGBA", (full, full), (0, 0, 0, 0))
     if bbox:
-        crop = fr.crop(bbox)
-        scale = min((size - 4) / crop.width, (size - 4) / crop.height, 1.0)
-        if scale < 1.0:
-            crop = crop.resize((max(1, int(crop.width * scale)), max(1, int(crop.height * scale))), Image.LANCZOS)
-        fr = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-        fr.paste(crop, ((size - crop.width) // 2, (size - crop.height) // 2), crop)
+        crop = big.crop(bbox)
+        scale = min((full - 2 * pad) / crop.width, (full - 2 * pad) / crop.height)
+        crop = crop.resize((max(1, int(crop.width * scale)), max(1, int(crop.height * scale))), Image.LANCZOS)
+        canvas.paste(crop, ((full - crop.width) // 2, (full - crop.height) // 2), crop)
+    fr = rk.shrink(canvas, ss)
     return fr
 
 
