@@ -12,7 +12,10 @@ def test_new_character_defaults():
     c = new_character(2, (10, 20))
     assert c["town"] == 2 and c["hp"] == PLAYER_MAX_HP and c["kills"] == 0 and c["deaths"] == 0
     assert c["pos"].tolist() == [10, 20] and c["spawn"].tolist() == [10, 20]
-    assert c["inv"].shape == (INV_SLOTS,) and c["inv"].dtype == np.int32 and not c["inv"].any()
+    assert c["inv"].shape == (INV_SLOTS,) and c["inv"].dtype == np.int32
+    assert c["inv"][0] > 0 and c["inv"][1] > 0 and not c["inv"][2:].any()  # the Novice starter kit, worn (round 6)
+    from game.data.items import EQ_BODY, EQ_WEAPON
+    assert c["items_equip"][EQ_WEAPON] == 0 and c["items_equip"][EQ_BODY] == 1
 
 def test_save_load_exact(tmp_path):
     c = new_character(1, (5, 6)); c["hp"] = 77; c["inv"][3] = ITEM_MEAT; c["items_inv_count"][3] = 1; c["kills"] = 9
