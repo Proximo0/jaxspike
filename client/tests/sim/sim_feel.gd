@@ -160,6 +160,7 @@ func run() -> Array:
 
 	# Notices: the same text in two snaps is two System lines; one snap over many frames is one; the HUD line holds.
 	var sys0: int = chat.visible_lines(ChatWindow.TAB_SYSTEM).size()
+	chat.select_tab(ChatWindow.TAB_PARTY)  # ro6-ui: the HUD line only shows a notice when the chat is not on All/System
 	link.push_inbound(snap_text(7, Vector2i(66, 100), {"level": 13}, "blocked"))
 	await _feel_frames(4)
 	link.push_inbound(snap_text(8, Vector2i(66, 100), {"level": 13}, "blocked"))

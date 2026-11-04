@@ -30,10 +30,11 @@ var cards: Array = []  ## welcome.cards rows
 var rows: Array[Dictionary] = []  ## last card_rows
 var selected: int = -1  ## index into rows
 var title_label: Label
+var title_bar: PanelTitle
 var grid: GridContainer
 var detail_art: TextureRect
 var detail_label: Label
-var thumbs: Array[TextureRect] = []
+var thumbs: Array[ItemTooltip.TipRect] = []
 var banner: PanelContainer = null
 var banner_art: TextureRect = null
 var banner_label: Label = null
@@ -48,8 +49,8 @@ func _ready() -> void:
 	theme = load("res://game/ui/theme/ro_theme.tres") as Theme
 	var box := VBoxContainer.new()
 	add_child(box)
-	title_label = Label.new()
-	box.add_child(title_label)
+	title_bar = PanelTitle.make(self, box, "Card Album", close)  # ro6-ui: shared title, close, drag
+	title_label = title_bar.title_label
 	var body := HBoxContainer.new()
 	box.add_child(body)
 	var scroll := ScrollContainer.new()
@@ -116,6 +117,11 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 
+## Hides the album (the title bar's close button).
+func close() -> void:
+	visible = false
+
+
 ## Shows or hides the album (Alt+A and the HUD button).
 func toggle() -> void:
 	visible = not visible
@@ -159,7 +165,7 @@ func refresh() -> void:
 		var lit: bool = int(rows[i]["owned"]) > 0
 		n_owned += 1 if lit else 0
 		thumbs[i].modulate = Color.WHITE if lit else UNOWNED_TINT
-		thumbs[i].tooltip_text = detail_text(rows[i], welcome)
+		thumbs[i].set_tip(detail_tip(rows[i], welcome))
 	title_label.text = album_title(n_owned, rows.size())
 	if selected < 0 and not rows.is_empty():
 		selected = 0
@@ -229,7 +235,7 @@ func _rebuild_grid() -> void:
 	thumbs.clear()
 	var rs: Array[Dictionary] = card_rows(cards, {})
 	for i: int in range(rs.size()):
-		var t := TextureRect.new()
+		var t := ItemTooltip.TipRect.new()
 		t.custom_minimum_size = THUMB_PX
 		t.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		t.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
@@ -374,6 +380,16 @@ static func detail_text(row: Dictionary, welcome_msg: Dictionary = {}) -> String
 	lines.append_array(ItemText.card_lines(row))
 	lines.append(owned)
 	return "\n".join(lines)
+
+
+## ro6-ui: the rich tooltip spec of a card row (ItemText.tooltip_spec plus the owned line); its `text` is
+## detail_text. Without the welcome.items row: {"text": detail_text} only, so the plain tooltip shows.
+static func detail_tip(row: Dictionary, welcome_msg: Dictionary = {}) -> Dictionary:
+	var id: int = int(row.get("id", 0))
+	if ItemText.info(welcome_msg, id).is_empty():
+		return {"text": detail_text(row, welcome_msg)}
+	var n: int = int(row.get("owned", 0))
+	return ItemText.tooltip_spec(welcome_msg, id, 0, [], PackedStringArray(["Owned: %d" % n if n > 0 else "Not found yet"]))
 
 
 ## The chat line for a `card` message: {text, color, kind "system"}.

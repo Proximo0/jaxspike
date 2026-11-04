@@ -13,6 +13,7 @@ const PRICE_MAX_PCT: int = 24
 const SKILL_DISCOUNT: String = "Discount"
 const SKILL_OVERCHARGE: String = "Overcharge"
 const ICON_PX: int = 32
+const COLUMN_PX: Vector2 = Vector2(300, 240)
 
 var session: NetSession = null
 var welcome: Dictionary = {}
@@ -24,6 +25,7 @@ var shop_name: String = ""
 var rows_buy: Array[Dictionary] = []
 var rows_sell: Array[Dictionary] = []
 var title_label: Label
+var title_bar: PanelTitle
 var ryn_label: Label
 var buy_list: VBoxContainer
 var sell_list: VBoxContainer
@@ -38,17 +40,10 @@ func _ready() -> void:
 		slots = AssetSlots.load_default()
 	var box := VBoxContainer.new()
 	add_child(box)
-	var head := HBoxContainer.new()
-	box.add_child(head)
-	title_label = Label.new()
-	title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	head.add_child(title_label)
+	title_bar = PanelTitle.make(self, box, "Shop", close)  # ro6-ui: shared title, close, drag
+	title_label = title_bar.title_label
 	ryn_label = Label.new()
-	head.add_child(ryn_label)
-	var close_btn := Button.new()
-	close_btn.text = "Close"
-	close_btn.pressed.connect(close)
-	head.add_child(close_btn)
+	title_bar.extras.add_child(ryn_label)
 	var cols := HBoxContainer.new()
 	box.add_child(cols)
 	buy_list = _shop_column(cols, "Buy")
@@ -65,7 +60,8 @@ func _shop_column(parent: Node, title: String) -> VBoxContainer:
 	lbl.text = title
 	col.add_child(lbl)
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(220, 200)
+	scroll.custom_minimum_size = COLUMN_PX  # ro6-ui: wide enough for icon, name, price and the button
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	col.add_child(scroll)
 	var list := VBoxContainer.new()
 	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -127,18 +123,18 @@ func _rebuild(list: VBoxContainer, rows: Array[Dictionary], is_buy: bool) -> voi
 		c.queue_free()
 	for r: Dictionary in rows:
 		var line := HBoxContainer.new()
-		var icon := TextureRect.new()
+		var icon := ItemTooltip.TipRect.new()
 		icon.custom_minimum_size = Vector2(ICON_PX, ICON_PX)
 		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		icon.texture = slots.item_texture(String(r["icon_key"])) if slots != null else null
-		icon.tooltip_text = String(r["tooltip"])
+		icon.set_tip(r["tip"] as Dictionary)
 		icon.mouse_filter = Control.MOUSE_FILTER_PASS
 		line.add_child(icon)
-		var nm := Label.new()
+		var nm := ItemTooltip.TipLabel.new()
 		nm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		nm.text = String(r["label"])
-		nm.tooltip_text = String(r["tooltip"])
+		nm.set_tip(r["tip"] as Dictionary)
 		nm.mouse_filter = Control.MOUSE_FILTER_PASS
 		line.add_child(nm)
 		var pr := Label.new()
@@ -273,10 +269,11 @@ static func buy_rows(welcome_msg: Dictionary, town_id: int, you: Dictionary) -> 
 			continue
 		var info: Dictionary = _shop_item_info(welcome_msg, id)
 		var price: int = buy_price(int(info.get("buy", 0)), pct)
+		var tip: Dictionary = ItemText.tooltip_spec(welcome_msg, id, 0, [], PackedStringArray(["Buy: " + price_text(price)]))
 		out.append({"item": id, "name": InventoryPanel.item_name(welcome_msg, id),
 				"label": ItemText.display_name(welcome_msg, id), "price": price,
-				"icon_key": InventoryPanel.row_icon_key(welcome_msg, id),
-				"tooltip": ItemText.tooltip(welcome_msg, id, 0, [], PackedStringArray(["Buy: " + price_text(price)]))})
+				"icon_key": InventoryPanel.row_icon_key(welcome_msg, id), "tip": tip,
+				"tooltip": String(tip.get("text", ""))})
 	return out
 
 
@@ -306,10 +303,11 @@ static func sell_rows(welcome_msg: Dictionary, you: Dictionary) -> Array[Diction
 		var info: Dictionary = _shop_item_info(welcome_msg, id)
 		var price: int = sell_price(int(info.get("sell", 0)), pct)
 		var extra: PackedStringArray = PackedStringArray(["Sell: %s each" % price_text(price)])
+		var tip: Dictionary = ItemText.tooltip_spec(welcome_msg, id, refine, cards, extra)
 		out.append({"slot": i, "item": id, "name": InventoryPanel.item_name(welcome_msg, id), "count": cnt,
 				"label": ItemText.stack_name(welcome_msg, id, cnt, refine), "price": price,
-				"icon_key": InventoryPanel.row_icon_key(welcome_msg, id),
-				"tooltip": ItemText.tooltip(welcome_msg, id, refine, cards, extra)})
+				"icon_key": InventoryPanel.row_icon_key(welcome_msg, id), "tip": tip,
+				"tooltip": String(tip.get("text", ""))})
 	return out
 
 

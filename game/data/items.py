@@ -377,6 +377,7 @@ DISPLAY_NAMES = tuple(display_name(n) if r[1] != KIND_NONE else "" for n, r in z
 
 
 def table_for_client() -> list:
+    from game import ro_items  # local: ro_items imports this module
     """The item table as plain Python (list of N_ITEMS dicts, index == item id) for the welcome message.
 
     Reserved ids have name "" and kind 0. Round 2 adds "icon" (slots.json key) and "jobs" (job ids that may wear it).
@@ -389,6 +390,7 @@ def table_for_client() -> list:
         d["stackable"] = bool(d["stackable"])
         d["icon"] = ICONS[i]
         d["display"] = DISPLAY_NAMES[i]  # ro5-items: capitalised name ("Gildscarab Card"); client adds +refine, [slots]
+        d["bonus_text"] = f"{ro_items.BONUS_LABELS[d['bonus']]} {d['bonus_value']:+d}" if d["bonus_value"] else ""  # ro6-ui
         d["jobs"] = [j for j in range(N_JOBS) if _EQUIP_JOBS_NP[i, j]]
         out.append(d)
     return out

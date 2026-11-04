@@ -40,8 +40,9 @@ var storage_known: bool = false
 var at_shop: bool = false  ## a shop tile is within 1 tile of the player (enables Sell)
 var storage_items: Array = []  ## cached `you.storage` (the server sends it only on change)
 var ryn_label: Label
-var slot_buttons: Array[Button] = []
-var equip_buttons: Array[Button] = []
+var title_bar: PanelTitle
+var slot_buttons: Array[ItemTooltip.TipButton] = []
+var equip_buttons: Array[ItemTooltip.TipButton] = []
 var slot_pips: Array[HBoxContainer] = []  ## ro4-cards: socket pips per inventory button
 var _pip_cache: Dictionary = {}  ## card art path ("" = empty socket) -> Texture2D
 var storage_box: VBoxContainer
@@ -59,19 +60,14 @@ func _ready() -> void:
 		slots = AssetSlots.load_default()
 	var box := VBoxContainer.new()
 	add_child(box)
-	var head := HBoxContainer.new()
-	box.add_child(head)
-	var title := Label.new()
-	title.text = "Inventory (I)"
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	head.add_child(title)
+	title_bar = PanelTitle.make(self, box, "Inventory (I)", close)  # ro6-ui: shared title, close, drag
 	ryn_label = Label.new()
-	head.add_child(ryn_label)
+	title_bar.extras.add_child(ryn_label)
 	var grid := GridContainer.new()
 	grid.columns = 4
 	box.add_child(grid)
 	for i: int in range(INV_SLOTS):
-		var b := Button.new()
+		var b := ItemTooltip.TipButton.new()
 		b.custom_minimum_size = Vector2(SLOT_PX, SLOT_PX)
 		b.clip_text = true
 		b.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
@@ -94,7 +90,7 @@ func _ready() -> void:
 	eq_grid.columns = 2
 	box.add_child(eq_grid)
 	for i: int in range(EQUIP_NAMES.size()):
-		var b := Button.new()
+		var b := ItemTooltip.TipButton.new()
 		b.custom_minimum_size = Vector2(SLOT_PX * 2, 28)
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		b.clip_text = true
@@ -142,6 +138,11 @@ func _process(_delta: float) -> void:
 		refresh()
 
 
+## Hides the window (the title bar's close button; I opens it again).
+func close() -> void:
+	visible = false
+
+
 func _unhandled_key_input(event: InputEvent) -> void:
 	var k := event as InputEventKey
 	if k != null and k.pressed and not k.echo and k.keycode == TOGGLE_KEY:
@@ -169,7 +170,7 @@ func refresh() -> void:
 		equip_buttons[i].text = "%s: %s" % [EQUIP_NAMES[i], String(er["label"]) if worn else "-"]
 		equip_buttons[i].icon = slots.item_texture(String(er["icon_key"])) if slots != null and worn else null
 		equip_buttons[i].expand_icon = true
-		equip_buttons[i].tooltip_text = String(er["tooltip"])
+		equip_buttons[i].set_tip(er["tip"] as Dictionary)
 	if typeof(you.get("storage")) == TYPE_ARRAY:
 		storage_items = (you["storage"] as Array).duplicate()
 		storage_known = true
@@ -201,11 +202,11 @@ static func _pos_tile(v: Variant) -> Vector2i:
 	return Vector2i(-100000, -100000)
 
 
-func _show_slot(b: Button, r: Dictionary) -> void:
+func _show_slot(b: ItemTooltip.TipButton, r: Dictionary) -> void:
 	if bool(r["empty"]):
 		b.text = ""
 		b.icon = null
-		b.tooltip_text = ""
+		b.set_tip({})
 		b.modulate = Color.WHITE
 		return
 	b.icon = slots.item_texture(String(r["icon_key"])) if slots != null else null
@@ -215,7 +216,7 @@ func _show_slot(b: Button, r: Dictionary) -> void:
 		b.icon = _card_pip_texture(card_icon)
 	var cnt: int = int(r["count"])
 	b.text = ("E " if bool(r["equipped"]) else "") + (str(cnt) if cnt > 1 else "")
-	b.tooltip_text = String(r["tooltip"])
+	b.set_tip(r["tip"] as Dictionary)
 	b.modulate = EQUIPPED_TINT if bool(r["equipped"]) else Color.WHITE
 
 
@@ -280,13 +281,13 @@ func _rebuild_storage() -> void:
 		storage_list.remove_child(c)
 		c.queue_free()
 	for r: Dictionary in storage_rows(storage_items, _items(), welcome):
-		var b := Button.new()
+		var b := ItemTooltip.TipButton.new()
 		b.text = String(r["label"])
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		b.icon = slots.item_texture(String(r["icon_key"])) if slots != null else null
 		b.expand_icon = true
 		b.custom_minimum_size = Vector2(0, STORAGE_ROW_PX)
-		b.tooltip_text = String(r["tooltip"])
+		b.set_tip(r["tip"] as Dictionary)
 		b.pressed.connect(take_out.bind(int(r["slot"])))
 		storage_list.add_child(b)
 
@@ -379,7 +380,8 @@ static func item_kind(items: Array, id: int) -> int:
 
 
 ## Exactly INV_SLOTS rows from `you.inv` (dict rows, or the legacy flat id list). Keys: slot, item, count, refine,
-## cards, empty, name (plain), label ("+4 Blade [3]"), kind, equipped, equip_index, icon_key, tooltip.
+## cards, empty, name (plain), label ("+4 Blade [3]"), kind, equipped, equip_index, icon_key, tooltip (plain text),
+## tip (ItemText.tooltip_spec, the rich tooltip).
 static func slot_rows(you: Dictionary, items: Array, welcome_msg: Dictionary = {}) -> Array[Dictionary]:
 	var inv: Array = you["inv"] as Array if typeof(you.get("inv")) == TYPE_ARRAY else []
 	var worn: Dictionary = _equip_map(you)
@@ -410,7 +412,7 @@ static func slot_rows(you: Dictionary, items: Array, welcome_msg: Dictionary = {
 			"slot": i, "item": item, "count": count, "refine": refine, "cards": cards, "empty": empty,
 			"name": nm, "kind": item_kind(items, item), "equipped": eq_idx >= 0 and not empty,
 			"equip_index": eq_idx, "icon_key": row_icon_key(welcome_msg, item),
-			"label": ItemText.display_name(welcome_msg, item, refine), "tooltip": "",
+			"label": ItemText.display_name(welcome_msg, item, refine), "tooltip": "", "tip": {},
 		})
 	var eq: Variant = you.get("equip")
 	for r: Dictionary in out:
@@ -434,7 +436,8 @@ static func slot_rows(you: Dictionary, items: Array, welcome_msg: Dictionary = {
 			ct = compare_text(r, wr, items)
 		if int(r["count"]) > 1:
 			extra.insert(0, "Amount %d" % int(r["count"]))
-		r["tooltip"] = ItemText.tooltip(welcome_msg, int(r["item"]), int(r["refine"]), r["cards"], extra, ct)
+		r["tip"] = ItemText.tooltip_spec(welcome_msg, int(r["item"]), int(r["refine"]), r["cards"], extra, ct)
+		r["tooltip"] = String((r["tip"] as Dictionary).get("text", ""))
 	return out
 
 
@@ -588,16 +591,16 @@ static func equip_slot_rows(you: Dictionary, items: Array, welcome_msg: Dictiona
 	for i: int in range(EQUIP_NAMES.size()):
 		var s: int = int(eq[i]) if i < eq.size() else -1
 		var r: Dictionary = {"index": i, "label": "", "slot_name": EQUIP_NAMES[i], "slot": -1, "item": 0, "name": "",
-				"tooltip": "", "icon_key": ""}
+				"tooltip": "", "icon_key": "", "tip": {}}
 		if s >= 0 and s < INV_SLOTS and not bool(inv_rows[s]["empty"]):
 			r["slot"] = s
-			for k: String in ["item", "name", "label", "tooltip", "icon_key"]:
+			for k: String in ["item", "name", "label", "tooltip", "icon_key", "tip"]:
 				r[k] = inv_rows[s][k]
 		out.append(r)
 	return out
 
 
-## Non-empty waybell storage entries: {slot, item, name, label, kind, icon_key, tooltip}.
+## Non-empty waybell storage entries: {slot, item, name, label, kind, icon_key, tooltip, tip}.
 static func storage_rows(storage: Array, items: Array, welcome_msg: Dictionary = {}) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for i: int in range(storage.size()):
@@ -606,7 +609,8 @@ static func storage_rows(storage: Array, items: Array, welcome_msg: Dictionary =
 			out.append({"slot": i, "item": id, "name": item_name(welcome_msg, id),
 					"label": ItemText.display_name(welcome_msg, id), "kind": item_kind(items, id),
 					"icon_key": row_icon_key(welcome_msg, id),
-					"tooltip": ItemText.tooltip(welcome_msg, id, 0, [], PackedStringArray(["Click: take out"]))})
+					"tip": ItemText.tooltip_spec(welcome_msg, id, 0, [], PackedStringArray(["Click: take out"]))})
+			out[-1]["tooltip"] = String((out[-1]["tip"] as Dictionary).get("text", ""))
 	return out
 
 

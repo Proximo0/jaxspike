@@ -18,6 +18,11 @@ const EXP := Color(0.95, 0.80, 0.25)
 const BAR_BG := Color(0.08, 0.09, 0.12)
 const CLEAR := Color(0.0, 0.0, 0.0, 0.0)
 const HOTKEY_BG := Color(0.24, 0.27, 0.36)
+const CLOSE_HOVER := Color(0.70, 0.25, 0.25)
+const TIP_BG := Color(0.10, 0.11, 0.16, 0.97)
+const TIP_DIM := Color(0.70, 0.73, 0.80)
+const TIP_BONUS := Color(0.55, 0.95, 0.55)
+const TIP_EXTRA := Color(0.95, 0.90, 0.70)
 const ZONE_TITLE_PX: int = 34
 const FONT_SIZE: int = 12
 const MARGIN_X: float = 4.0
@@ -94,7 +99,54 @@ static func build() -> Theme:
 		t.set_stylebox("background", variation, box(BAR_BG, PANEL_BORDER))
 		t.set_stylebox("fill", variation, box(c, c.darkened(0.4)))
 	add_feel(t)
+	add_windows(t)
 	return t
+
+
+## ro6-ui: window chrome (title bar text, close button) and the rich item tooltip (popup frame, label tones).
+static func add_windows(t: Theme) -> void:
+	var bar: StyleBoxFlat = box(TITLE_BG, PANEL_BORDER)
+	bar.content_margin_left = 6.0
+	bar.content_margin_right = 2.0
+	t.set_stylebox("panel", "TitleBar", bar)
+	t.set_type_variation("PanelTitle", "Label")
+	t.set_color("font_color", "PanelTitle", Color.WHITE)
+	t.set_color("font_outline_color", "PanelTitle", Color(0, 0, 0, 0.7))
+	t.set_constant("outline_size", "PanelTitle", 2)
+	t.set_font_size("font_size", "PanelTitle", 13)
+	t.set_type_variation("CloseButton", "Button")
+	var close: StyleBoxFlat = box(BUTTON_PRESSED, PANEL_BORDER)
+	close.content_margin_left = 0.0
+	close.content_margin_right = 0.0
+	close.content_margin_top = 0.0
+	close.content_margin_bottom = 0.0
+	t.set_stylebox("normal", "CloseButton", close)
+	var close_hover: StyleBoxFlat = close.duplicate() as StyleBoxFlat
+	close_hover.bg_color = CLOSE_HOVER
+	t.set_stylebox("hover", "CloseButton", close_hover)
+	var close_pressed: StyleBoxFlat = close.duplicate() as StyleBoxFlat
+	close_pressed.bg_color = CLOSE_HOVER.darkened(0.3)
+	t.set_stylebox("pressed", "CloseButton", close_pressed)
+	t.set_font_size("font_size", "CloseButton", 12)
+	var tip: StyleBoxFlat = box(TIP_BG, EXP.darkened(0.25))
+	tip.content_margin_left = 8.0
+	tip.content_margin_right = 8.0
+	tip.content_margin_top = 6.0
+	tip.content_margin_bottom = 6.0
+	t.set_stylebox("panel", "TooltipPanel", tip)
+	t.set_color("font_color", "TooltipLabel", TEXT)
+	t.set_font_size("font_size", "TooltipLabel", FONT_SIZE)
+	t.set_type_variation("NoticeLine", "Label")
+	t.set_color("font_color", "NoticeLine", EXP.lightened(0.3))
+	t.set_color("font_outline_color", "NoticeLine", Color(0.05, 0.04, 0.08, 0.95))
+	t.set_constant("outline_size", "NoticeLine", 5)
+	t.set_font_size("font_size", "NoticeLine", 16)
+	var tones: Dictionary = {"TipName": Color.WHITE, "TipDim": TIP_DIM, "TipBonus": TIP_BONUS, "TipCard": EXP,
+			"TipExtra": TIP_EXTRA}
+	for v: String in tones:
+		t.set_type_variation(v, "Label")
+		t.set_color("font_color", v, tones[v])
+		t.set_font_size("font_size", v, 14 if v == "TipName" else FONT_SIZE)
 
 
 ## Team client-feel variations: basic info window, bar numbers, zone banner, minimap frame, chat window and tabs,

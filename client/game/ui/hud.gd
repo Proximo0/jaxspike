@@ -56,21 +56,29 @@ func _ready() -> void:
 	name_label.theme_type_variation = &"InfoName"
 	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(name_label)
+	# ro6-ui: the SAFE and PvP badges ride on the job row (right), so a long name never pushes the window wider.
+	var job_row := HBoxContainer.new()
+	job_row.name = "JobRow"
+	box.add_child(job_row)
+	job_label = Label.new()
+	job_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	job_row.add_child(job_label)
 	safe_badge = Label.new()
 	safe_badge.text = "SAFE"
 	safe_badge.theme_type_variation = &"InfoBadge"
 	safe_badge.visible = false
-	head.add_child(safe_badge)
+	job_row.add_child(safe_badge)
 	pvp_badge = Label.new()
 	pvp_badge.name = "PvpBadge"
 	pvp_badge.theme_type_variation = &"InfoBadge"
 	pvp_badge.add_theme_color_override("font_color", EntityLayer.PVP_NAME_COLOR)
 	pvp_badge.visible = false
-	head.add_child(pvp_badge)
-	job_label = Label.new()
-	box.add_child(job_label)
+	job_row.add_child(pvp_badge)
+	var level_row := HBoxContainer.new()
+	box.add_child(level_row)
 	level_label = Label.new()
-	box.add_child(level_label)
+	level_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	level_row.add_child(level_label)
 	var hp: Array = _hud_bar(box, "HP", &"HpBar")
 	hp_bar = hp[0]
 	hp_label = hp[1]
@@ -100,7 +108,9 @@ func _ready() -> void:
 	stats_hint = Label.new()
 	stats_hint.text = "(C) Stats"
 	stats_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	foot.add_child(stats_hint)
+	level_row.add_child(stats_hint)  # ro6-ui: off the crowded weight / ryn footer
+	notice_label.theme = th
+	notice_label.theme_type_variation = &"NoticeLine"
 	banner = ZoneBanner.new()
 	banner.name = "ZoneBanner"
 	banner.set_anchors_preset(Control.PRESET_CENTER_TOP)
@@ -203,7 +213,8 @@ func refresh(delta: float = 0.0) -> void:
 	pvp_badge.text = pvp_text
 	pvp_badge.visible = pvp_text != ""
 	_notice.observe(session.store.snaps, session.store.notice)
-	notice_label.text = _notice.hud_line(delta)
+	var line: String = _notice.hud_line(delta)
+	notice_label.text = line if notice_on_hud(_chat_tabs()) else ""  # ro6-ui: one place per notice
 	if stats.visible:
 		stats.refresh()
 	if session.map.is_loaded() and _map_built_for != session.map:
@@ -234,7 +245,32 @@ func _hud_fill(bar: ProgressBar, over: Label, fraction: float, text: String) -> 
 	over.text = text
 
 
+## ro6-ui: the current tab of every visible ChatWindow in the view's canvas layers (the chat logs each notice).
+func _chat_tabs() -> Array[int]:
+	var out: Array[int] = []
+	var view: Node = get_parent()
+	if view == null:
+		return out
+	for layer: Node in view.get_children():
+		if not layer is CanvasLayer:
+			continue
+		for n: Node in layer.get_children():
+			var cw: ChatWindow = n as ChatWindow
+			if cw != null and cw.is_visible_in_tree():
+				out.append(cw.current_tab)
+	return out
+
+
 # ---- pure helpers ----
+
+## ro6-ui: the HUD notice line shows a server notice only when no visible chat window shows it already, i.e. no
+## chat window is open on a tab with system lines (All or System). `chat_tabs`: the tabs of the visible chats.
+static func notice_on_hud(chat_tabs: Array[int]) -> bool:
+	for t: int in chat_tabs:
+		if ChatWindow.tab_shows(t, "system"):
+			return false
+	return true
+
 
 ## Every string and fraction of the basic info window from `you`, the own entity row and the welcome tables.
 static func info_rows(you: Dictionary, own: Dictionary, welcome_msg: Dictionary) -> Dictionary:

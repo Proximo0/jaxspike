@@ -25,6 +25,10 @@ const ICON_ETC: String = "item.etc"
 const ICON_CONSUMABLE: String = "item.potion_red"
 const ICON_CARD: String = "item.card"
 const REFINE_ATK_BY_LEVEL: Array[int] = [0, 2, 3, 5, 7]  ## per refine, by weapon level (ro_items.REFINE_ATK)
+## ro6-ui: refine colour tiers of the rich tooltip: +1..+4 pale blue, +5..+7 gold, +8 and up orange.
+const REFINE_TIER_MIN: Array[int] = [1, 5, 8]
+const REFINE_TIER_COLORS: Array[Color] = [Color(0.55, 0.85, 1.0), Color(1.0, 0.82, 0.25), Color(1.0, 0.5, 0.3)]
+const NAME_COLOR: Color = Color(1.0, 1.0, 1.0)
 
 
 ## The welcome.items row of an id ({} for 0, out of range or before the table arrives).
@@ -227,6 +231,9 @@ static func tooltip(welcome_msg: Dictionary, id: int, refine: int = 0, cards: Ar
 	var lines: PackedStringArray = PackedStringArray()
 	lines.append(display_name(welcome_msg, id, refine))
 	lines.append(stat_line if stat_line != "" else type_line(welcome_msg, id, refine))
+	var bonus: String = bonus_text(welcome_msg, id)
+	if bonus != "":
+		lines.append("Bonus: " + bonus)
 	var names: PackedStringArray = []
 	for c: Variant in cards:
 		var cid: int = int(c)
@@ -247,3 +254,51 @@ static func tooltip(welcome_msg: Dictionary, id: int, refine: int = 0, cards: Ar
 		lines.append("Weight %d" % w)
 	lines.append_array(extra)
 	return "\n".join(lines)
+
+
+# ---- ro6-ui: the rich tooltip (ItemTooltip draws this spec; the plain `tooltip` text stays the fallback) ----
+
+## The gear bonus of welcome.items[id].bonus_text ("STR +2"), "" when none or before the server sends the field.
+static func bonus_text(welcome_msg: Dictionary, id: int) -> String:
+	return String(info(welcome_msg, id).get("bonus_text", ""))
+
+
+## Colour of a refine level's "+N" (white for 0).
+static func refine_color(refine: int) -> Color:
+	var c: Color = NAME_COLOR
+	for i: int in range(REFINE_TIER_MIN.size()):
+		if refine >= REFINE_TIER_MIN[i]:
+			c = REFINE_TIER_COLORS[i]
+	return c
+
+
+## Everything the rich tooltip draws, as plain data: id, icon_key, card_art (card.<snake> of a card item, else ""),
+## refine_text ("+4" or ""), refine_color, name ("Blade [3]", no refine), type_line (or `stat_line`), bonus,
+## cards [{id, name, text, art}] for the socketed cards, sockets, empty_sockets, card_lines, weight, extra, text
+## (the plain `tooltip` string, also the fallback). {} for id 0.
+static func tooltip_spec(welcome_msg: Dictionary, id: int, refine: int = 0, cards: Array = [],
+		extra: PackedStringArray = PackedStringArray(), stat_line: String = "") -> Dictionary:
+	if id <= 0:
+		return {}
+	var k: int = kind(welcome_msg, id)
+	var gear: bool = k == KIND_WEAPON or k == KIND_ARMOR
+	var n_sock: int = sockets(welcome_msg, id)
+	var socketed: Array[Dictionary] = []
+	for c: Variant in cards:
+		var cid: int = int(c)
+		if cid > 0:
+			var row: Dictionary = card_row(welcome_msg, cid)
+			socketed.append({"id": cid, "name": base_name(welcome_msg, cid), "text": String(row.get("text", "")),
+					"art": String(row.get("icon", ""))})
+	var own_card: Dictionary = card_row(welcome_msg, id)
+	return {
+		"id": id, "icon_key": icon_key(welcome_msg, id), "card_art": String(own_card.get("icon", "")),
+		"refine_text": "+%d" % refine if gear and refine > 0 else "",
+		"refine_color": refine_color(refine if gear else 0),
+		"name": base_name(welcome_msg, id) + (" [%d]" % n_sock if n_sock > 0 else ""),
+		"type_line": stat_line if stat_line != "" else type_line(welcome_msg, id, refine),
+		"bonus": bonus_text(welcome_msg, id), "cards": socketed, "sockets": n_sock,
+		"empty_sockets": maxi(n_sock - socketed.size(), 0), "card_lines": card_lines(own_card),
+		"weight": int(info(welcome_msg, id).get("weight", 0)), "extra": extra,
+		"text": tooltip(welcome_msg, id, refine, cards, extra, stat_line),
+	}
