@@ -13,6 +13,7 @@ Item ids stay in `world["players"]["inv"]` (loot.py writes pickups there, surviv
 `_normalize` repairs the parallel arrays after any such outside change.
 """
 import jax.numpy as jnp
+import numpy as np
 
 from game import ro_refine, ro_stats
 from game.config import (
@@ -295,14 +296,18 @@ def equipped(world):
         < item_data.SLOTS[item][..., None]
     )
     card_ok = sockets & (cards != 0)
+    n_ex = item_data.CARD_EXTRA_N
+    ex_ok = jnp.broadcast_to(card_ok[..., None], card_ok.shape + (n_ex,))
     bonus_ids = jnp.concatenate(
-        [item_data.BONUS[item][..., None], item_data.CARD_BONUS[cards]], axis=2
+        [item_data.BONUS[item][..., None], item_data.CARD_BONUS[cards],
+         item_data.CARD_EXTRA_BONUS[cards].reshape(MAX_PLAYERS, N_EQ, -1)], axis=2
     )
     values = jnp.concatenate(
-        [item_data.BONUS_VALUE[item][..., None], jnp.where(card_ok, item_data.CARD_VALUE[cards], 0)],
+        [item_data.BONUS_VALUE[item][..., None], jnp.where(card_ok, item_data.CARD_VALUE[cards], 0),
+         jnp.where(ex_ok, item_data.CARD_EXTRA_VALUE[cards], 0).reshape(MAX_PLAYERS, N_EQ, -1)],
         axis=2,
     )
-    width = N_EQ * (1 + item_data.MAX_CARDS)
+    width = N_EQ * (1 + item_data.MAX_CARDS * (1 + n_ex))
     rows = jnp.broadcast_to(_PIDX[:, None], (MAX_PLAYERS, width))
     card_bonus = jnp.zeros((MAX_PLAYERS, item_data.N_BONUS), jnp.int32).at[
         rows, bonus_ids.reshape(MAX_PLAYERS, width)
@@ -330,3 +335,78 @@ def phase(world, inputs):
     world = ro_refine.refine(world, inputs, key)
     world = _drop(world, inputs)
     return _normalize(world)
+
+
+# --- card tables for the client (round 4, ro4-cards; docs/cards_wire.md) ------------------------------------------
+# Data only: the card effects themselves are item_data.CARD_BONUS/CARD_VALUE plus item_data.CARD_EXTRA, applied in
+# `equipped`. These helpers turn them into plain JSON for `welcome.cards` and the `card` announcement.
+BONUS_LABELS = ("STR", "AGI", "VIT", "INT", "DEX", "LUK", "ATK", "DEF", "MATK", "HIT", "FLEE", "CRIT", "Max HP",
+                "Max SP")
+SLOT_LABELS = ("Weapon", "Headgear", "Armor", "Shield", "Garment", "Shoes", "Accessory")
+assert len(BONUS_LABELS) == item_data.N_BONUS and len(SLOT_LABELS) == item_data.SLOT_ACCESSORY + 1
+
+
+def card_effect_text(item_id: int) -> str:
+    """'LUK +2, FLEE +1' for a card ('' when it has no effect)."""
+    return ", ".join(f"{BONUS_LABELS[b]} {v:+d}" for b, v in item_data.card_effects(item_id))
+
+
+def card_title(item_id: int) -> str:
+    """Display name of an item row: 'blobbin card' -> 'Blobbin Card'."""
+    return " ".join(w.capitalize() for w in item_data.NAMES[item_id].split())
+
+
+def _card_sources():
+    """item id -> (monster kind, per-10000 chance) for every card on a monster drop row."""
+    from game.data import drops as drops_data  # local: drops imports items, keep ro_items import-light
+    di, dc = np.asarray(drops_data.DROP_ITEM), np.asarray(drops_data.DROP_CHANCE)
+    out = {}
+    for kind in range(di.shape[0]):
+        for j in range(di.shape[1]):
+            i = int(di[kind, j])
+            if i and int(item_data._np["KIND"][i]) == item_data.KIND_CARD and i not in out:
+                out[i] = (kind, int(dc[kind, j]))
+    return out
+
+
+def _haunts(monster_name: str) -> str:
+    """Where a monster lives, from world_layout: dungeon names and field bands ('' when nowhere)."""
+    from game import world_layout
+    band_names = ("the fields near the towns", "the middle fields", "the far fields")
+    where = [d[3] for d in world_layout.DUNGEONS if monster_name in d[4] or d[5] == monster_name]
+    where += [band_names[min(b, len(band_names) - 1)] for b, band in enumerate(world_layout.FIELD_BANDS)
+              if monster_name in band[2]]
+    return ", ".join(where)
+
+
+def card_table_for_client() -> list:
+    """`welcome.cards`: one dict per card item, ascending id.
+
+    {id, name, monster (display name or ""), kind (monster kind or -1 when no monster drops it in Aurelune),
+     slot (SLOT_* the card compounds into), slot_name, effects [[bonus id, value], ...], text ('LUK +2, FLEE +1'),
+     chance (per 10000, 0 when no monster drops it), mvp (bool), where (haunts text), icon ('card.<snake>')}
+    """
+    from game.data import monsters as monster_data
+    src = _card_sources()
+    out = []
+    for i in range(item_data.N_ITEMS):
+        if int(item_data._np["KIND"][i]) != item_data.KIND_CARD:
+            continue
+        snake = item_data.NAMES[i][: -len(" card")].replace(" ", "_")
+        kind, chance = src.get(i, (-1, 0))
+        mname = monster_data.MONSTERS[kind].name if kind >= 0 else ""
+        slot = int(item_data._np["CLASS"][i])
+        out.append({
+            "id": i, "name": card_title(i), "monster": mname, "kind": kind, "slot": slot,
+            "slot_name": SLOT_LABELS[slot], "effects": [[b, v] for b, v in item_data.card_effects(i)],
+            "text": card_effect_text(i), "chance": chance, "mvp": i in item_data.MVP_CARDS,
+            "where": _haunts(mname) if mname else "", "icon": "card." + snake,
+        })
+    return out
+
+
+def announce_text(finder: str | None, item_id: int) -> str:
+    """The world-wide line: '<name> found a <Monster> Card!' ('Someone' when the finder is a bot or unknown)."""
+    name = card_title(item_id)
+    article = "an" if name[:1].lower() in "aeiou" else "a"
+    return f"{finder or 'Someone'} found {article} {name}!"

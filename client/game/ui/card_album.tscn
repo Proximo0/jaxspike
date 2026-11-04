@@ -1,0 +1,8 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://game/ui/card_album.gd" id="1"]
+
+[node name="CardAlbum" type="PanelContainer"]
+offset_left = 420.0
+offset_top = 140.0
+script = ExtResource("1")

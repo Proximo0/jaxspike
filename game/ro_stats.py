@@ -107,18 +107,26 @@ def derived(world):
     lvl = jnp.clip(s["base_level"], 1, MAX_BASE_LEVEL)
     job = jnp.clip(s["job"], 0, NUM_JOBS - 1)
     st, ag, vi, it, dx, lk = (s[k] for k in _STAT_KEYS)
+    # Round 4 (cards): worn gear and compounded cards add their bonuses here (ro_items.equipped()["card_bonus"],
+    # [MAX_PLAYERS, N_BONUS]); before this nothing read them, so every card did nothing.
+    if "items" in world:
+        from game import ro_items  # local: ro_items imports ro_stats
+        cb = ro_items.equipped(world)["card_bonus"]
+    else:
+        cb = jnp.zeros((MAX_PLAYERS, item_data.N_BONUS), _I32)
+    st, ag, vi, it, dx, lk = (v + cb[:, i] for i, v in enumerate((st, ag, vi, it, dx, lk)))
 
-    max_hp = JOB_BASE_HP_TABLE_J[job, lvl] * (100 + vi) // 100
-    max_sp = JOB_BASE_SP_TABLE_J[job, lvl] * (100 + it) // 100
-    atk = st + (st // 10) ** 2 + dx // 5 + lk // 5
+    max_hp = jnp.maximum(JOB_BASE_HP_TABLE_J[job, lvl] * (100 + vi) // 100 + cb[:, item_data.BONUS_MAX_HP], 1)
+    max_sp = jnp.maximum(JOB_BASE_SP_TABLE_J[job, lvl] * (100 + it) // 100 + cb[:, item_data.BONUS_MAX_SP], 0)
+    atk = st + (st // 10) ** 2 + dx // 5 + lk // 5 + cb[:, item_data.BONUS_ATK]
     matk_min = it + (it // 7) ** 2
     matk_max = it + (it // 5) ** 2
-    matk = (matk_min + matk_max) // 2
-    hit = lvl + dx
-    flee = lvl + ag
-    soft_def = vi
+    matk = (matk_min + matk_max) // 2 + cb[:, item_data.BONUS_MATK]
+    hit = lvl + dx + cb[:, item_data.BONUS_HIT]
+    flee = lvl + ag + cb[:, item_data.BONUS_FLEE]
+    soft_def = vi + cb[:, item_data.BONUS_DEF]
     mdef = it + vi // 2
-    crit = 10 + lk * 3
+    crit = 10 + lk * 3 + 10 * cb[:, item_data.BONUS_CRIT]  # crit is in tenths of a percent
     cast_mult = jnp.clip(1000 - dx * 1000 // 150, 0, 1000)
     # ASPD by job and worn weapon class (rAthena job_aspd); a class the job cannot use falls back to the fist column.
     if "items" in world:

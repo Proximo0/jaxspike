@@ -131,7 +131,7 @@ _rows = [
     ("moonbun card", _K, SLOT_WEAPON, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_CRIT, 1),
     ("fiddlehop card", _K, SLOT_BODY, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_ATK, 5),
     ("pilferbug card", _K, SLOT_BODY, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_AGI, 1),
-    ("grukk brute card", _K, SLOT_SHIELD, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, 0, 0),
+    ("grukk brute card", _K, SLOT_SHIELD, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_DEF, 3),
     ("antlet card", _K, SLOT_WEAPON, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_ATK, 20),
     ("emberblob card", _K, SLOT_WEAPON, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_HIT, 3),
     ("buzzeye card", _K, SLOT_SHOES, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_FLEE, 2),
@@ -148,17 +148,17 @@ _rows = [
     ("skel bone", _E, 0, 0, 0, 0, 0, 0, 1, 232, 116, 0, 0, 0, True, 0, 0, 0, 0),
     ("rotten bandage", _E, 0, 0, 0, 0, 0, 0, 1, 350, 175, 0, 0, 0, True, 0, 0, 0, 0),
     ("tiger skin", _E, 0, 0, 0, 0, 0, 0, 1, 548, 274, 0, 0, 0, True, 0, 0, 0, 0),
-    ("vexblob card", _K, SLOT_ACCESSORY, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, 0, 0),
-    ("rotling card", _K, SLOT_SHOES, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, 0, 0),
+    ("vexblob card", _K, SLOT_ACCESSORY, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_AGI, 1),
+    ("rotling card", _K, SLOT_SHOES, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_MAX_HP, 300),
     ("snarlfang card", _K, SLOT_WEAPON, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_ATK, 15),
     ("clackbone card", _K, SLOT_WEAPON, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_ATK, 10),
     ("gallopeck card", _K, SLOT_BODY, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_MAX_HP, 100),
     ("sandgulper card", _K, SLOT_GARMENT, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_FLEE, 5),
     ("clackbone guard card", _K, SLOT_WEAPON, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_CRIT, 9),
-    ("grumblebear card", _K, SLOT_SHIELD, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, 0, 0),
+    ("grumblebear card", _K, SLOT_SHIELD, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_VIT, 2),
     ("tombwrap card", _K, SLOT_WEAPON, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_HIT, 20),
-    ("gildscarab card", _K, SLOT_SHIELD, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, 0, 0),
-    ("scorchstripe card", _K, SLOT_SHOES, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, 0, 0),
+    ("gildscarab card", _K, SLOT_SHIELD, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_DEF, 10),  # MVP (CARD_EXTRA)
+    ("scorchstripe card", _K, SLOT_SHOES, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, True, 0, 0, BONUS_STR, 5),  # MVP (CARD_EXTRA)
     # ro-fidelity: early RO staples (rAthena db/pre-re). Wings teleport in RO (random / save point): no hook yet.
     ("cutter",         _W, WC_DAGGER,          30,  0, 0,  0, 3, 50,  1250,  625, 0,  0, 1, False, 0, 0, 0, 0),
     ("flit feather",       _C, 0,                  0,   0, 0,  0, 0, 5,   60,    30,  0,  0, 0, True,  0, 0, 0, 0),
@@ -234,6 +234,49 @@ BONUS = jnp.asarray(_np["BONUS"])
 BONUS_VALUE = jnp.asarray(_np["BONUS_VALUE"])
 CARD_BONUS = jnp.asarray(_np["CARD_BONUS"])
 CARD_VALUE = jnp.asarray(_np["CARD_VALUE"])
+
+# --- card effects beyond the row's (card_bonus, card_value) pair (round 4, ro4-cards) --------------------------------
+# Classic cards often carry two or three bonuses (rAthena item_db scripts); a card row's own pair is effect 0 and
+# CARD_EXTRA adds up to CARD_EXTRA_N more (bonus id, value). Negative values are drawbacks (MVP cards trade power).
+# ro_items.equipped folds every pair into card_bonus in the same scatter-add. MVP cards: Gildscarab (the golden
+# beetle's shell: a wall of DEF and HP, at an SP cost) and Scorchstripe (the ember tiger: STR, ATK and FLEE, less HP).
+CARD_EXTRA_N = 3
+CARD_EXTRA = {
+    ITEM_BLOBBIN_CARD: ((BONUS_FLEE, 1),),
+    ITEM_WRIGGLET_CARD: ((BONUS_MAX_HP, 100),),
+    ITEM_MOONBUN_CARD: ((BONUS_LUK, 1), (BONUS_FLEE, 1)),
+    ITEM_FIDDLEHOP_CARD: ((BONUS_DEX, 1),),
+    ITEM_PILFERBUG_CARD: ((BONUS_FLEE, 1),),
+    ITEM_GRUKK_BRUTE_CARD: ((BONUS_MAX_HP, 200),),
+    ITEM_EMBERBLOB_CARD: ((BONUS_DEX, 1),),
+    ITEM_BUZZEYE_CARD: ((BONUS_AGI, 1),),
+    ITEM_PEEPIT_CARD: ((BONUS_STR, 1),),
+    ITEM_CROAKLE_CARD: ((BONUS_MAX_SP, 50),),
+    ITEM_CAPLING_CARD: ((BONUS_MAX_HP, 100),),
+    ITEM_VEXBLOB_CARD: ((BONUS_FLEE, 3),),
+    ITEM_ROTLING_CARD: ((BONUS_VIT, 1),),
+    ITEM_SANDGULPER_CARD: ((BONUS_AGI, 1),),
+    ITEM_GRUMBLEBEAR_CARD: ((BONUS_DEF, 2),),
+    ITEM_GILDSCARAB_CARD: ((BONUS_MAX_HP, 1000), (BONUS_VIT, 3), (BONUS_MAX_SP, -60)),
+    ITEM_SCORCHSTRIPE_CARD: ((BONUS_ATK, 30), (BONUS_FLEE, 10), (BONUS_MAX_HP, -400)),
+}
+assert all(_np["KIND"][i] == KIND_CARD and len(v) <= CARD_EXTRA_N for i, v in CARD_EXTRA.items())
+_ex_b = np.zeros((N_ITEMS, CARD_EXTRA_N), np.int32)
+_ex_v = np.zeros((N_ITEMS, CARD_EXTRA_N), np.int32)
+for _i, _pairs in CARD_EXTRA.items():
+    for _j, (_b, _v) in enumerate(_pairs):
+        _ex_b[_i, _j], _ex_v[_i, _j] = _b, _v
+CARD_EXTRA_BONUS = jnp.asarray(_ex_b)  # int32 [N_ITEMS, CARD_EXTRA_N] bonus ids (0 with value 0 = unused)
+CARD_EXTRA_VALUE = jnp.asarray(_ex_v)  # int32 [N_ITEMS, CARD_EXTRA_N]
+MVP_CARDS = (ITEM_GILDSCARAB_CARD, ITEM_SCORCHSTRIPE_CARD)
+
+
+def card_effects(item_id: int) -> list:
+    """Every (bonus id, value) pair of a card, the row's own pair first; [] for a non-card or an effectless row."""
+    out = [(int(_np["CARD_BONUS"][item_id]), int(_np["CARD_VALUE"][item_id]))]
+    out += [(int(b), int(v)) for b, v in CARD_EXTRA.get(item_id, ())]
+    return [(b, v) for b, v in out if v != 0]
+
 
 ITEM_TABLE = {
     "KIND": KIND, "CLASS": CLASS, "ATK": ATK, "DEF": DEF, "MATK": MATK, "ELEMENT": ELEMENT, "SLOTS": SLOTS,

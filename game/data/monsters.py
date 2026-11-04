@@ -130,8 +130,8 @@ WANDER_MAX_CELLS = 5
 WANDER_BOX = 6  # chebyshev cells from the spawn a wander goal may reach
 
 # Attack delay per kind (ro4-balance): rAthena pre-re mob_db AttackDelay in ms (the time between two swings), from
-# the RO counterparts (Poring 1872, Fabre 1672, Lunatic 1456, Drops 1372, ... ro-fidelity may correct a value).
-# combat.py still swings every config.MONSTER_ATTACK_COOLDOWN ticks (8 = 800 ms, ~2.3x faster than a Poring);
+# the classic counterparts of each role (jelly 1872, larva 1672, bunny 1456, ember blob 1372, ...; may be corrected).
+# combat.py still swings every config.MONSTER_ATTACK_COOLDOWN ticks (8 = 800 ms, ~2.3x faster than the classic jelly);
 # the line for combat (ro4-balance hand-back) swings every max(1, (ADELAY_MS + TICK_MS // 2) // TICK_MS) ticks.
 # Kept in ms: game/config.py imports this module, so TICK_MS cannot be read here.
 _ADELAY_MS = {

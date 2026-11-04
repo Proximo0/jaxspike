@@ -25,6 +25,9 @@ const REFINE_ATK_BY_LEVEL: Array[int] = [0, 2, 3, 5, 7]  ## per refine, by weapo
 const SHOP_NEAR_TILES: int = 1
 const SLOT_PX: int = 52
 const EQUIPPED_TINT: Color = Color(0.75, 1.0, 0.75)
+const PIP_PX: Vector2 = Vector2(9, 12)  ## ro4-cards socket pip size
+const PIP_EMPTY_COLOR: Color = Color(0.1, 0.08, 0.12, 0.85)
+const PIP_CARD_COLOR: Color = Color(1.0, 0.82, 0.25)
 
 var session: NetSession = null
 var welcome: Dictionary = {}
@@ -38,6 +41,8 @@ var storage_items: Array = []  ## cached `you.storage` (the server sends it only
 var ryn_label: Label
 var slot_buttons: Array[Button] = []
 var equip_buttons: Array[Button] = []
+var slot_pips: Array[HBoxContainer] = []  ## ro4-cards: socket pips per inventory button
+var _pip_cache: Dictionary = {}  ## card art path ("" = empty socket) -> Texture2D
 var storage_box: VBoxContainer
 var storage_list: VBoxContainer
 var menu: PopupMenu
@@ -73,6 +78,14 @@ func _ready() -> void:
 		b.gui_input.connect(_on_slot_gui_input.bind(i))
 		grid.add_child(b)
 		slot_buttons.append(b)
+		var pips := HBoxContainer.new()  # ro4-cards: one pip per card socket, lit with the card's portrait
+		pips.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		pips.add_theme_constant_override("separation", 1)
+		pips.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+		pips.offset_top = -PIP_PX.y - 2.0
+		pips.offset_left = 2.0
+		b.add_child(pips)
+		slot_pips.append(pips)
 	var eq_title := Label.new()
 	eq_title.text = "Equipment"
 	box.add_child(eq_title)
@@ -147,6 +160,7 @@ func refresh() -> void:
 	ryn_label.text = "Ryn %d" % int(you.get("ryn", 0))
 	for i: int in range(INV_SLOTS):
 		_show_slot(slot_buttons[i], rows[i])
+		_show_pips(slot_pips[i], rows[i])
 	for i: int in range(equip_rows.size()):
 		var er: Dictionary = equip_rows[i]
 		equip_buttons[i].text = "%s: %s" % [EQUIP_NAMES[i], String(er["name"]) if int(er["item"]) > 0 else "-"]
@@ -190,10 +204,66 @@ func _show_slot(b: Button, r: Dictionary) -> void:
 		b.modulate = Color.WHITE
 		return
 	b.icon = slots.texture(String(r["icon_key"])) if slots != null else null
+	var card_icon: String = String(card_info(welcome, int(r["item"])).get("icon", "")) if int(r["kind"]) == KIND_CARD else ""
+	b.expand_icon = card_icon != ""  # ro4-cards: a card shows its own framed portrait, scaled into the slot
+	if card_icon != "":
+		b.icon = _card_pip_texture(card_icon)
 	var cnt: int = int(r["count"])
 	b.text = ("E " if bool(r["equipped"]) else "") + (str(cnt) if cnt > 1 else "")
 	b.tooltip_text = String(r["tooltip"])
 	b.modulate = EQUIPPED_TINT if bool(r["equipped"]) else Color.WHITE
+
+
+## ro4-cards: the socket pips under a gear slot (card portrait when filled, a dark socket when empty).
+func _show_pips(box: HBoxContainer, r: Dictionary) -> void:
+	var pips: Array[int] = []
+	if not bool(r["empty"]):
+		pips = socket_pips(r, welcome)
+	while box.get_child_count() < pips.size():
+		var t := TextureRect.new()
+		t.custom_minimum_size = PIP_PX
+		t.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		t.stretch_mode = TextureRect.STRETCH_SCALE
+		t.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		box.add_child(t)
+	for i: int in range(box.get_child_count()):
+		var t: TextureRect = box.get_child(i) as TextureRect
+		t.visible = i < pips.size()
+		if not t.visible:
+			continue
+		var cid: int = pips[i]
+		var info: Dictionary = card_info(welcome, cid) if cid > 0 else {}
+		t.texture = _card_pip_texture(String(info.get("icon", ""))) if cid > 0 else _empty_pip_texture()
+		t.modulate = Color.WHITE
+
+
+func _card_pip_texture(icon: String) -> Texture2D:
+	var path: String = CardAlbum.art_path(icon)
+	if _pip_cache.has(path):
+		return _pip_cache[path] as Texture2D
+	var tex: Texture2D = null
+	if path != "" and ResourceLoader.exists(path):
+		tex = load(path) as Texture2D
+	elif path != "" and FileAccess.file_exists(path):
+		var img: Image = Image.load_from_file(ProjectSettings.globalize_path(path))
+		if img != null and not img.is_empty():
+			tex = ImageTexture.create_from_image(img)
+	if tex == null:
+		tex = _solid_pip(PIP_CARD_COLOR)
+	_pip_cache[path] = tex
+	return tex
+
+
+func _empty_pip_texture() -> Texture2D:
+	if not _pip_cache.has(""):
+		_pip_cache[""] = _solid_pip(PIP_EMPTY_COLOR)
+	return _pip_cache[""] as Texture2D
+
+
+static func _solid_pip(c: Color) -> Texture2D:
+	var img: Image = Image.create(6, 8, false, Image.FORMAT_RGBA8)
+	img.fill(c)
+	return ImageTexture.create_from_image(img)
 
 
 func _rebuild_storage() -> void:
@@ -346,11 +416,16 @@ static func slot_rows(you: Dictionary, items: Array, welcome_msg: Dictionary = {
 			"slot": i, "item": item, "count": count, "refine": refine, "cards": cards, "empty": empty,
 			"name": nm, "kind": item_kind(items, item), "equipped": eq_idx >= 0 and not empty,
 			"equip_index": eq_idx, "icon_key": AssetSlots.item_key(item),
-			"tooltip": "" if empty else tooltip_text(nm, refine, cards, welcome_msg),
+			"tooltip": "" if empty else tooltip_text(nm, refine, cards, welcome_msg, item),
 		})
 	var eq: Variant = you.get("equip")
 	for r: Dictionary in out:
 		if bool(r["empty"]) or bool(r["equipped"]):
+			continue
+		if int(r["kind"]) == KIND_CARD:  # ro4-cards: where a click would compound it
+			var cmp: String = compound_text(r, out, you, welcome_msg)
+			if cmp != "":
+				r["tooltip"] = String(r["tooltip"]) + "\n" + cmp
 			continue
 		var wi: int = equip_target(items, int(r["item"]))
 		var wr: Dictionary = {}
@@ -419,15 +494,101 @@ static func near_shop_tile(pos: Vector2i, world_shops: Array) -> bool:
 	return false
 
 
-static func tooltip_text(nm: String, refine: int, cards: Array[int], welcome_msg: Dictionary) -> String:
+static func tooltip_text(nm: String, refine: int, cards: Array[int], welcome_msg: Dictionary, item: int = 0) -> String:
 	var t: String = ("+%d " % refine if refine > 0 else "") + nm
 	var names: PackedStringArray = []
 	for c: int in cards:
 		if c > 0:
-			names.append(item_name(welcome_msg, c))
+			var eff: String = card_effect(welcome_msg, c)
+			names.append(item_name(welcome_msg, c) + (" (%s)" % eff if eff != "" else ""))
 	if not names.is_empty():
 		t += "\nCards: " + ", ".join(names)
+		var n_slots: int = socket_count(welcome_msg, item)
+		if n_slots > 0:
+			t += "  (%d / %d sockets)" % [mini(names.size(), n_slots), n_slots]
+	var card_row: Dictionary = card_info(welcome_msg, item)
+	if not card_row.is_empty():
+		t += "\n%s card: %s" % [String(card_row.get("slot_name", "")), String(card_row.get("text", ""))]
+		var mon: String = String(card_row.get("monster", ""))
+		if mon != "":
+			t += "\nDrops from " + mon + (" (MVP)" if bool(card_row.get("mvp", false)) else "")
 	return t
+
+
+# ---- cards (round 4, ro4-cards: welcome.cards, docs/cards_wire.md) ----
+
+## The welcome.cards row of a card id ({} for anything else or before the table arrives).
+static func card_info(welcome_msg: Dictionary, id: int) -> Dictionary:
+	var v: Variant = welcome_msg.get("cards")
+	if id <= 0 or typeof(v) != TYPE_ARRAY:
+		return {}
+	for r: Variant in v as Array:
+		if typeof(r) == TYPE_DICTIONARY and int((r as Dictionary).get("id", 0)) == id:
+			return r
+	return {}
+
+
+## Effect text of a card id ('LUK +2, FLEE +1'), "" when unknown.
+static func card_effect(welcome_msg: Dictionary, id: int) -> String:
+	return String(card_info(welcome_msg, id).get("text", ""))
+
+
+## Card sockets of a weapon/armor id (welcome.items slots), 0 for anything else.
+static func socket_count(welcome_msg: Dictionary, id: int) -> int:
+	var items: Variant = welcome_msg.get("items")
+	if typeof(items) != TYPE_ARRAY:
+		return 0
+	var info: Dictionary = item_info(items as Array, id)
+	var k: int = int(info.get("kind", 0))
+	return clampi(int(info.get("slots", 0)), 0, 4) if k == KIND_WEAPON or k == KIND_ARMOR else 0
+
+
+## Socket pips of a gear row: one entry per socket, the card id or 0 for an empty socket ([] for no sockets).
+static func socket_pips(row: Dictionary, welcome_msg: Dictionary) -> Array[int]:
+	var out: Array[int] = []
+	var n: int = socket_count(welcome_msg, int(row.get("item", 0)))
+	var cs: Variant = row.get("cards", [])
+	for i: int in range(n):
+		out.append(int((cs as Array)[i]) if typeof(cs) == TYPE_ARRAY and i < (cs as Array).size() else 0)
+	return out
+
+
+## Where a card row would compound, mirroring ro_refine.compound_card: the worn item in the card's equip slot
+## (accessories: Acc 1 if it has a free socket, else Acc 2) with a free socket. {} when it would not go anywhere.
+## Keys: equip_index, slot (inventory slot of the worn item), name, free (free sockets before compounding).
+static func compound_target(card_row: Dictionary, rows_: Array[Dictionary], you: Dictionary,
+		welcome_msg: Dictionary) -> Dictionary:
+	var info: Dictionary = card_info(welcome_msg, int(card_row.get("item", 0)))
+	if info.is_empty() or typeof(you.get("equip")) != TYPE_ARRAY:
+		return {}
+	var eq: Array = you["equip"]
+	var cls: int = int(info.get("slot", -1))
+	var choices: Array[int] = [cls]
+	if cls == 6:  # SLOT_ACCESSORY: Acc 1, then Acc 2
+		choices = [6, 7]
+	for e: int in choices:
+		if e < 0 or e >= eq.size():
+			continue
+		var s: int = int(eq[e])
+		if s < 0 or s >= rows_.size() or bool(rows_[s]["empty"]):
+			continue
+		var free: int = socket_pips(rows_[s], welcome_msg).count(0)
+		if free > 0:
+			return {"equip_index": e, "slot": s, "name": String(rows_[s]["name"]), "free": free}
+	return {}
+
+
+## The compound line of a card's tooltip.
+static func compound_text(card_row: Dictionary, rows_: Array[Dictionary], you: Dictionary,
+		welcome_msg: Dictionary) -> String:
+	var info: Dictionary = card_info(welcome_msg, int(card_row.get("item", 0)))
+	if info.is_empty():
+		return ""
+	var tgt: Dictionary = compound_target(card_row, rows_, you, welcome_msg)
+	if tgt.is_empty():
+		return "Click: no worn %s with a free socket" % String(info.get("slot_name", "item")).to_lower()
+	return "Click: compound into worn %s (%d free socket%s)" % [
+		String(tgt["name"]), int(tgt["free"]), "" if int(tgt["free"]) == 1 else "s"]
 
 
 ## inventory slot -> equipment index for every worn slot in `you.equip`.
