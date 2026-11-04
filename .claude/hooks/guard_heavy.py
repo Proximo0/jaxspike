@@ -8,8 +8,10 @@ Heavy = pytest, soak/bench scripts, net.server, Godot, Blender, check_all/run_si
 Limits (the user's rule, 2026-11-03: "keep your caps at 60 percent so i can safely run a few things as well", so
 Claude's work may use at most 60% of the 16 GB PC; override with env JAXSPIKE_GUARD_MIN_FREE_MB / _MAX_PYTHON /
 _MAX_GODOT):
-  free RAM >= 40% of total (6.4 GB of 16 GB) for any heavy command, >= 45% for a full pytest suite or a soak;
-  python.exe processes < 6 (full suite or soak: < 3); Godot processes < 2; Blender < 2.
+  Claude's heavy processes (python, Godot, Blender) together <= 60% of total RAM, counting the new command at
+  1.5 GB (3 GB for a full suite or a soak); free RAM >= 25% of total (4 GB of 16 GB) left for the user's own
+  programs (the Claude app itself holds 4-5 GB, so a higher free floor is unreachable even when idle; the user
+  approved this measure on 2026-11-03); python.exe processes < 6 (full suite or soak: < 3); Godot < 2; Blender < 2.
 Exit 2 blocks the call and the message below tells the model what to do instead. Standard library only.
 """
 import ctypes
@@ -48,11 +50,23 @@ def total_mb() -> int:
 
 
 def counts() -> dict:
+    """Process counts by name and the heavy processes' total working set in MB (tasklist's Mem Usage column)."""
     out = subprocess.run(["tasklist", "/FO", "CSV", "/NH"], capture_output=True, text=True, timeout=20).stdout
-    names = [ln.split('","')[0].strip('"').lower() for ln in out.splitlines() if ln.startswith('"')]
-    return {"python": sum(n.startswith("python") for n in names),
-            "godot": sum(n.startswith("godot") for n in names),
-            "blender": sum(n.startswith("blender") for n in names)}
+    c = {"python": 0, "godot": 0, "blender": 0, "heavy_mb": 0}
+    for ln in out.splitlines():
+        if not ln.startswith('"'):
+            continue
+        cols = ln.strip().strip('"').split('","')
+        name = cols[0].lower()
+        kind = next((k for k in ("python", "godot", "blender") if name.startswith(k)), None)
+        if kind is None:
+            continue
+        c[kind] += 1
+        try:
+            c["heavy_mb"] += int(re.sub(r"[^0-9]", "", cols[4])) // 1024  # "825,000 K"
+        except (IndexError, ValueError):
+            pass
+    return c
 
 
 def main() -> int:
@@ -69,12 +83,13 @@ def main() -> int:
     if not HEAVY.search(cmd):
         return 0
     total = total_mb()
-    min_free = int(os.environ.get("JAXSPIKE_GUARD_MIN_FREE_MB", total * 40 // 100))  # Claude uses <= 60%
+    min_free = int(os.environ.get("JAXSPIKE_GUARD_MIN_FREE_MB", total * 25 // 100))  # the user's own room
+    budget = total * 60 // 100  # Claude's heavy processes together, including the one about to start
     max_py = int(os.environ.get("JAXSPIKE_GUARD_MAX_PYTHON", 6))
     max_godot = int(os.environ.get("JAXSPIKE_GUARD_MAX_GODOT", 2))
     big = bool(FULL_SUITE.search(cmd) or SOAK.search(cmd))
+    need = 3000 if big else 1500  # MB the new command is assumed to take
     if big:
-        min_free = max(min_free, total * 45 // 100)
         max_py = min(max_py, 3)
     b = re.search(r"--batch\s+(\d+)", cmd)
     if b and int(b.group(1)) > 4 and "wsl" not in cmd.lower():
@@ -89,7 +104,10 @@ def main() -> int:
         return 0
     problems = []
     if free < min_free:
-        problems.append(f"free RAM {free} MB < {min_free} MB (Claude's work may use at most 60% of the PC)")
+        problems.append(f"free RAM {free} MB < {min_free} MB (the floor kept for the user's own programs)")
+    if c["heavy_mb"] + need > budget:
+        problems.append(f"Claude's heavy processes use {c['heavy_mb']} MB; with this command's ~{need} MB that passes "
+                        f"the 60% budget of {budget} MB")
     if c["python"] >= max_py:
         problems.append(f"{c['python']} python.exe processes running (limit {max_py} for this command)")
     if c["godot"] >= max_godot:
