@@ -1,0 +1,34 @@
+{
+ "_doc": "Every model source the sprite pipeline renders from. All CC0 1.0 (public domain dedication). Keep in step with client/assets/LICENSES.md.",
+ "kaykit-adventurers": {
+  "name": "KayKit Character Pack: Adventurers 1.0",
+  "author": "Kay Lousberg (www.kaylousberg.com)",
+  "url": "https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0",
+  "license": "CC0 1.0",
+  "local": "D:/jaxspike-art/src/kaykit_adv",
+  "used": ["Knight.glb", "Mage.glb", "Rogue.glb", "Rogue_Hooded.glb", "Barbarian.glb"]
+ },
+ "kaykit-skeletons": {
+  "name": "KayKit Character Pack: Skeletons 1.0",
+  "author": "Kay Lousberg (www.kaylousberg.com)",
+  "url": "https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Skeletons-1.0",
+  "license": "CC0 1.0",
+  "local": "D:/jaxspike-art/src/kaykit_skel",
+  "used": ["Skeleton_Minion.glb", "Skeleton_Warrior.glb", "Skeleton_Mage.glb"]
+ },
+ "quaternius-ultimate-monsters": {
+  "name": "Quaternius Ultimate Monsters pack (October 2022)",
+  "author": "Quaternius (quaternius.com)",
+  "url": "https://quaternius.com/packs/ultimatemonsters.html",
+  "license": "CC0 1.0 (License.txt in the pack)",
+  "local": "D:/jaxspike-art/src/quaternius_um",
+  "used": ["Blob/PinkBlob", "Blob/GreenBlob", "Blob/GreenSpikyBlob", "Blob/Alien", "Blob/Mushnub", "Blob/Dog", "Blob/Cat",
+           "Big/Orc", "Big/Bunny", "Big/Cactoro", "Big/Tribal", "Big/Birb", "Big/Fish", "Big/Yeti",
+           "Flying/Armabee", "Flying/Armabee_Evolved"]
+ },
+ "blender": {
+  "name": "Blender 5.0.1 (renderer only; nothing of Blender ends up in the output)",
+  "url": "https://www.blender.org",
+  "license": "GPL (tool); renders are the user's own work"
+ }
+}

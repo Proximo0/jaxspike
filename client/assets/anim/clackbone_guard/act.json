@@ -1,0 +1,76 @@
+{
+ "kind": "clackbone_guard",
+ "scale": 0.5,
+ "frame_w": 96,
+ "frame_h": 112,
+ "anchor": [
+  48,
+  100
+ ],
+ "atk_frame": 3,
+ "rows": 5,
+ "directions": [
+  "S",
+  "SW",
+  "W",
+  "NW",
+  "N",
+  "NE",
+  "E",
+  "SE"
+ ],
+ "mirror_rows": {
+  "5": 3,
+  "6": 2,
+  "7": 1
+ },
+ "actions": {
+  "idle": {
+   "file": "idle.png",
+   "image": "res://assets/anim/clackbone_guard/idle.png",
+   "row0": 0,
+   "frames": 4,
+   "delay_ms": 200,
+   "mirror": true,
+   "loop": true
+  },
+  "walk": {
+   "file": "walk.png",
+   "image": "res://assets/anim/clackbone_guard/walk.png",
+   "row0": 0,
+   "frames": 8,
+   "delay_ms": 75,
+   "mirror": true,
+   "loop": true
+  },
+  "attack": {
+   "file": "attack.png",
+   "image": "res://assets/anim/clackbone_guard/attack.png",
+   "row0": 0,
+   "frames": 6,
+   "delay_ms": 100,
+   "mirror": true,
+   "loop": false,
+   "atk_frame": 3
+  },
+  "hurt": {
+   "file": "hurt.png",
+   "image": "res://assets/anim/clackbone_guard/hurt.png",
+   "row0": 0,
+   "frames": 4,
+   "delay_ms": 75,
+   "mirror": true,
+   "loop": false
+  },
+  "dead": {
+   "file": "dead.png",
+   "image": "res://assets/anim/clackbone_guard/dead.png",
+   "row0": 0,
+   "frames": 5,
+   "delay_ms": 120,
+   "mirror": true,
+   "loop": false
+  }
+ },
+ "source": "client/tools/art render_kind.py (D:/jaxspike-art/src/kaykit_skel/KayKit-Character-Pack-Skeletons-1.0-main/addons/kaykit_character_pack_skeletons/Characters/gltf/Skeleton_Warrior.glb)"
+}

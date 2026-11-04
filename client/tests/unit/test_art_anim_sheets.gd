@@ -177,6 +177,10 @@ func test_round3_sheets_are_hires_prerenders() -> void:
 		assert_eq(int(act["atk_frame"]), 3, "%s: atk_frame" % kind)
 		assert_eq(int(act["actions"]["attack"]["frames"]), 6, "%s: attack frames" % kind)
 		assert_true(String(act.get("source", "")).contains("render_kind"), "%s: source tag" % kind)
+		# 2x sheets carry the draw scale the loader applies (frame * scale world px at a 32 px tile)
+		var scale: float = float(act.get("scale", 1.0))
+		assert_true(scale > 0.0 and scale <= 1.0, "%s: scale %f" % [kind, scale])
+		assert_true(fh * scale <= 80.0, "%s: drawn height %f px at tile 32 is too tall" % [kind, fh * scale])
 
 
 func test_npc_sheets() -> void:

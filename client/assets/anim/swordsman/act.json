@@ -1,6 +1,6 @@
 {
  "kind": "swordsman",
- "engine_kind": "swordsman",
+ "scale": 0.5,
  "frame_w": 96,
  "frame_h": 128,
  "anchor": [

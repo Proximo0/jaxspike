@@ -19,6 +19,11 @@ func test_parse_fields() -> void:
 	assert_false((m["actions"] as Dictionary).has("bad"))
 	assert_true(ActSheet.parse("{").is_empty())
 	assert_true(ActSheet.parse('{"frame_w": 8}').is_empty())
+	assert_near(float(m["scale"]), 1.0)  # default: 1x sheets
+	var m2: Dictionary = ActSheet.parse(ACT.replace('"atk_frame": 2,', '"atk_frame": 2, "scale": 0.5,'))
+	assert_near(float(m2["scale"]), 0.5)
+	var tex := ImageTexture.create_from_image(Image.create(16, 50, false, Image.FORMAT_RGBA8))
+	assert_near(ActSheet.build(m2, {"idle": tex}).scale, 0.5)
 
 
 func test_build_five_rows_mirrored() -> void:

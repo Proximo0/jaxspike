@@ -1,0 +1,1144 @@
+{
+ "_doc": [
+  "Manifest for render_kind.py. One entry per sprite kind (7 jobs, 20 monsters). `source` is a glb/gltf under",
+  "source_root (D:, not in git). `show`/`hide` are regexes over mesh names (KayKit packs bundle every weapon;",
+  "pick one). `clips` maps our actions to the model's clip names; an object form adds `hit` (0..1 contact moment",
+  "of the attack clip, warped onto frame 3 of 6 = 60 %), `span` [a, b] (part of the clip) and `yaw`.",
+  "`tint` multiplies the texture (recolours a shared model into another role), `frame` overrides the default",
+  "frame size, `zoom` scales the figure, `floor` drops the lowest rest vertex to the ground, `hover` lifts it.",
+  "`folder` is the output dir under client/assets/anim/ (docs/naming.md original monster names; the key stays the engine id).",
+  "Licences: see `licenses.json` next to this file; every source here is CC0.",
+  "Quaternius's atlas is a muted palette: those kinds get brightness 1.35 and a tint above 1.0 on the hue they should read as (tints multiply before the cel ramp, values over 1 lighten).",
+  "Chibi: `bone_scales` scales pose bones (head, hands); `face` puts an anime face decal (gen_faces.py style) on the `target` mesh, parented to `bone`; `squash` bounces blobs in idle/walk; `outline_rel`, `specular`, `rim` shape the ink and the cel look."
+ ],
+ "source_root": "D:/jaxspike-art/src",
+ "defaults": {
+  "frame_job": [
+   96,
+   128
+  ],
+  "frame_monster": [
+   96,
+   96
+  ],
+  "elev_deg": 35,
+  "zoom": 1.15,
+  "zoom_monster": 1.3,
+  "hide": [
+   "^Icosphere"
+  ],
+  "margin_bottom": 12,
+  "margin_top": 6,
+  "samples": 8,
+  "ramp": [
+   [
+    0.0,
+    0.55
+   ],
+   [
+    0.42,
+    0.8
+   ],
+   [
+    0.66,
+    1.0
+   ]
+  ],
+  "saturation": 1.2,
+  "brightness": 1.15,
+  "outline_rel": 0.016,
+  "specular": 0.22,
+  "specular_at": 0.96,
+  "rim": 0.18,
+  "rim_at": 0.16
+ },
+ "_paths": {
+  "adv": "kaykit_adv/KayKit-Character-Pack-Adventures-1.0-main/addons/kaykit_character_pack_adventures/Characters/gltf",
+  "skel": "kaykit_skel/KayKit-Character-Pack-Skeletons-1.0-main/addons/kaykit_character_pack_skeletons/Characters/gltf",
+  "um": "quaternius_um/Ultimate Monsters"
+ },
+ "kinds": {
+  "novice": {
+   "role": "job",
+   "index": 0,
+   "license": "kaykit-adventurers",
+   "source": "kaykit_adv/KayKit-Character-Pack-Adventures-1.0-main/addons/kaykit_character_pack_adventures/Characters/gltf/Rogue.glb",
+   "show": [
+    "^Rogue_(Arm|Body|Head|Leg)"
+   ],
+   "tint": [
+    1.0,
+    0.92,
+    0.8
+   ],
+   "clips": {
+    "idle": "Unarmed_Idle",
+    "walk": "Walking_A",
+    "sit": "Sit_Floor_Idle",
+    "pickup": "PickUp",
+    "standby": "Unarmed_Idle",
+    "attack": {
+     "clip": "Unarmed_Melee_Attack_Punch_A",
+     "hit": 0.45
+    },
+    "hurt": "Hit_A",
+    "dead": "Death_A",
+    "cast": "Spellcast_Long"
+   },
+   "bone_scales": {
+    "head": 1.45,
+    "handslot.r": 1.35,
+    "handslot.l": 1.35,
+    "hand.r": 1.15,
+    "hand.l": 1.15
+   },
+   "face": {
+    "style": "novice",
+    "bone": "head",
+    "target": "Rogue_Head$",
+    "size": 0.36,
+    "up": 0.5,
+    "lift": 0.07,
+    "offset": 0.02
+   },
+   "zoom": 1.1
+  },
+  "swordsman": {
+   "role": "job",
+   "index": 1,
+   "license": "kaykit-adventurers",
+   "source": "kaykit_adv/KayKit-Character-Pack-Adventures-1.0-main/addons/kaykit_character_pack_adventures/Characters/gltf/Knight.glb",
+   "show": [
+    "^Knight_(Arm|Body|Cape|Head|Leg)",
+    "^1H_Sword$",
+    "^Round_Shield$"
+   ],
+   "clips": {
+    "idle": "Idle",
+    "walk": "Walking_A",
+    "sit": "Sit_Floor_Idle",
+    "pickup": "PickUp",
+    "standby": "2H_Melee_Idle",
+    "attack": {
+     "clip": "1H_Melee_Attack_Slice_Diagonal",
+     "hit": 0.45
+    },
+    "hurt": "Hit_A",
+    "dead": "Death_A",
+    "cast": "Spellcast_Long"
+   },
+   "bone_scales": {
+    "head": 1.45,
+    "handslot.r": 1.35,
+    "handslot.l": 1.35,
+    "hand.r": 1.15,
+    "hand.l": 1.15
+   },
+   "face": {
+    "style": "swordsman",
+    "bone": "head",
+    "target": "Knight_Head$",
+    "size": 0.36,
+    "up": 0.5,
+    "lift": 0.07,
+    "offset": 0.02
+   },
+   "zoom": 1.1
+  },
+  "mage": {
+   "role": "job",
+   "index": 2,
+   "license": "kaykit-adventurers",
+   "source": "kaykit_adv/KayKit-Character-Pack-Adventures-1.0-main/addons/kaykit_character_pack_adventures/Characters/gltf/Mage.glb",
+   "show": [
+    "^Mage_",
+    "^2H_Staff$"
+   ],
+   "clips": {
+    "idle": "Idle",
+    "walk": "Walking_A",
+    "sit": "Sit_Floor_Idle",
+    "pickup": "PickUp",
+    "standby": "2H_Melee_Idle",
+    "attack": {
+     "clip": "Spellcast_Shoot",
+     "hit": 0.5
+    },
+    "hurt": "Hit_A",
+    "dead": "Death_A",
+    "cast": "Spellcast_Long"
+   },
+   "bone_scales": {
+    "head": 1.45,
+    "handslot.r": 1.35,
+    "handslot.l": 1.35,
+    "hand.r": 1.15,
+    "hand.l": 1.15
+   },
+   "face": {
+    "style": "mage",
+    "bone": "head",
+    "target": "Mage_Head$",
+    "size": 0.36,
+    "up": 0.5,
+    "lift": 0.07,
+    "offset": 0.02
+   },
+   "zoom": 1.1
+  },
+  "archer": {
+   "role": "job",
+   "index": 3,
+   "license": "kaykit-adventurers",
+   "source": "kaykit_adv/KayKit-Character-Pack-Adventures-1.0-main/addons/kaykit_character_pack_adventures/Characters/gltf/Rogue_Hooded.glb",
+   "show": [
+    "^Rogue_(Arm|Body|Cape|Head_Hooded|Leg)",
+    "^2H_Crossbow$"
+   ],
+   "tint": [
+    0.75,
+    1.0,
+    0.7
+   ],
+   "clips": {
+    "idle": "Idle",
+    "walk": "Walking_A",
+    "sit": "Sit_Floor_Idle",
+    "pickup": "PickUp",
+    "standby": "2H_Ranged_Aiming",
+    "attack": {
+     "clip": "2H_Ranged_Shoot",
+     "hit": 0.4
+    },
+    "hurt": "Hit_A",
+    "dead": "Death_A",
+    "cast": "Spellcast_Long"
+   },
+   "bone_scales": {
+    "head": 1.45,
+    "handslot.r": 1.35,
+    "handslot.l": 1.35,
+    "hand.r": 1.15,
+    "hand.l": 1.15
+   },
+   "face": {
+    "style": "archer",
+    "bone": "head",
+    "target": "Rogue_Head_Hooded$",
+    "size": 0.36,
+    "up": 0.5,
+    "lift": 0.07,
+    "offset": 0.02
+   },
+   "zoom": 1.1
+  },
+  "acolyte": {
+   "role": "job",
+   "index": 4,
+   "license": "kaykit-adventurers",
+   "source": "kaykit_adv/KayKit-Character-Pack-Adventures-1.0-main/addons/kaykit_character_pack_adventures/Characters/gltf/Mage.glb",
+   "show": [
+    "^Mage_(Arm|Body|Cape|Head|Leg)",
+    "^1H_Wand$"
+   ],
+   "tint": [
+    0.85,
+    0.95,
+    1.2
+   ],
+   "clips": {
+    "idle": "Idle",
+    "walk": "Walking_A",
+    "sit": "Sit_Floor_Idle",
+    "pickup": "PickUp",
+    "standby": "Unarmed_Idle",
+    "attack": {
+     "clip": "1H_Melee_Attack_Chop",
+     "hit": 0.45
+    },
+    "hurt": "Hit_A",
+    "dead": "Death_A",
+    "cast": "Spellcast_Raise"
+   },
+   "bone_scales": {
+    "head": 1.45,
+    "handslot.r": 1.35,
+    "handslot.l": 1.35,
+    "hand.r": 1.15,
+    "hand.l": 1.15
+   },
+   "face": {
+    "style": "acolyte",
+    "bone": "head",
+    "target": "Mage_Head$",
+    "size": 0.36,
+    "up": 0.5,
+    "lift": 0.07,
+    "offset": 0.02
+   },
+   "zoom": 1.1
+  },
+  "thief": {
+   "role": "job",
+   "index": 5,
+   "license": "kaykit-adventurers",
+   "source": "kaykit_adv/KayKit-Character-Pack-Adventures-1.0-main/addons/kaykit_character_pack_adventures/Characters/gltf/Rogue.glb",
+   "show": [
+    "^Rogue_(Arm|Body|Cape|Head|Leg)",
+    "^Knife$",
+    "^Knife_Offhand$"
+   ],
+   "tint": [
+    1.0,
+    0.7,
+    0.7
+   ],
+   "clips": {
+    "idle": "Idle",
+    "walk": "Walking_A",
+    "sit": "Sit_Floor_Idle",
+    "pickup": "PickUp",
+    "standby": "2H_Melee_Idle",
+    "attack": {
+     "clip": "Dualwield_Melee_Attack_Slice",
+     "hit": 0.45
+    },
+    "hurt": "Hit_A",
+    "dead": "Death_A",
+    "cast": "Spellcast_Long"
+   },
+   "bone_scales": {
+    "head": 1.45,
+    "handslot.r": 1.35,
+    "handslot.l": 1.35,
+    "hand.r": 1.15,
+    "hand.l": 1.15
+   },
+   "face": {
+    "style": "thief",
+    "bone": "head",
+    "target": "Rogue_Head$",
+    "size": 0.36,
+    "up": 0.5,
+    "lift": 0.07,
+    "offset": 0.02
+   },
+   "zoom": 1.1
+  },
+  "merchant": {
+   "role": "job",
+   "index": 6,
+   "license": "kaykit-adventurers",
+   "source": "kaykit_adv/KayKit-Character-Pack-Adventures-1.0-main/addons/kaykit_character_pack_adventures/Characters/gltf/Barbarian.glb",
+   "show": [
+    "^Barbarian_(Arm|Body|Head|Hat|Leg)",
+    "^1H_Axe$"
+   ],
+   "tint": [
+    1.0,
+    0.9,
+    0.7
+   ],
+   "clips": {
+    "idle": "Idle",
+    "walk": "Walking_A",
+    "sit": "Sit_Floor_Idle",
+    "pickup": "PickUp",
+    "standby": "2H_Melee_Idle",
+    "attack": {
+     "clip": "1H_Melee_Attack_Chop",
+     "hit": 0.45
+    },
+    "hurt": "Hit_A",
+    "dead": "Death_A",
+    "cast": "Spellcast_Long"
+   },
+   "bone_scales": {
+    "head": 1.45,
+    "handslot.r": 1.35,
+    "handslot.l": 1.35,
+    "hand.r": 1.15,
+    "hand.l": 1.15
+   },
+   "face": {
+    "style": "merchant",
+    "bone": "head",
+    "target": "Barbarian_Head$",
+    "size": 0.36,
+    "up": 0.5,
+    "lift": 0.07,
+    "offset": 0.02
+   },
+   "zoom": 1.1
+  },
+  "blobbin": {
+   "folder": "blobbin",
+   "role": "monster",
+   "index": 0,
+   "license": "quaternius-ultimate-monsters",
+   "floor": true,
+   "source": "quaternius_um/Ultimate Monsters/Blob/glTF/PinkBlob.gltf",
+   "clips": {
+    "idle": "Idle",
+    "walk": "Walk",
+    "attack": {
+     "clip": "Bite_Front",
+     "hit": 0.45
+    },
+    "hurt": "HitRecieve",
+    "dead": "Death"
+   },
+   "brightness": 1.3,
+   "tint": [
+    1.3,
+    0.75,
+    1.15
+   ],
+   "lift": [
+    0.35,
+    0.12,
+    0.22
+   ],
+   "squash": 0.07,
+   "hide": [
+    "^Icosphere",
+    "\\.00\\d$"
+   ],
+   "face": {
+    "style": "blob_happy",
+    "bone": "Head",
+    "target": "_Blob$",
+    "size": 0.62,
+    "up": 0.5,
+    "lift": 0.22
+   }
+  },
+  "grukk_brute": {
+   "folder": "grukk_brute",
+   "role": "monster",
+   "index": 1,
+   "license": "quaternius-ultimate-monsters",
+   "floor": true,
+   "frame": [
+    128,
+    128
+   ],
+   "source": "quaternius_um/Ultimate Monsters/Big/glTF/Orc.gltf",
+   "clips": {
+    "idle": "Idle",
+    "walk": "Walk",
+    "attack": {
+     "clip": "Weapon",
+     "hit": 0.45
+    },
+    "hurt": "HitReact",
+    "dead": "Death"
+   },
+   "brightness": 1.3,
+   "tint": [
+    0.9,
+    1.3,
+    0.7
+   ],
+   "lift": [
+    0.1,
+    0.2,
+    0.05
+   ],
+   "bone_scales": {
+    "Head": 1.3
+   },
+   "face": {
+    "style": "monster_mean",
+    "bone": "Head",
+    "target": ".*",
+    "size": 0.22,
+    "up": 0.5
+   }
+  },
+  "wrigglet": {
+   "folder": "wrigglet",
+   "role": "monster",
+   "index": 2,
+   "license": "quaternius-ultimate-monsters",
+   "floor": true,
+   "source": "quaternius_um/Ultimate Monsters/Blob/glTF/GreenSpikyBlob.gltf",
+   "clips": {
+    "idle": "Idle",
+    "walk": "Walk",
+    "attack": {
+     "clip": "Bite_Front",
+     "hit": 0.45
+    },
+    "hurt": "HitRecieve",
+    "dead": "Death"
+   },
+   "brightness": 1.3,
+   "tint": [
+    0.9,
+    1.3,
+    0.6
+   ],
+   "lift": [
+    0.15,
+    0.3,
+    0.1
+   ],
+   "squash": 0.07,
+   "hide": [
+    "^Icosphere",
+    "\\.00\\d$"
+   ],
+   "face": {
+    "style": "blob_happy",
+    "bone": "Head",
+    "target": "_Blob$",
+    "size": 0.4,
+    "up": 0.5,
+    "lift": 0.3,
+    "offset": 0.03
+   }
+  },
+  "moonbun": {
+   "folder": "moonbun",
+   "role": "monster",
+   "index": 3,
+   "license": "quaternius-ultimate-monsters",
+   "floor": true,
+   "source": "quaternius_um/Ultimate Monsters/Big/glTF/Bunny.gltf",
+   "clips": {
+    "idle": "Idle",
+    "walk": "Walk",
+    "attack": {
+     "clip": "Punch",
+     "hit": 0.45
+    },
+    "hurt": "HitReact",
+    "dead": "Death"
+   },
+   "brightness": 1.3,
+   "tint": [
+    1.3,
+    1.25,
+    1.3
+   ],
+   "lift": [
+    0.18,
+    0.15,
+    0.2
+   ],
+   "bone_scales": {
+    "Head": 1.3
+   },
+   "face": {
+    "style": "monster_cute",
+    "bone": "Head",
+    "target": ".*",
+    "size": 0.2,
+    "up": 0.55
+   }
+  },
+  "emberblob": {
+   "folder": "emberblob",
+   "role": "monster",
+   "index": 4,
+   "license": "quaternius-ultimate-monsters",
+   "floor": true,
+   "source": "quaternius_um/Ultimate Monsters/Blob/glTF/PinkBlob.gltf",
+   "tint": [
+    1.3,
+    0.9,
+    0.35
+   ],
+   "clips": {
+    "idle": "Idle",
+    "walk": "Walk",
+    "attack": {
+     "clip": "Bite_Front",
+     "hit": 0.45
+    },
+    "hurt": "HitRecieve",
+    "dead": "Death"
+   },
+   "brightness": 1.3,
+   "lift": [
+    0.3,
+    0.2,
+    0.0
+   ],
+   "squash": 0.07,
+   "hide": [
+    "^Icosphere",
+    "\\.00\\d$"
+   ],
+   "face": {
+    "style": "blob_happy",
+    "bone": "Head",
+    "target": "_Blob$",
+    "size": 0.62,
+    "up": 0.5,
+    "lift": 0.22
+   }
+  },
+  "vexblob": {
+   "folder": "vexblob",
+   "role": "monster",
+   "index": 5,
+   "license": "quaternius-ultimate-monsters",
+   "floor": true,
+   "source": "quaternius_um/Ultimate Monsters/Blob/glTF/GreenBlob.gltf",
+   "clips": {
+    "idle": "Idle",
+    "walk": "Walk",
+    "attack": {
+     "clip": "Bite_Front",
+     "hit": 0.45
+    },
+    "hurt": "HitRecieve",
+    "dead": "Death"
+   },
+   "brightness": 1.3,
+   "tint": [
+    0.9,
+    1.3,
+    0.7
+   ],
+   "lift": [
+    0.15,
+    0.3,
+    0.1
+   ],
+   "squash": 0.07,
+   "hide": [
+    "^Icosphere",
+    "\\.00\\d$"
+   ],
+   "face": {
+    "style": "blob_happy",
+    "bone": "Head",
+    "target": "_Blob$",
+    "size": 0.42,
+    "up": 0.5,
+    "lift": 0.3
+   }
+  },
+  "bramblet": {
+   "folder": "bramblet",
+   "role": "monster",
+   "index": 6,
+   "license": "quaternius-ultimate-monsters",
+   "floor": true,
+   "source": "quaternius_um/Ultimate Monsters/Big/glTF/Cactoro.gltf",
+   "tint": [
+    0.95,
+    1.0,
+    0.6
+   ],
+   "clips": {
+    "idle": "Idle",
+    "walk": "Walk",
+    "attack": {
+     "clip": "Punch",
+     "hit": 0.45
+    },
+    "hurt": "HitReact",
+    "dead": "Death"
+   },
+   "brightness": 1.3,
+   "lift": [
+    0.15,
+    0.15,
+    0.05
+   ],
+   "bone_scales": {
+    "Head": 1.3
+   },
+   "face": {
+    "style": "monster_mean",
+    "bone": "Head",
+    "target": ".*",
+    "size": 0.22,
+    "up": 0.5
+   }
+  },
+  "fiddlehop": {
+   "folder": "fiddlehop",
+   "role": "monster",
+   "index": 7,
+   "license": "quaternius-ultimate-monsters",
+   "floor": true,
+   "source": "quaternius_um/Ultimate Monsters/Blob/glTF/Alien.gltf",
+   "tint": [
+    0.9,
+    1.3,
+    0.6
+   ],
+   "clips": {
+    "idle": "Idle",
+    "walk": "Walk",
+    "attack": {
+     "clip": "Bite_Front",
+     "hit": 0.45
+    },
+    "hurt": "HitRecieve",
+    "dead": "Death"
+   },
+   "brightness": 1.3,
+   "lift": [
+    0.15,
+    0.3,
+    0.1
+   ],
+   "squash": 0.07,
+   "hide": [
+    "^Icosphere",
+    "\\.00\\d$"
+   ],
+   "face": {
+    "style": "blob_happy",
+    "bone": "Head",
+    "target": "_Blob$",
+    "size": 0.42,
+    "up": 0.5,
+    "lift": 0.3
+   }
+  },
+  "capling": {
+   "folder": "capling",
+   "role": "monster",
+   "index": 8,
+   "license": "quaternius-ultimate-monsters",
+   "floor": true,
+   "source": "quaternius_um/Ultimate Monsters/Blob/glTF/Mushnub.gltf",
+   "clips": {
+    "idle": "Idle",
+    "walk": "Walk",
+    "attack": {
+     "clip": "Bite_Front",
+     "hit": 0.45
+    },
+    "hurt": "HitRecieve",
+    "dead": "Death"
+   },
+   "brightness": 1.3,
+   "tint": [
+    1.3,
+    1.2,
+    1.0
+   ],
+   "lift": [
+    0.3,
+    0.25,
+    0.2
+   ],
+   "squash": 0.07,
+   "hide": [
+    "^Icosphere",
+    "\\.00\\d$"
+   ],
+   "face": {
+    "style": "blob_happy",
+    "bone": "Head",
+    "target": "_Blob$",
+    "size": 0.62,
+    "up": 0.5,
+    "lift": 0.22
+   }
+  },
+  "pilferbug": {
+   "folder": "pilferbug",
+   "role": "monster",
+   "index": 9,
+   "license": "quaternius-ultimate-monsters",
+   "floor": true,
+   "hover": 0.1,
+   "source": "quaternius_um/Ultimate Monsters/Flying/glTF/Armabee.gltf",
+   "tint": [
+    1.2,
+    1.0,
+    0.8
+   ],
+   "clips": {
+    "idle": "Flying_Idle",
+    "walk": "Fast_Flying",
+    "attack": {
+     "clip": "Headbutt",
+     "hit": 0.45
+    },
+    "hurt": "HitReact",
+    "dead": "Death"
+   },
+   "brightness": 1.3,
+   "lift": [
+    0.15,
+    0.1,
+    0.05
+   ]
+  },
+  "rotling": {
+   "folder": "rotling",
+   "role": "monster",
+   "index": 10,
+   "license": "quaternius-ultimate-monsters",
+   "floor": true,
+   "source": "quaternius_um/Ultimate Monsters/Big/glTF/Tribal.gltf",
+   "tint": [
+    0.8,
+    1.2,
+    0.75
+   ],
+   "clips": {
+    "idle": "Idle",
+    "walk": "Walk",
+    "attack": {
+     "clip": "Punch",
+     "hit": 0.45
+    },
+    "hurt": "HitReact",
+    "dead": "Death"
+   },
+   "brightness": 1.3,
+   "lift": [
+    0.1,
+    0.2,
+    0.1
+   ],
+   "bone_scales": {
+    "Head": 1.3
+   },
+   "face": {
+    "style": "monster_mean",
+    "bone": "Head",
+    "target": ".*",
+    "size": 0.22,
+    "up": 0.5
+   }
+  },
+  "snarlfang": {
+   "folder": "snarlfang",
+   "role": "monster",
+   "index": 11,
+   "license": "quaternius-ultimate-monsters",
+   "floor": true,
+   "source": "quaternius_um/Ultimate Monsters/Blob/glTF/Dog.gltf",
+   "tint": [
+    0.85,
+    0.9,
+    1.15
+   ],
+   "clips": {
+    "idle": "Idle",
+    "walk": "Walk",
+    "attack": {
+     "clip": "Bite_Front",
+     "hit": 0.45
+    },
+    "hurt": "HitRecieve",
+    "dead": "Death"
+   },
+   "brightness": 1.3,
+   "lift": [
+    0.2,
+    0.2,
+    0.25
+   ],
+   "squash": 0.07,
+   "hide": [
+    "^Icosphere"
+   ]
+  },
+  "clackbone": {
+   "folder": "clackbone",
+   "role": "monster",
+   "index": 12,
+   "license": "kaykit-skeletons",
+   "frame": [
+    96,
+    112
+   ],
+   "source": "kaykit_skel/KayKit-Character-Pack-Skeletons-1.0-main/addons/kaykit_character_pack_skeletons/Characters/gltf/Skeleton_Minion.glb",
+   "show": [
+    "^Skeleton_Minion_"
+   ],
+   "clips": {
+    "idle": "Idle",
+    "walk": "Walking_D_Skeletons",
+    "attack": {
+     "clip": "Unarmed_Melee_Attack_Punch_A",
+     "hit": 0.45
+    },
+    "hurt": "Hit_A",
+    "dead": "Death_A"
+   },
+   "bone_scales": {
+    "head": 1.3
+   }
+  },
+  "gallopeck": {
+   "folder": "gallopeck",
+   "role": "monster",
+   "index": 13,
+   "license": "quaternius-ultimate-monsters",
+   "floor": true,
+   "frame": [
+    128,
+    128
+   ],
+   "source": "quaternius_um/Ultimate Monsters/Big/glTF/Birb.gltf",
+   "tint": [
+    1.3,
+    1.3,
+    0.6
+   ],
+   "clips": {
+    "idle": "Idle",
+    "walk": "Run",
+    "attack": {
+     "clip": "Punch",
+     "hit": 0.45
+    },
+    "hurt": "HitReact",
+    "dead": "Death"
+   },
+   "brightness": 1.3,
+   "lift": [
+    0.3,
+    0.25,
+    0.05
+   ],
+   "bone_scales": {
+    "Head": 1.3
+   },
+   "face": {
+    "style": "monster_cute",
+    "bone": "Head",
+    "target": ".*",
+    "size": 0.22,
+    "up": 0.5
+   }
+  },
+  "sandgulper": {
+   "folder": "sandgulper",
+   "role": "monster",
+   "index": 14,
+   "license": "quaternius-ultimate-monsters",
+   "floor": true,
+   "frame": [
+    128,
+    128
+   ],
+   "source": "quaternius_um/Ultimate Monsters/Big/glTF/Fish.gltf",
+   "tint": [
+    1.3,
+    1.2,
+    0.75
+   ],
+   "clips": {
+    "idle": "Idle",
+    "walk": "Walk",
+    "attack": {
+     "clip": "Punch",
+     "hit": 0.45
+    },
+    "hurt": "HitReact",
+    "dead": "Death"
+   },
+   "brightness": 1.3,
+   "lift": [
+    0.3,
+    0.25,
+    0.1
+   ],
+   "bone_scales": {
+    "Head": 1.3
+   },
+   "face": {
+    "style": "monster_cute",
+    "bone": "Head",
+    "target": ".*",
+    "size": 0.22,
+    "up": 0.5
+   }
+  },
+  "clackbone_guard": {
+   "folder": "clackbone_guard",
+   "role": "monster",
+   "index": 15,
+   "license": "kaykit-skeletons",
+   "frame": [
+    96,
+    112
+   ],
+   "source": "kaykit_skel/KayKit-Character-Pack-Skeletons-1.0-main/addons/kaykit_character_pack_skeletons/Characters/gltf/Skeleton_Warrior.glb",
+   "show": [
+    "^Skeleton_Warrior_"
+   ],
+   "clips": {
+    "idle": "Idle_Combat",
+    "walk": "Walking_D_Skeletons",
+    "attack": {
+     "clip": "1H_Melee_Attack_Slice_Diagonal",
+     "hit": 0.45
+    },
+    "hurt": "Hit_A",
+    "dead": "Death_A"
+   },
+   "bone_scales": {
+    "head": 1.3
+   }
+  },
+  "grumblebear": {
+   "folder": "grumblebear",
+   "role": "monster",
+   "index": 16,
+   "license": "quaternius-ultimate-monsters",
+   "floor": true,
+   "frame": [
+    128,
+    128
+   ],
+   "source": "quaternius_um/Ultimate Monsters/Big/glTF/Yeti.gltf",
+   "tint": [
+    1.0,
+    0.7,
+    0.45
+   ],
+   "clips": {
+    "idle": "Idle",
+    "walk": "Walk",
+    "attack": {
+     "clip": "Punch",
+     "hit": 0.45
+    },
+    "hurt": "HitReact",
+    "dead": "Death"
+   },
+   "brightness": 1.3,
+   "lift": [
+    0.15,
+    0.1,
+    0.05
+   ],
+   "bone_scales": {
+    "Head": 1.3
+   },
+   "face": {
+    "style": "monster_cute",
+    "bone": "Head",
+    "target": ".*",
+    "size": 0.22,
+    "up": 0.5
+   }
+  },
+  "tombwrap": {
+   "folder": "tombwrap",
+   "role": "monster",
+   "index": 17,
+   "license": "kaykit-skeletons",
+   "frame": [
+    96,
+    112
+   ],
+   "source": "kaykit_skel/KayKit-Character-Pack-Skeletons-1.0-main/addons/kaykit_character_pack_skeletons/Characters/gltf/Skeleton_Mage.glb",
+   "show": [
+    "^Skeleton_Mage_(?!Hat)"
+   ],
+   "tint": [
+    0.95,
+    0.85,
+    0.6
+   ],
+   "clips": {
+    "idle": "Idle",
+    "walk": "Walking_D_Skeletons",
+    "attack": {
+     "clip": "Unarmed_Melee_Attack_Punch_B",
+     "hit": 0.45
+    },
+    "hurt": "Hit_A",
+    "dead": "Death_A"
+   },
+   "lift": [
+    0.2,
+    0.18,
+    0.1
+   ],
+   "bone_scales": {
+    "head": 1.3
+   }
+  },
+  "gildscarab": {
+   "folder": "gildscarab",
+   "role": "monster",
+   "index": 18,
+   "license": "quaternius-ultimate-monsters",
+   "floor": true,
+   "hover": 0.1,
+   "frame": [
+    128,
+    128
+   ],
+   "source": "quaternius_um/Ultimate Monsters/Flying/glTF/Armabee_Evolved.gltf",
+   "tint": [
+    1.3,
+    1.3,
+    0.4
+   ],
+   "clips": {
+    "idle": "Flying_Idle",
+    "walk": "Fast_Flying",
+    "attack": {
+     "clip": "Headbutt",
+     "hit": 0.45
+    },
+    "hurt": "HitReact",
+    "dead": "Death"
+   },
+   "brightness": 1.3,
+   "lift": [
+    0.35,
+    0.3,
+    0.05
+   ]
+  },
+  "scorchstripe": {
+   "folder": "scorchstripe",
+   "role": "monster",
+   "index": 19,
+   "license": "quaternius-ultimate-monsters",
+   "floor": true,
+   "frame": [
+    128,
+    128
+   ],
+   "zoom": 1.3,
+   "source": "quaternius_um/Ultimate Monsters/Blob/glTF/Cat.gltf",
+   "tint": [
+    1.3,
+    1.0,
+    0.45
+   ],
+   "clips": {
+    "idle": "Idle",
+    "walk": "Walk",
+    "attack": {
+     "clip": "Bite_Front",
+     "hit": 0.45
+    },
+    "hurt": "HitRecieve",
+    "dead": "Death"
+   },
+   "brightness": 1.3,
+   "lift": [
+    0.3,
+    0.15,
+    0.0
+   ],
+   "squash": 0.07,
+   "hide": [
+    "^Icosphere"
+   ]
+  }
+ },
+ "faces_dir": "D:/jaxspike-art/faces"
+}

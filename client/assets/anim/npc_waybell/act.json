@@ -1,0 +1,46 @@
+{
+ "kind": "npc_waybell",
+ "frame_w": 48,
+ "frame_h": 64,
+ "anchor": [
+  24,
+  60
+ ],
+ "atk_frame": 3,
+ "rows": 5,
+ "directions": [
+  "S",
+  "SW",
+  "W",
+  "NW",
+  "N",
+  "NE",
+  "E",
+  "SE"
+ ],
+ "mirror_rows": {
+  "5": 3,
+  "6": 2,
+  "7": 1
+ },
+ "actions": {
+  "idle": {
+   "file": "idle.png",
+   "image": "res://assets/anim/npc_waybell/idle.png",
+   "row0": 0,
+   "frames": 4,
+   "delay_ms": 200,
+   "mirror": true,
+   "loop": true
+  },
+  "talk": {
+   "file": "talk.png",
+   "image": "res://assets/anim/npc_waybell/talk.png",
+   "row0": 0,
+   "frames": 4,
+   "delay_ms": 160,
+   "mirror": true,
+   "loop": true
+  }
+ }
+}

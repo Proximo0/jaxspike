@@ -14,6 +14,7 @@ var frame_w: int = 0
 var frame_h: int = 0
 var anchor: Vector2 = Vector2.ZERO  ## pixel in a frame that sits on the entity's cell centre (feet)
 var atk_frame: int = -1
+var scale: float = 1.0  ## draw size = frame * scale, anchor * scale (2x sheets carry "scale": 0.5)
 var actions: Dictionary = {}  ## name -> {frames, delay_ms, rows, mirror}
 var frames: SpriteFrames = SpriteFrames.new()
 var source: String = ""
@@ -61,6 +62,7 @@ static func parse(text: String) -> Dictionary:
 	return {
 		"frame_w": fw, "frame_h": fh, "anchor": anc, "actions": out_actions,
 		"atk_frame": int(src["atk_frame"]) if _is_num(src.get("atk_frame")) else -1,
+		"scale": float(src["scale"]) if _is_num(src.get("scale")) and float(src["scale"]) > 0.0 else 1.0,
 		"image": String(src["image"]) if src.get("image") is String else "",
 	}
 
@@ -74,6 +76,7 @@ static func build(meta: Dictionary, textures: Dictionary) -> ActSheet:
 	sheet.frame_h = int(meta["frame_h"])
 	sheet.anchor = meta["anchor"]
 	sheet.atk_frame = int(meta["atk_frame"])
+	sheet.scale = float(meta.get("scale", 1.0))
 	if sheet.frames.has_animation(&"default"):
 		sheet.frames.remove_animation(&"default")
 	var acts: Dictionary = meta["actions"]

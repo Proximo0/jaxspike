@@ -148,7 +148,7 @@ func _draw_clip() -> bool:
 	var tex_f: Texture2D = sheet.frame_texture(clip_anim, frame)
 	if tex_f == null:
 		return false
-	var s: float = tile_px / 32.0
+	var s: float = tile_px / 32.0 * sheet.scale  # 2x sheets carry scale 0.5
 	var feet := Vector2(0.0, tile_px * FEET_Y)
 	if is_own:
 		draw_arc(feet, 11.0 * s, 0.0, TAU, 20, OWN_RING, 1.5)
@@ -163,4 +163,6 @@ func _draw_clip() -> bool:
 
 ## Height (px) above the feet that the bar and label clear.
 func _clip_height() -> float:
+	if sheet != null and sheet.scale > 0.0 and sheet.anchor.y > 0.0:
+		return sheet.anchor.y * sheet.scale * tile_px / 32.0
 	return HEAD_PX * tile_px / 32.0
