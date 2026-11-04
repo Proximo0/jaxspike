@@ -2,7 +2,7 @@
  "version": 1,
  "cell_px": 64,
  "columns": 13,
- "rows": 16,
+ "rows": 48,
  "terrain_atlas": "res://assets/tiles/terrain.png",
  "props_atlas": "res://assets/tiles/props.png",
  "props_columns": 9,
@@ -11,8 +11,61 @@
   "N": 1,
   "E": 2,
   "S": 4,
-  "W": 8
+  "W": 8,
+  "NE": 16,
+  "SE": 32,
+  "SW": 64,
+  "NW": 128
  },
+ "blob47_masks": [
+  0,
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  9,
+  10,
+  11,
+  12,
+  13,
+  14,
+  15,
+  19,
+  23,
+  27,
+  31,
+  38,
+  39,
+  46,
+  47,
+  55,
+  63,
+  76,
+  77,
+  78,
+  79,
+  95,
+  110,
+  111,
+  127,
+  137,
+  139,
+  141,
+  143,
+  155,
+  159,
+  175,
+  191,
+  205,
+  207,
+  223,
+  239,
+  255
+ ],
  "terrains": [
   {
    "id": 0,
@@ -34,7 +87,7 @@
    "id": 1,
    "name": "road",
    "source": "procedural (gen_tiles.py)",
-   "mode": "blob4",
+   "mode": "blob47",
    "connects": [
     1,
     8,
@@ -68,7 +121,7 @@
    "id": 4,
    "name": "water",
    "source": "procedural (gen_tiles.py)",
-   "mode": "blob4",
+   "mode": "blob47",
    "connects": [
     4
    ]
@@ -77,13 +130,19 @@
    "id": 5,
    "name": "tree",
    "source": "procedural (gen_tiles.py)",
-   "mode": "single"
+   "mode": "single",
+   "near": {
+    "ids": [
+     2
+    ],
+    "offset": 1
+   }
   },
   {
    "id": 6,
    "name": "wall",
    "source": "procedural (gen_tiles.py)",
-   "mode": "blob4",
+   "mode": "blob47",
    "connects": [
     6
    ]
@@ -97,7 +156,13 @@
     5,
     3,
     3
-   ]
+   ],
+   "near": {
+    "ids": [
+     11
+    ],
+    "offset": 3
+   }
   },
   {
    "id": 8,
@@ -150,7 +215,8 @@
     "origin": [
      0,
      32
-    ]
+    ],
+    "base_px": 32
    },
    "tree1": {
     "atlas": [
@@ -164,7 +230,8 @@
     "origin": [
      0,
      32
-    ]
+    ],
+    "base_px": 32
    },
    "tree2": {
     "atlas": [
@@ -178,7 +245,8 @@
     "origin": [
      0,
      32
-    ]
+    ],
+    "base_px": 32
    },
    "bell": {
     "atlas": [
@@ -192,7 +260,8 @@
     "origin": [
      0,
      32
-    ]
+    ],
+    "base_px": 32
    },
    "stall0": {
     "atlas": [
@@ -206,7 +275,8 @@
     "origin": [
      0,
      32
-    ]
+    ],
+    "base_px": 32
    },
    "stall1": {
     "atlas": [
@@ -220,7 +290,8 @@
     "origin": [
      0,
      32
-    ]
+    ],
+    "base_px": 32
    },
    "stall2": {
     "atlas": [
@@ -234,7 +305,8 @@
     "origin": [
      0,
      32
-    ]
+    ],
+    "base_px": 32
    },
    "stall3": {
     "atlas": [
@@ -248,7 +320,8 @@
     "origin": [
      0,
      32
-    ]
+    ],
+    "base_px": 32
    },
    "furnace": {
     "atlas": [
@@ -262,7 +335,8 @@
     "origin": [
      0,
      32
-    ]
+    ],
+    "base_px": 32
    },
    "fountain": {
     "atlas": [
@@ -276,7 +350,8 @@
     "origin": [
      -32,
      -32
-    ]
+    ],
+    "base_px": 32
    },
    "fire": {
     "atlas": [
@@ -290,7 +365,23 @@
     "origin": [
      0,
      0
-    ]
+    ],
+    "base_px": 32
+   },
+   "furnace_small": {
+    "atlas": [
+     5,
+     2
+    ],
+    "size": [
+     1,
+     1
+    ],
+    "origin": [
+     0,
+     0
+    ],
+    "base_px": 32
    }
   },
   "on_terrain": {
@@ -314,10 +405,11 @@
    "3": "fountain"
   },
   "nodes": {
-   "406": "furnace",
+   "406": "furnace_small",
    "407": "fire"
   }
  },
+ "_doc_base_px": "props.cells.<name>.base_px: px below the base cell's centre where the prop touches the ground; MapRenderer uses it as the tile's y_sort_origin (minus the entity feet offset) so characters sort behind/in front of props",
  "licence": "CC0 1.0, project-original, generated procedurally by client/tools/art/tiles/gen_tiles.py",
  "filled_rows": {
   "0": [
@@ -329,24 +421,6 @@
    5,
    6,
    7
-  ],
-  "1": [
-   0,
-   1,
-   2,
-   3,
-   4,
-   5,
-   6,
-   7,
-   8,
-   9,
-   10,
-   11,
-   12,
-   13,
-   14,
-   15
   ],
   "3": [
    0,
@@ -366,6 +440,55 @@
    14,
    15
   ],
+  "1": [
+   0,
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10,
+   11,
+   12,
+   13,
+   14,
+   15,
+   16,
+   17,
+   18,
+   19,
+   20,
+   21,
+   22,
+   23,
+   24,
+   25,
+   26,
+   27,
+   28,
+   29,
+   30,
+   31,
+   32,
+   33,
+   34,
+   35,
+   36,
+   37,
+   38,
+   39,
+   40,
+   41,
+   42,
+   43,
+   44,
+   45,
+   46
+  ],
   "4": [
    0,
    1,
@@ -382,7 +505,38 @@
    12,
    13,
    14,
-   15
+   15,
+   16,
+   17,
+   18,
+   19,
+   20,
+   21,
+   22,
+   23,
+   24,
+   25,
+   26,
+   27,
+   28,
+   29,
+   30,
+   31,
+   32,
+   33,
+   34,
+   35,
+   36,
+   37,
+   38,
+   39,
+   40,
+   41,
+   42,
+   43,
+   44,
+   45,
+   46
   ],
   "6": [
    0,
@@ -400,7 +554,38 @@
    12,
    13,
    14,
-   15
+   15,
+   16,
+   17,
+   18,
+   19,
+   20,
+   21,
+   22,
+   23,
+   24,
+   25,
+   26,
+   27,
+   28,
+   29,
+   30,
+   31,
+   32,
+   33,
+   34,
+   35,
+   36,
+   37,
+   38,
+   39,
+   40,
+   41,
+   42,
+   43,
+   44,
+   45,
+   46
   ],
   "2": [
    0,
@@ -409,12 +594,16 @@
    3
   ],
   "5": [
-   0
+   0,
+   1
   ],
   "7": [
    0,
    1,
-   2
+   2,
+   3,
+   4,
+   5
   ],
   "8": [
    0

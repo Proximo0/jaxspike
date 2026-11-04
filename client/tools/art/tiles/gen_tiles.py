@@ -2,14 +2,17 @@
 
     python client/tools/art/tiles/gen_tiles.py [--out client/assets/tiles]
 
-Writes `terrain.png` (13 columns = terrain ids x 16 rows, 64 px cells), `props.png` (64 px grid, multi-cell props)
+Writes `terrain.png` (13 columns = terrain ids x 48 rows, 64 px cells), `props.png` (64 px grid, multi-cell props)
 and `tiles.json` (the index `client/game/world/map_renderer.gd` reads). Every pixel is drawn here: no source
 images, nothing from any game. The look follows `client/tools/art` (render_kind / blender_render): light from the
 upper left, three flat tones per material (shadow / mid / light, like the 0.55 / 0.8 / 1.0 ramp), a hard white
 highlight spot, near-black ink outlines on props, bright lifted colours. Drawn at 4x and downsampled (LANCZOS).
 
 Terrain rows per column (see tiles.json "terrains"):
-  blob4    row = 4-neighbour mask of connecting terrains (N=1, E=2, S=4, W=8): road, water, wall, temple
+  blob47   row = index in BLOB47_MASKS of the 8-neighbour mask (N=1 E=2 S=4 W=8 NE=16 SE=32 SW=64 NW=128, a
+           diagonal kept only when both its sides connect): road, water, wall. Rims follow a distance field, so
+           inner corners get a rounded rim and outer corners a rounded water / road edge (no staircase).
+  blob4    row = 4-neighbour mask of connecting terrains (N=1, E=2, S=4, W=8): temple
   variants row = a weighted pick from a per-tile hash: grass, floor, rock, cave
   single   row 0: tree (base under the canopy prop), warp, waybell, station, shop
 Props sit on a second layer, may overhang the tile above (trees, bell post, stalls) and one 2x2 fountain marks the
@@ -21,6 +24,7 @@ import math
 import os
 import random
 
+import numpy as np
 from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -29,7 +33,7 @@ DEFAULT_OUT = os.path.normpath(os.path.join(HERE, "..", "..", "..", "assets", "t
 T = 64            # output cell px (2x the default tile_px 32, like the 2x character sheets)
 SS = 4            # supersample factor
 W = T * SS        # drawing size of one cell
-ROWS = 16
+ROWS = 48         # 47 blob rows (+1 spare)
 N_TERRAIN = 13
 NAMES = ("grass", "road", "floor", "temple", "water", "tree", "wall", "rock",
          "warp", "waybell", "station", "cave", "shop")
@@ -242,10 +246,93 @@ def edge_band(img, mask_bits, width, pal, ink=True, inner_line=None):
             d.rectangle((W - iw, 0, W, W), fill=INK)
 
 
-def road_tile(mask_bits):
+
+# ---------------------------------------------------------------- 8-neighbour blob (47 tiles)
+
+B_N, B_E, B_S, B_WE, B_NE, B_SE, B_SW, B_NW = 1, 2, 4, 8, 16, 32, 64, 128
+
+
+def blob_reduce(m):
+    """Drop a diagonal bit unless both of its sides connect (the 256 raw masks fold onto 47)."""
+    for diag, a, b in ((B_NE, B_N, B_E), (B_SE, B_S, B_E), (B_SW, B_S, B_WE), (B_NW, B_N, B_WE)):
+        if m & diag and not (m & a and m & b):
+            m &= ~diag
+    return m
+
+
+BLOB47_MASKS = sorted({blob_reduce(m) for m in range(256)})
+assert len(BLOB47_MASKS) == 47
+
+_GRID = (np.arange(-1, W + 1, dtype=np.float64) + 0.5)
+_GX, _GY = np.meshgrid(_GRID, _GRID)  # padded by one px for the gradient
+
+
+def blob_field(m, ro):
+    """Distance (supersampled px) from each pixel to the open boundary of mask `m`, on a (W+2)^2 grid.
+
+    Open sides are lines on the cell edge; an inner corner (both sides connect, the diagonal does not) is the corner
+    point, so the rim bends round it in a quarter circle; an outer corner (both sides open) is rounded with radius
+    `ro` (values below 0 there are outside the rounded edge). Both tiles of a shared edge see the same boundary
+    near it, so neighbours join without seams."""
+    x, y = _GX, _GY
+    d = np.full(x.shape, 1e9)
+    if not m & B_N:
+        d = np.minimum(d, y)
+    if not m & B_S:
+        d = np.minimum(d, W - y)
+    if not m & B_WE:
+        d = np.minimum(d, x)
+    if not m & B_E:
+        d = np.minimum(d, W - x)
+    corners = ((W, 0, B_N, B_E, B_NE, -1, 1), (W, W, B_S, B_E, B_SE, -1, -1),
+               (0, W, B_S, B_WE, B_SW, 1, -1), (0, 0, B_N, B_WE, B_NW, 1, 1))
+    for vx, vy, a, b, diag, sx, sy in corners:
+        if m & a and m & b and not m & diag:
+            d = np.minimum(d, np.hypot(x - vx, y - vy))
+        elif not m & a and not m & b and ro > 0:
+            qx, qy = vx + sx * ro, vy + sy * ro
+            region = ((x - qx) * sx < 0) & ((y - qy) * sy < 0)
+            d = np.where(region, np.minimum(d, ro - np.hypot(x - qx, y - qy)), d)
+    return d
+
+
+def _mask_img(sel):
+    return Image.fromarray(np.where(sel[1:-1, 1:-1], 255, 0).astype(np.uint8), "L")
+
+
+def rim_tile(img, m, rim, ro, pal, ink=True, bands=(), outside=None):
+    """Paint the rim of a blob47 tile: `pal` (light, mid, shadow) band of width `rim` on the open boundary, a
+    shade line on its inner side (shadow where the rim is on a top or left side, light on a bottom or right side,
+    as the 4-neighbour bands did), extra `bands` [(from, to, colour)] inside it, and an ink line on the cell edge.
+    With `outside` (a colour) the rounded outer corners are cut out: the wedge beyond the curve takes that colour
+    (a light beach sand for water, which sits well on grass, flagstones and rock) and the ink follows the curve,
+    so a shore reads round, not stepped."""
+    d = blob_field(m, ro)
+    for lo, hi, col in bands:
+        img.paste(rgba(col), (0, 0), _mask_img((d >= lo) & (d < hi)))
+    img.paste(rgba(pal[1]), (0, 0), _mask_img(d < rim))
+    gy, gx = np.gradient(d)
+    top_left = (gx + gy) > 0  # the inward normal points down/right
+    lw = max(SS, rim // 4)
+    line = (d >= rim - lw) & (d < rim)
+    img.paste(rgba(pal[2]), (0, 0), _mask_img(line & top_left))
+    img.paste(rgba(pal[0]), (0, 0), _mask_img(line & ~top_left))
+    if ink:
+        e = d if outside is not None else blob_field(m, 0)  # else square: ink on the cell edge
+        img.paste(INK, (0, 0), _mask_img(e < int(2.2 * SS)))
+    if outside is not None:
+        img.paste(rgba(outside), (0, 0), _mask_img(d < 0))
+    return d
+
+KERB = ((226, 218, 230), (200, 190, 208), (150, 138, 164))  # a pale stone kerb that reads against the cobbles
+ROAD_RIM, ROAD_RO = 7 * SS, 26 * SS
+
+
+def road_tile(m8):
+    """Blob47 road: cobbles with a kerb on the open sides, rounded on outer corners and bends."""
     img = new_cell(fill=DIRT[1])
     cobbles(img, DIRT, W // 4, 11)
-    edge_band(img, mask_bits, 7 * SS, ((214, 196, 166), (186, 166, 136), (140, 120, 96)))
+    rim_tile(img, m8, ROAD_RIM, ROAD_RO, KERB, outside=KERB[0])
     return img
 
 
@@ -301,6 +388,9 @@ def temple_tile(mask_bits):
     return img
 
 
+WATER_RIM, WATER_RO = 8 * SS, 30 * SS
+
+
 def water_tile(mask_bits, rng):
     img = new_cell(fill=WATER[1])
     d = ImageDraw.Draw(img)
@@ -311,16 +401,35 @@ def water_tile(mask_bits, rng):
     for _ in range(2):
         x, y = rng.uniform(60, 196), rng.uniform(60, 196)
         d.ellipse((x - 5, y - 5, x + 5, y + 5), fill=WHITE)
-    rim = 6 * SS
-    # deeper water under the rim, a white foam line, then the sand/stone rim with ink
-    deep = new_cell()
-    edge_band(deep, mask_bits, rim + 6 * SS, (WATER[2], WATER[2], WATER[2]), ink=False)
-    img.alpha_composite(deep)
-    edge_band(img, mask_bits, rim, SAND, inner_line=((240, 252, 255), 0, int(1.6 * SS)))
+    # deeper water under the rim, a white foam line, then the sand rim with ink; rounded shores
+    foam = int(1.6 * SS)
+    rim_tile(img, mask_bits, WATER_RIM, WATER_RO, SAND, outside=SAND[0],
+             bands=((WATER_RIM, WATER_RIM + 6 * SS, WATER[2]), (WATER_RIM, WATER_RIM + foam, (240, 252, 255))))
     return img
 
 
-def wall_tile(mask_bits):
+def wall_tile(m8):
+    """Blob47 wall: the 4-neighbour wall of the low bits, plus inner corners (both sides wall, the diagonal open)
+    that close the ink outline: a corner square on top, and on the bottom an ink edge beside the neighbour's brick
+    front face."""
+    img = wall_tile4(m8 & 15)
+    d = ImageDraw.Draw(img)
+    iw = int(2.2 * SS)
+    fy = int(W * 0.56)
+    if m8 & B_N and m8 & B_E and not m8 & B_NE:
+        d.rectangle((W - iw, 0, W, iw), fill=INK)
+    if m8 & B_N and m8 & B_WE and not m8 & B_NW:
+        d.rectangle((0, 0, iw, iw), fill=INK)
+    if m8 & B_S and m8 & B_E and not m8 & B_SE:
+        d.rectangle((W - iw, fy, W, W), fill=INK)
+        d.rectangle((W - iw - SS * 1.5, fy, W - iw, W), fill=rgba(STONE[2]))
+    if m8 & B_S and m8 & B_WE and not m8 & B_SW:
+        d.rectangle((0, fy, iw, W), fill=INK)
+        d.rectangle((iw, fy, iw + SS * 1.5, W), fill=rgba(STONE[0]))
+    return img
+
+
+def wall_tile4(mask_bits):
     """Top face everywhere; a brick front face on the lower part when there is no wall to the south."""
     img = new_cell(fill=STONE[1])
     d = ImageDraw.Draw(img)
@@ -369,6 +478,22 @@ def tree_base():
     return img
 
 
+def tree_planter():
+    """A town tree (next to flagstones, the `near` rule): a flagstone with a round stone-edged bed of soil and moss
+    under the trunk, instead of a square of grass."""
+    img = floor_tile(random.Random(700), 0)
+    d = ImageDraw.Draw(img)
+    c = W / 2
+    d.ellipse((c - 104, 132, c + 104, 250), fill=INK)
+    d.ellipse((c - 96, 138, c + 96, 242), fill=rgba(STONE[1]))
+    d.ellipse((c - 96, 138, c + 90, 234), fill=rgba(STONE[0]))
+    d.ellipse((c - 80, 150, c + 80, 232), fill=rgba((120, 86, 64)))
+    d.ellipse((c - 80, 150, c + 70, 220), fill=rgba((142, 104, 76)))
+    tuft(d, c - 50, 214, 12, GRASS)
+    tuft(d, c + 46, 206, 11, GRASS)
+    return img
+
+
 def boulder(img, cx, cy, rx, ry, rng):
     pts = []
     n = 9
@@ -385,12 +510,17 @@ def boulder(img, cx, cy, rx, ry, rng):
     d.line([(x, y), (x + rx * 0.15, y + ry * 0.3), (x + rx * 0.05, y + ry * 0.55)], fill=INK_SOFT, width=int(1.4 * SS))
 
 
-def rock_tile(rng, kind):
-    img = new_cell(fill=(150, 140, 132))
+def rock_tile(rng, kind, ground=None):
+    """Boulders on the ground they stand in: grass in the fields, the cave floor next to a cave (the `near` rule),
+    so a rock line or a dungeon pillar shows no grey square."""
+    if ground == "cave":
+        img = cave_tile(random.Random(600 + kind), 0)
+        shade = CAVE[2]
+    else:
+        img = grass_tile(random.Random(520 + kind), 0)
+        shade = GRASS[2]
     d = ImageDraw.Draw(img)
-    for _ in range(5):
-        x, y = rng.uniform(20, 236), rng.uniform(20, 236)
-        d.ellipse((x - 7, y - 5, x + 7, y + 5), fill=rgba((126, 116, 110)))
+    d.ellipse((24, 150, W - 24, 246), fill=rgba(shade))  # contact shadow
     if kind == 0:
         boulder(img, 128, 136, 104, 92, rng)
     elif kind == 1:
@@ -412,13 +542,14 @@ def cave_tile(rng, kind):
         pebble(img, rng.uniform(80, 170), rng.uniform(80, 170), 16, 11, BOULDER)
     if kind == 3:  # a glowing crystal shard, bright accent in the dark
         x, y = rng.uniform(90, 160), rng.uniform(120, 180)
-        m = poly_mask(img, [(x, y - 40), (x + 14, y), (x, y + 8), (x - 14, y)])
-        cel(img, m, ((210, 250, 255), (120, 210, 250), (70, 140, 220)), ink=1.6, k=10)
+        for dx, h, wd in ((-26, 48, 14), (24, 40, 12), (0, 76, 22)):  # a cluster of three shards
+            m = poly_mask(img, [(x + dx, y - h), (x + dx + wd, y), (x + dx, y + 10), (x + dx - wd, y)])
+            cel(img, m, ((210, 250, 255), (120, 210, 250), (70, 140, 220)), ink=1.8, k=10)
     return img
 
 
 def paved_base():
-    return road_tile(15)
+    return road_tile(255)
 
 
 def warp_tile():
@@ -654,6 +785,32 @@ def furnace_prop():
     return img
 
 
+def furnace_small_prop():
+    """1x1 cell: the furnace squat enough for a one-tile EntitySprite (crafting node 406): a domed brick body with
+    a glowing mouth and a short chimney with a smoke puff, inside the cell so nothing is cut off."""
+    img = new_cell(1, 1)
+    d = ImageDraw.Draw(img)
+    c = W / 2
+    ch = poly_mask(img, [(c + 40, 96), (c + 80, 96), (c + 80, 40), (c + 40, 40)])
+    cel(img, ch, BRICK, ink=2.4, k=10)
+    bm = new_mask(img)
+    ImageDraw.Draw(bm).rounded_rectangle((24, 74, W - 24, W - 18), radius=56, fill=255)
+    cel(img, bm, ((236, 160, 120), (204, 118, 90), (150, 78, 70)), ink=2.8, k=30, light_k=18,
+        highlight=(70, 106, 8))
+    for y in range(124, W - 30, 30):
+        d.line([(40, y), (W - 40, y)], fill=rgba((150, 78, 70)), width=int(1.2 * SS))
+    mm = new_mask(img)
+    md = ImageDraw.Draw(mm)
+    md.pieslice((c - 48, 128, c + 48, 220), 180, 360, fill=255)
+    md.rectangle((c - 48, 174, c + 48, W - 30), fill=255)
+    img.paste(INK, (0, 0), dilate(mm, 2.4 * SS))
+    img.paste((255, 170, 60, 255), (0, 0), mm)
+    img.paste((255, 236, 140, 255), (0, 0), ellipse_mask(img, (c - 30, 160, c + 30, W - 30)))
+    for x, y, r in ((c + 62, 26, 14), (c + 40, 12, 9)):  # smoke puffs
+        d.ellipse((x - r, y - r, x + r, y + r), fill=(240, 240, 250, 220))
+    return img
+
+
 def fire_prop():
     """1x1 cell: a cooking fire on crossed logs (crafting node 407)."""
     img = new_cell(1, 1)
@@ -681,7 +838,11 @@ VARIANT_WEIGHTS = {
     7: [5, 3, 3],                      # rock
     11: [16, 10, 4, 2],                # cave
 }
-BLOB4 = {1: [1, 8, 9, 10, 12], 3: [3], 4: [4], 6: [6]}   # terrain -> terrains it connects to
+BLOB47 = {1: [1, 8, 9, 10, 12], 4: [4], 6: [6]}   # terrain -> terrains it connects to
+BLOB4 = {3: [3]}
+# terrain -> (ids, row offset): when any of the 8 neighbours has one of the ids, the row moves down by the offset
+NEAR = {5: ([2], 1),      # a tree next to town flagstones stands in a planter
+        7: ([11], 3)}     # boulders next to the cave floor stand on cave ground
 
 
 def build_terrain():
@@ -696,15 +857,18 @@ def build_terrain():
     for kind in range(len(VARIANT_WEIGHTS[0])):
         put(0, kind, grass_tile(random.Random(500 + kind), kind))
     for m in range(16):
-        put(1, m, road_tile(m))
         put(3, m, temple_tile(m))
-        put(4, m, water_tile(m, random.Random(900 + m % 4)))
-        put(6, m, wall_tile(m))
+    for r, m8 in enumerate(BLOB47_MASKS):
+        put(1, r, road_tile(m8))
+        put(4, r, water_tile(m8, random.Random(900 + r % 4)))
+        put(6, r, wall_tile(m8))
     for kind in range(len(VARIANT_WEIGHTS[2])):
         put(2, kind, floor_tile(random.Random(700 + kind), kind))
     put(5, 0, tree_base())
+    put(5, 1, tree_planter())
     for kind in range(len(VARIANT_WEIGHTS[7])):
         put(7, kind, rock_tile(random.Random(800 + kind), kind))
+        put(7, kind + NEAR[7][1], rock_tile(random.Random(800 + kind), kind, "cave"))
     put(8, 0, warp_tile())
     put(9, 0, waybell_tile())
     put(10, 0, station_tile())
@@ -719,9 +883,10 @@ def build_terrain():
 PROP_CELLS = {
     "tree0": (0, 0, 1, 2), "tree1": (1, 0, 1, 2), "tree2": (2, 0, 1, 2), "bell": (3, 0, 1, 2),
     "stall0": (4, 0, 1, 2), "stall1": (5, 0, 1, 2), "stall2": (6, 0, 1, 2), "stall3": (7, 0, 1, 2),
-    "furnace": (8, 0, 1, 2), "fountain": (0, 2, 4, 4), "fire": (4, 2, 1, 1),
+    "furnace": (8, 0, 1, 2), "fountain": (0, 2, 4, 4), "fire": (4, 2, 1, 1), "furnace_small": (5, 2, 1, 1),
 }
 PROP_COLS, PROP_ROWS = 9, 6
+PROP_BASE_PX = {}  # px below the base cell's centre where a prop touches the ground (y-sort); default T // 2
 
 
 def build_props():
@@ -729,7 +894,7 @@ def build_props():
     makers = {"tree0": lambda: tree_prop(0), "tree1": lambda: tree_prop(1), "tree2": lambda: tree_prop(2),
               "bell": bell_prop, "stall0": lambda: stall_prop(0), "stall1": lambda: stall_prop(1),
               "stall2": lambda: stall_prop(2), "stall3": lambda: stall_prop(3), "furnace": furnace_prop,
-              "fountain": fountain_prop, "fire": fire_prop}
+              "fountain": fountain_prop, "fire": fire_prop, "furnace_small": furnace_small_prop}
     for name, (c, r, _, _) in PROP_CELLS.items():
         atlas.paste(harden(down(makers[name]())), (c * T, r * T))
     return atlas
@@ -739,17 +904,21 @@ def index_json(filled):
     terrains = []
     for tid in range(N_TERRAIN):
         e = {"id": tid, "name": NAMES[tid], "source": "procedural (gen_tiles.py)"}
-        if tid in BLOB4:
+        if tid in BLOB47:
+            e.update({"mode": "blob47", "connects": BLOB47[tid]})
+        elif tid in BLOB4:
             e.update({"mode": "blob4", "connects": BLOB4[tid]})
         elif tid in VARIANT_WEIGHTS:
             e.update({"mode": "variants", "weights": VARIANT_WEIGHTS[tid]})
         else:
             e.update({"mode": "single"})
+        if tid in NEAR:
+            e["near"] = {"ids": NEAR[tid][0], "offset": NEAR[tid][1]}
         terrains.append(e)
 
     def cell(name, origin):
         c, r, w, h = PROP_CELLS[name]
-        return {"atlas": [c, r], "size": [w, h], "origin": origin}
+        return {"atlas": [c, r], "size": [w, h], "origin": origin, "base_px": PROP_BASE_PX.get(name, T // 2)}
 
     tall = [0, T // 2]  # a 1x2 prop drawn with its bottom on the cell's bottom edge
     props = {
@@ -759,14 +928,18 @@ def index_json(filled):
                        "12": ["stall0", "stall1", "stall2", "stall3"]},
         "shop_pick": "x",           # stalls cycle by x so a row of shops alternates colours
         "block_center": {"3": "fountain"},
-        "nodes": {"406": "furnace", "407": "fire"},
+        "nodes": {"406": "furnace_small", "407": "fire"},  # 1x1 cells: an EntitySprite draws one tile
     }
     return {
         "version": 1, "cell_px": T, "columns": N_TERRAIN, "rows": ROWS,
         "terrain_atlas": "res://assets/tiles/terrain.png",
         "props_atlas": "res://assets/tiles/props.png", "props_columns": PROP_COLS, "props_rows": PROP_ROWS,
-        "mask_bits": {"N": 1, "E": 2, "S": 4, "W": 8},
+        "mask_bits": {"N": 1, "E": 2, "S": 4, "W": 8, "NE": 16, "SE": 32, "SW": 64, "NW": 128},
+        "blob47_masks": BLOB47_MASKS,
         "terrains": terrains, "props": props,
+        "_doc_base_px": "props.cells.<name>.base_px: px below the base cell's centre where the prop touches the "
+                        "ground; MapRenderer uses it as the tile's y_sort_origin (minus the entity feet offset) so "
+                        "characters sort behind/in front of props",
         "licence": "CC0 1.0, project-original, generated procedurally by client/tools/art/tiles/gen_tiles.py",
         "filled_rows": {str(k): sorted(v) for k, v in filled.items()},
     }

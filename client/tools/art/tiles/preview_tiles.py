@@ -31,12 +31,14 @@ def main():
     ap.add_argument("h", type=int)
     ap.add_argument("out")
     ap.add_argument("--px", type=int, default=32)
+    ap.add_argument("--tiles", default=TILES, help="folder with tiles.json, terrain.png, props.png")
     a = ap.parse_args()
+    tiles = a.tiles
     t = open(a.terrain, "rb").read()
-    idx = json.load(open(os.path.join(TILES, "tiles.json")))
+    idx = json.load(open(os.path.join(tiles, "tiles.json")))
     cp = idx["cell_px"]
-    atlas = Image.open(os.path.join(TILES, "terrain.png")).convert("RGBA")
-    props = Image.open(os.path.join(TILES, "props.png")).convert("RGBA")
+    atlas = Image.open(os.path.join(tiles, "terrain.png")).convert("RGBA")
+    props = Image.open(os.path.join(tiles, "props.png")).convert("RGBA")
 
     def at(x, y):
         return t[y * N + x] if 0 <= x < N and 0 <= y < N else 255
@@ -48,7 +50,18 @@ def main():
         for x in range(a.x0, a.x0 + a.w):
             tid = at(x, y)
             e = idx["terrains"][tid]
-            if e["mode"] == "blob4":
+            if e["mode"] == "blob47":
+                c = e["connects"]
+                m = 0
+                for bit, (dx, dy) in ((1, (0, -1)), (2, (1, 0)), (4, (0, 1)), (8, (-1, 0)),
+                                      (16, (1, -1)), (32, (1, 1)), (64, (-1, 1)), (128, (-1, -1))):
+                    if at(x + dx, y + dy) in c:
+                        m |= bit
+                for diag, s1, s2 in ((16, 1, 2), (32, 4, 2), (64, 4, 8), (128, 1, 8)):
+                    if m & diag and not (m & s1 and m & s2):
+                        m &= ~diag
+                row = idx["blob47_masks"].index(m)
+            elif e["mode"] == "blob4":
                 c = e["connects"]
                 row = (1 if at(x, y - 1) in c else 0) | (2 if at(x + 1, y) in c else 0) | \
                       (4 if at(x, y + 1) in c else 0) | (8 if at(x - 1, y) in c else 0)
@@ -61,6 +74,9 @@ def main():
                     row += 1
             else:
                 row = 0
+            near = e.get("near")
+            if near and any(at(x + dx, y + dy) in near["ids"] for dx in (-1, 0, 1) for dy in (-1, 0, 1)):
+                row += near["offset"]
             img.paste(atlas.crop((tid * cp, row * cp, tid * cp + cp, row * cp + cp)), ((x - a.x0) * cp, (y - a.y0) * cp))
             names = pmap["on_terrain"].get(str(tid))
             if names:

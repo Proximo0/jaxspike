@@ -1,5 +1,6 @@
 extends TestCase
-## Terrain tileset: ViewMath autotile helpers (hash, weighted pick, blob4 masks, rows, block centres, prop variants)
+## Terrain tileset: ViewMath autotile helpers (hash, weighted pick, blob4 and blob47 masks, rows, block centres,
+## prop variants, node props)
 ## and MapRenderer drawing from client/assets/tiles (tileset, props layer, scale) or the flat-colour fallback.
 
 const GRASS: int = 0
@@ -108,8 +109,9 @@ func test_renderer_draws_the_tileset() -> void:
 	assert_eq(r.cell_px, 64)
 	assert_eq(r.get_used_cells().size(), 256)
 	assert_eq(r.get_cell_atlas_coords(Vector2i(5, 5)), Vector2i(TREE, 0), "tree base")
-	assert_eq(r.get_cell_atlas_coords(Vector2i(4, 2)), Vector2i(WATER, ViewMath.MASK_E | ViewMath.MASK_W))
-	assert_eq(r.get_cell_atlas_coords(Vector2i(0, 2)), Vector2i(WATER, ViewMath.MASK_E))
+	assert_eq(r.get_cell_atlas_coords(Vector2i(4, 2)), Vector2i(WATER,
+			ViewMath.blob47_row(ViewMath.MASK_E | ViewMath.MASK_W)), "water is blob47")
+	assert_eq(r.get_cell_atlas_coords(Vector2i(0, 2)), Vector2i(WATER, ViewMath.blob47_row(ViewMath.MASK_E)))
 	assert_eq(r.terrain_at_cell(Vector2i(9, 9)), SHOP)
 	var tile_px: float = ViewMath.tuned("tile_px", ViewMath.DEFAULT_TILE_PX)
 	assert_near(r.drawn_tile_px(), tile_px, 0.001, "64 px cells drawn at tile_px")
@@ -159,3 +161,110 @@ func test_full_map_build_time() -> void:
 	assert_eq(r.get_used_cells().size(), size * size)
 	assert_true(ms < 2500, "512x512 build took %d ms" % ms)
 	r.free()
+
+
+func test_blob47_masks_match_the_tileset() -> void:
+	var masks: PackedInt32Array = ViewMath.blob47_masks()
+	assert_eq(masks.size(), ViewMath.BLOB47_COUNT)
+	assert_eq(masks[0], 0)
+	assert_eq(masks[masks.size() - 1], 255)
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(ViewMath.TILESET_INDEX))
+	assert_true(parsed is Dictionary, "tiles.json parses")
+	var listed: Array = (parsed as Dictionary).get("blob47_masks", [])
+	assert_eq(listed.size(), masks.size(), "gen_tiles.py wrote the same 47 masks")
+	for i: int in range(mini(listed.size(), masks.size())):
+		assert_eq(int(listed[i]), masks[i])
+	var rows: int = int((parsed as Dictionary).get("rows", 0))
+	assert_true(rows >= ViewMath.BLOB47_COUNT, "atlas has a row per mask")
+
+
+func test_blob_reduce_and_rows() -> void:
+	var n: int = ViewMath.MASK_N
+	var e: int = ViewMath.MASK_E
+	assert_eq(ViewMath.blob_reduce(ViewMath.MASK_NE), 0, "a diagonal alone does not count")
+	assert_eq(ViewMath.blob_reduce(n | ViewMath.MASK_NE), n, "needs both sides")
+	assert_eq(ViewMath.blob_reduce(n | e | ViewMath.MASK_NE), n | e | ViewMath.MASK_NE)
+	assert_eq(ViewMath.blob47_row(255), ViewMath.BLOB47_COUNT - 1)
+	assert_eq(ViewMath.blob47_row(0), 0)
+	assert_eq(ViewMath.blob47_row(n | ViewMath.MASK_SW | ViewMath.MASK_SE), ViewMath.blob47_row(n),
+			"dropped diagonals share the row")
+	assert_true(ViewMath.blob47_row(n | e) != ViewMath.blob47_row(n | e | ViewMath.MASK_NE),
+			"an inner corner has its own row")
+	for m: int in range(256):
+		var r: int = ViewMath.blob47_row(m)
+		assert_true(r >= 0 and r < ViewMath.BLOB47_COUNT)
+
+
+func test_blob8_mask_and_inner_corner_rows() -> void:
+	# an L of water: (1,1) has water N and E but grass NE, so it is an inner corner
+	var m := _map(4)
+	for p: Vector2i in [Vector2i(1, 0), Vector2i(1, 1), Vector2i(2, 1), Vector2i(0, 0), Vector2i(0, 1)]:
+		_put(m, p.x, p.y, WATER)
+	var bits: int = 1 << WATER
+	var raw: int = ViewMath.blob8_mask(m.terrain, 4, 1, 1, bits)
+	assert_eq(raw, ViewMath.MASK_N | ViewMath.MASK_E | ViewMath.MASK_W | ViewMath.MASK_NW)
+	assert_eq(ViewMath.blob8_mask(m.terrain, 4, 0, 0, bits), ViewMath.MASK_E | ViewMath.MASK_S | ViewMath.MASK_SE,
+			"map edge never connects")
+	var modes := PackedInt32Array()
+	modes.resize(13)
+	modes[WATER] = ViewMath.TILE_BLOB47
+	var connects := PackedInt32Array()
+	connects.resize(13)
+	connects[WATER] = bits
+	var weights: Array[PackedInt32Array] = []
+	for i: int in range(13):
+		weights.append(PackedInt32Array())
+	var rows: PackedByteArray = ViewMath.tile_rows(m.terrain, 4, modes, connects, weights)
+	assert_eq(rows[1 * 4 + 1], ViewMath.blob47_row(raw))
+	assert_eq(rows[1 * 4 + 2], ViewMath.blob47_row(ViewMath.MASK_W), "the NE diagonal of (2,1) is not water")
+
+
+func test_node_props_for_stations() -> void:
+	var idx: Dictionary = {"cell_px": 64, "props": {"nodes": {"406": "f"}, "cells": {"f": {"atlas": [5, 2],
+			"size": [1, 1]}}}}
+	assert_eq(ViewMath.node_prop_region(idx, 406), Rect2i(320, 128, 64, 64))
+	assert_eq(ViewMath.node_prop_region(idx, 407), Rect2i(), "no prop bound")
+	for kind: int in [406, 407]:
+		var tex: Texture2D = ViewMath.node_prop_texture(kind)
+		assert_true(tex != null, "kind %d has a props-atlas texture" % kind)
+		if tex != null:
+			assert_eq(Vector2i(tex.get_size()), Vector2i(64, 64), "one tile, so the EntitySprite square fits")
+	assert_true(ViewMath.node_prop_texture(400) == null, "gather nodes keep their shapes")
+
+
+func test_near_rule_moves_the_row() -> void:
+	# a tree beside a flagstone gets the planter row; boulders beside the cave floor get cave ground
+	var m := _map(5)
+	_put(m, 1, 1, TREE)
+	_put(m, 2, 1, 2)  # floor
+	_put(m, 3, 3, TREE)
+	_put(m, 0, 4, 7)  # rock
+	_put(m, 1, 4, 11)  # cave
+	var modes := PackedInt32Array()
+	modes.resize(13)
+	modes[7] = ViewMath.TILE_VARIANTS
+	var connects := PackedInt32Array()
+	connects.resize(13)
+	var weights: Array[PackedInt32Array] = []
+	for i: int in range(13):
+		weights.append(PackedInt32Array())
+	weights[7] = PackedInt32Array([1, 1, 1])
+	var near_bits := PackedInt32Array()
+	near_bits.resize(13)
+	var near_offset := PackedInt32Array()
+	near_offset.resize(13)
+	near_bits[TREE] = 1 << 2
+	near_offset[TREE] = 1
+	near_bits[7] = 1 << 11
+	near_offset[7] = 3
+	var rows: PackedByteArray = ViewMath.tile_rows(m.terrain, 5, modes, connects, weights, near_bits, near_offset)
+	assert_eq(rows[1 * 5 + 1], 1, "town tree in a planter")
+	assert_eq(rows[3 * 5 + 3], 0, "field tree on grass")
+	var r: int = rows[4 * 5 + 0]
+	assert_true(r >= 3 and r < 6, "rock by the cave uses the cave-ground rows (got %d)" % r)
+	var plain: PackedByteArray = ViewMath.tile_rows(m.terrain, 5, modes, connects, weights)
+	assert_eq(plain[1 * 5 + 1], 0, "without near arrays nothing moves")
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(ViewMath.TILESET_INDEX))
+	var filled: Dictionary = (parsed as Dictionary).get("filled_rows", {})
+	assert_true((filled.get("5", []) as Array).has(1.0), "the planter row is in the atlas")
+	assert_true((filled.get("7", []) as Array).has(5.0), "the cave-ground rock rows are in the atlas")

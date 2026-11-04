@@ -241,6 +241,68 @@ const MASK_N: int = 1
 const MASK_E: int = 2
 const MASK_S: int = 4
 const MASK_W: int = 8
+## 8-neighbour blob (47 rows, gen_tiles.py BLOB47_MASKS): the 4 side bits above plus the diagonals, a diagonal
+## kept only when both of its sides connect.
+const TILE_BLOB47: int = 3
+const MASK_NE: int = 16
+const MASK_SE: int = 32
+const MASK_SW: int = 64
+const MASK_NW: int = 128
+const BLOB47_COUNT: int = 47
+static var _blob47_rows: PackedByteArray = PackedByteArray()
+
+
+## A raw 8-neighbour mask with every diagonal dropped whose two sides do not both connect.
+static func blob_reduce(m: int) -> int:
+	if m & MASK_NE != 0 and (m & MASK_N == 0 or m & MASK_E == 0):
+		m &= ~MASK_NE
+	if m & MASK_SE != 0 and (m & MASK_S == 0 or m & MASK_E == 0):
+		m &= ~MASK_SE
+	if m & MASK_SW != 0 and (m & MASK_S == 0 or m & MASK_W == 0):
+		m &= ~MASK_SW
+	if m & MASK_NW != 0 and (m & MASK_N == 0 or m & MASK_W == 0):
+		m &= ~MASK_NW
+	return m
+
+
+## The 47 reduced masks in ascending order: row r of a blob47 column draws blob47_masks()[r].
+static func blob47_masks() -> PackedInt32Array:
+	var out := PackedInt32Array()
+	for m: int in range(256):
+		if blob_reduce(m) == m:
+			out.append(m)
+	return out
+
+
+## Atlas row of a raw 8-neighbour mask in a blob47 column (the index of its reduced mask among blob47_masks).
+static func blob47_row(raw_mask: int) -> int:
+	if _blob47_rows.is_empty():
+		var rows := PackedByteArray()
+		rows.resize(256)
+		var masks: PackedInt32Array = blob47_masks()
+		for m: int in range(256):
+			rows[m] = masks.find(blob_reduce(m))
+		_blob47_rows = rows
+	return _blob47_rows[raw_mask & 255]
+
+
+## Raw 8-neighbour mask at (x, y) (sides as blob4_mask, plus NE/SE/SW/NW); outside the map never connects.
+static func blob8_mask(terrain: PackedByteArray, size: int, x: int, y: int, connect_bits: int) -> int:
+	var m: int = blob4_mask(terrain, size, x, y, connect_bits)
+	var i: int = y * size + x
+	var up: bool = y > 0
+	var dn: bool = y < size - 1
+	if x < size - 1:
+		if up and (connect_bits >> terrain[i - size + 1]) & 1 != 0:
+			m |= MASK_NE
+		if dn and (connect_bits >> terrain[i + size + 1]) & 1 != 0:
+			m |= MASK_SE
+	if x > 0:
+		if dn and (connect_bits >> terrain[i + size - 1]) & 1 != 0:
+			m |= MASK_SW
+		if up and (connect_bits >> terrain[i - size - 1]) & 1 != 0:
+			m |= MASK_NW
+	return m
 
 
 ## Deterministic per-tile hash (31 bits), the same as preview_tiles.py tile_hash.
@@ -281,24 +343,52 @@ static func blob4_mask(terrain: PackedByteArray, size: int, x: int, y: int, conn
 	return m
 
 
-## Atlas row of every cell (row-major, one byte each): the blob4 mask, a weighted variant from tile_hash, or 0.
-## `modes`, `connects` (bit masks) and `weights` are indexed by terrain id; ids outside them read as id 0.
+## Atlas row of every cell (row-major, one byte each): the blob47 row of the 8-neighbour mask, the blob4 mask, a
+## weighted variant from tile_hash, or 0. `modes`, `connects` (bit masks) and `weights` are indexed by terrain id;
+## ids outside them read as id 0. Optional `near_bits` / `near_offset` (by terrain id, tiles.json "near"): when one
+## of the 8 neighbours has an id in near_bits[t], the row moves down by near_offset[t] (town tree, rock by a cave).
 static func tile_rows(terrain: PackedByteArray, size: int, modes: PackedInt32Array, connects: PackedInt32Array,
-		weights: Array[PackedInt32Array]) -> PackedByteArray:
+		weights: Array[PackedInt32Array], near_bits: PackedInt32Array = PackedInt32Array(),
+		near_offset: PackedInt32Array = PackedInt32Array()) -> PackedByteArray:
 	var out := PackedByteArray()
 	out.resize(size * size)
 	var n_ids: int = modes.size()
+	var has_near: bool = near_bits.size() >= n_ids and near_offset.size() >= n_ids
+	if blob47_row(0) < 0:  # builds the lookup once, outside the loop
+		return out
+	var lut: PackedByteArray = _blob47_rows
+	# weighted picks as lookup tables (index h % total), and tile_hash inlined: most cells are grass variants
+	var picks: Array[PackedByteArray] = []
+	for t: int in range(n_ids):
+		var table := PackedByteArray()
+		if t < weights.size():
+			for i: int in range(weights[t].size()):
+				for k: int in range(maxi(weights[t][i], 0)):
+					table.append(i)
+		if table.is_empty():
+			table.append(0)
+		picks.append(table)
 	for y: int in range(size):
 		var row: int = y * size
+		var hy: int = y * 19349663
 		for x: int in range(size):
 			var t: int = terrain[row + x]
 			if t >= n_ids:
 				t = 0
 			var mode: int = modes[t]
-			if mode == TILE_BLOB4:
-				out[row + x] = blob4_mask(terrain, size, x, y, connects[t])
-			elif mode == TILE_VARIANTS:
-				out[row + x] = weighted_pick(tile_hash(x, y), weights[t])
+			var r: int = 0
+			if mode == TILE_VARIANTS:
+				var h: int = (x * 73856093) ^ hy
+				h = ((h ^ (h >> 13)) & 0x7FFFFFFF) * 1274126177
+				var table: PackedByteArray = picks[t]
+				r = table[((h ^ (h >> 16)) & 0x7FFFFFFF) % table.size()]
+			elif mode == TILE_BLOB47:
+				r = lut[blob8_mask(terrain, size, x, y, connects[t])]
+			elif mode == TILE_BLOB4:
+				r = blob4_mask(terrain, size, x, y, connects[t])
+			if has_near and near_bits[t] != 0 and blob8_mask(terrain, size, x, y, near_bits[t]) != 0:
+				r += near_offset[t]
+			out[row + x] = r
 	return out
 
 
@@ -329,3 +419,42 @@ static func block_centers(terrain: PackedByteArray, size: int, terrain_id: int) 
 				h += 1
 			out.append(Vector2i(x + ((w - 1) >> 1), y + ((h - 1) >> 1)))
 	return out
+
+
+static var _node_prop_cache: Dictionary = {}
+
+
+## Pixel region in the props atlas of the prop that tiles.json `props.nodes` binds to a node entity kind (406
+## furnace, 407 cooking fire), or an empty Rect2i when the index has no prop for it. Pure (the parsed index).
+static func node_prop_region(index: Dictionary, kind: int) -> Rect2i:
+	var props: Dictionary = index.get("props", {})
+	var nodes: Dictionary = props.get("nodes", {})
+	var cells: Dictionary = props.get("cells", {})
+	var pname: String = str(nodes.get(str(kind), ""))
+	if pname == "" or not cells.has(pname):
+		return Rect2i()
+	var cell: Dictionary = cells[pname]
+	var px: int = int(index.get("cell_px", 64))
+	var at: Array = cell.get("atlas", [0, 0])
+	var sz: Array = cell.get("size", [1, 1])
+	return Rect2i(int(at[0]) * px, int(at[1]) * px, int(sz[0]) * px, int(sz[1]) * px)
+
+
+## EntitySprite art for a node entity kind from the props atlas (furnace, fire), or null (cached per kind).
+static func node_prop_texture(kind: int, index_path: String = TILESET_INDEX) -> Texture2D:
+	var key: String = "%s#%d" % [index_path, kind]
+	if _node_prop_cache.has(key):
+		return _node_prop_cache[key] as Texture2D
+	var found: AtlasTexture = null
+	if FileAccess.file_exists(index_path):
+		var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(index_path))
+		if parsed is Dictionary:
+			var index: Dictionary = parsed
+			var region: Rect2i = node_prop_region(index, kind)
+			var path: String = str(index.get("props_atlas", ""))
+			if region.has_area() and path != "" and ResourceLoader.exists(path):
+				found = AtlasTexture.new()
+				found.atlas = load(path) as Texture2D
+				found.region = Rect2(region)
+	_node_prop_cache[key] = found
+	return found

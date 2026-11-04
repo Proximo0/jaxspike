@@ -2,19 +2,29 @@ extends SceneTree
 ## Windowed review renders of the tileset through the real MapRenderer, with a few chibi sprites for scale.
 ##   Godot_v4.7.2-stable_win64.exe --path client -s res://tools/art/tiles/capture_tiles.gd -- \
 ##       --terrain=<512x512 uint8 row-major terrain.bin> --out=<dir>
-## Writes <out>/<shot>_zoom<z>.png for Solmera's square and a field edge at zoom 1.0 and 2.0, then quits.
+## Writes <out>/<shot>_zoom<z>.png for each shot at its zooms (towns, dungeons, a lake shore, a road bend, a wall
+## corner), with a furnace and a fire node (406/407, art from ViewMath.node_prop_texture) beside the sprites.
 ## Quiet: prints one CAPTURE_TILES line (or the error).
 
 const MAP: int = 512
 const SHOTS: Array[Dictionary] = [
-	{"name": "solmera_square", "tile": Vector2(256.0, 257.0)},
-	{"name": "field_edge", "tile": Vector2(282.0, 294.0)},
+	{"name": "solmera_square", "tile": Vector2(256.0, 257.0), "zooms": [1.0, 2.0]},
+	{"name": "lunavell_square", "tile": Vector2(102.0, 114.0), "zooms": [1.0, 2.0]},
+	{"name": "pinehollow", "tile": Vector2(410.0, 103.0), "zooms": [1.0]},
+	{"name": "tidewick", "tile": Vector2(399.0, 411.0), "zooms": [1.0]},
+	{"name": "kharsand", "tile": Vector2(113.0, 400.0), "zooms": [1.0]},
+	{"name": "cave", "tile": Vector2(256.0, 46.0), "zooms": [1.0, 2.0]},
+	{"name": "cave_south", "tile": Vector2(256.0, 466.0), "zooms": [1.0]},
+	{"name": "lake_shore", "tile": Vector2(432.0, 271.0), "zooms": [2.0]},
+	{"name": "road_bend", "tile": Vector2(410.0, 255.0), "zooms": [2.0]},
+	{"name": "wall_corner", "tile": Vector2(227.0, 227.0), "zooms": [2.0]},
 ]
-const ZOOMS: Array[float] = [1.0, 2.0]
 const SPRITES: Array[Dictionary] = [
 	{"act": "res://assets/anim/swordsman/act.json", "kind": 0, "label": "Swordsman", "dx": -2, "dy": 2},
 	{"act": "res://assets/anim/mage/act.json", "kind": 0, "label": "Mage", "dx": 1, "dy": 3},
 	{"act": "res://assets/anim/blobbin/act.json", "kind": 1, "label": "Blobbin", "dx": 3, "dy": 1},
+	{"node": 406, "label": "Furnace", "dx": -1, "dy": -2},
+	{"node": 407, "label": "Fire", "dx": 1, "dy": -2},
 ]
 
 var _out: String = ""
@@ -59,7 +69,8 @@ func _run(build_ms: int) -> void:
 	for shot: Dictionary in SHOTS:
 		var centre: Vector2 = shot["tile"]
 		_place_sprites(centre, tile_px)
-		for z: float in ZOOMS:
+		for zv: Variant in shot["zooms"]:
+			var z: float = float(zv)
 			_camera.zoom = Vector2(z, z)
 			_camera.position = ViewMath.tile_center(centre, tile_px)
 			for i: int in range(4):
@@ -78,13 +89,18 @@ func _place_sprites(centre: Vector2, tile_px: float) -> void:
 	for c: Node in _sprites.get_children():
 		c.free()
 	for s: Dictionary in SPRITES:
-		var sheet: ActSheet = ActSheet.load_act(str(s["act"]))
 		var sp := EntitySprite.new()
 		_sprites.add_child(sp)
+		sp.position = ViewMath.tile_center(centre + Vector2(float(s["dx"]), float(s["dy"])), tile_px)
+		if s.has("node"):
+			var kind: int = int(s["node"])
+			sp.configure(kind, false, str(s["label"]), 1.0, tile_px, 12, ViewMath.node_prop_texture(kind), false,
+					ViewMath.CAT_NODE)
+			continue
+		var sheet: ActSheet = ActSheet.load_act(str(s["act"]))
 		sp.configure(int(s["kind"]), false, str(s["label"]), 1.0, tile_px, 12)
 		if sheet != null:
 			var clip: Dictionary = sheet.resolve(0, 1, int(s["kind"]) == 0)
 			if not clip.is_empty():
 				sp.set_clip(sheet, 0, str(clip["name"]), clip["anim"], 0, int(clip["frames"]), 1, bool(clip["flip"]),
 						0.0)
-		sp.position = ViewMath.tile_center(centre + Vector2(float(s["dx"]), float(s["dy"])), tile_px)

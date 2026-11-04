@@ -2,14 +2,14 @@ class_name MapRenderer
 extends TileMapLayer
 ## The whole map as a TileMapLayer, filled once from MapData at login.
 ## With the tileset of `ViewMath.TILESET_INDEX` (client/tools/art/tiles/gen_tiles.py): 64 px cells drawn at
-## tile_px through the node scale, autotiled rows (blob4 masks, weighted variants) from ViewMath.tile_rows, and a
+## tile_px through the node scale, autotiled rows (blob47 / blob4 masks, weighted variants) from ViewMath.tile_rows, and a
 ## child `Props` layer (trees, bell posts, stalls, the temple fountain) that may overhang the tile above.
 ## Without it: one flat colour per terrain id from ViewMath.TERRAIN_COLORS at tile_px (the old placeholder path).
 ## A changed Tuning.tile_px rescales in place (tileset) or swaps the colour atlas (fallback).
 
 const TERRAIN_IDS: int = 13
 const SOURCE_ID: int = 0
-const ATLAS_ROWS: int = 16
+const ATLAS_ROWS: int = 48  ## blob47 columns use 47 rows (tiles.json "rows" wins).
 const SHOP_ID: int = 12  ## game/data/terrain.py T_SHOP: its stalls cycle colours by x.
 
 var built_tile_px: int = 0
@@ -141,11 +141,28 @@ func _make_tileset(index: Dictionary) -> bool:
 	return true
 
 
+## Y-sort (round 4, ro3-art): the Props layer is y-sorted and sits at absolute z 0 while the terrain (this node)
+## stays at z -1, so under a y-sorted common parent (GameView) with a y-sorted EntityLayer whose sprites are z 0,
+## each prop sorts against the characters by its base: a character north of a tree draws behind it, south in
+## front. The tile's y_sort_origin is the prop's `base_px` (tiles.json, px below the base cell's centre) minus the
+## entity feet offset, because an entity node sits at its tile centre with the feet EntitySprite.FEET_Y lower.
+const TERRAIN_Z: int = -1
+
+
+static func prop_sort_origin(base_px: int, atlas_cell_px: int) -> int:
+	return base_px - int(round(EntitySprite.FEET_Y * float(atlas_cell_px)))
+
+
 func _make_props(index: Dictionary) -> void:
 	if props_layer == null:
 		props_layer = TileMapLayer.new()
 		props_layer.name = "Props"
+		props_layer.y_sort_enabled = true
+		props_layer.z_as_relative = false
+		props_layer.z_index = 0
 		add_child(props_layer)
+	y_sort_enabled = true  # nested y-sort: the Props cells join the parent's sort; the terrain sorts among itself
+	z_index = TERRAIN_Z
 	props_layer.tile_set = null
 	var props: Dictionary = index.get("props", {})
 	var tex: Texture2D = _texture(str(index.get("props_atlas", "")))
@@ -164,7 +181,9 @@ func _make_props(index: Dictionary) -> void:
 		if not src.has_room_for_tile(at, sz, 1, Vector2i.ZERO, 1):
 			continue
 		src.create_tile(at, sz)
-		src.get_tile_data(at, 0).texture_origin = _vec2i(cell.get("origin", [0, 0]))
+		var td: TileData = src.get_tile_data(at, 0)
+		td.texture_origin = _vec2i(cell.get("origin", [0, 0]))
+		td.y_sort_origin = prop_sort_origin(int(cell.get("base_px", cell_px / 2)), cell_px)
 	ts.add_source(src, SOURCE_ID)
 	props_layer.tile_set = ts
 
@@ -182,18 +201,26 @@ func _fill_tileset(map: MapData, index: Dictionary) -> void:
 	var modes := PackedInt32Array()
 	var connects := PackedInt32Array()
 	var weights: Array[PackedInt32Array] = []
+	var near_bits := PackedInt32Array()
+	var near_offset := PackedInt32Array()
 	for t: int in range(TERRAIN_IDS):
 		modes.append(ViewMath.TILE_SINGLE)
 		connects.append(0)
 		weights.append(PackedInt32Array())
+		near_bits.append(0)
+		near_offset.append(0)
 	for e: Variant in index["terrains"]:
 		var d: Dictionary = e
 		var id: int = int(d.get("id", -1))
 		if id < 0 or id >= TERRAIN_IDS:
 			continue
+		var near: Dictionary = d.get("near", {})
+		for nid: Variant in near.get("ids", []):
+			near_bits[id] |= 1 << int(nid)
+		near_offset[id] = int(near.get("offset", 0))
 		match str(d.get("mode", "single")):
-			"blob4":
-				modes[id] = ViewMath.TILE_BLOB4
+			"blob4", "blob47":
+				modes[id] = ViewMath.TILE_BLOB47 if str(d.get("mode")) == "blob47" else ViewMath.TILE_BLOB4
 				var bits: int = 0
 				for c: Variant in d.get("connects", []):
 					bits |= 1 << int(c)
@@ -202,7 +229,8 @@ func _fill_tileset(map: MapData, index: Dictionary) -> void:
 				modes[id] = ViewMath.TILE_VARIANTS
 				var wl: Array = d.get("weights", [])
 				weights[id] = PackedInt32Array(wl)
-	var rows: PackedByteArray = ViewMath.tile_rows(terrain, size, modes, connects, weights)
+	var rows: PackedByteArray = ViewMath.tile_rows(terrain, size, modes, connects, weights, near_bits,
+			near_offset)
 	# props chosen per terrain id: atlas coords of each variant
 	var props: Dictionary = index.get("props", {})
 	var cells: Dictionary = props.get("cells", {})
