@@ -26,6 +26,20 @@ Godot only draws, takes input and shows panels. Every contract brief restates th
   `GODOT=/c/Users/crp27/Downloads/Godot_4.7.2/Godot_v4.7.2-stable_win64_console.exe PATH="$PWD/tools/winshim:$PATH"`
   (the shim supplies the missing `flock`). CI and cloud sessions run the same scripts on Linux.
 
+## Load limits (the PC has 16 GB RAM; three Claude crashes on 2026-11-02 came from running out of it)
+- At most **60 agents in all**: at most 6 team sessions at once, each with at most 10 workers
+  (`.claude/settings.json` caps subagents per session at 10). More teams wait in a queue; the lead starts the next
+  when one reports.
+- One heavy process per team at a time (pytest, soak, bench, Godot, Blender, test server). Iterate on the test
+  files you changed; the full suite, `check_all`, soaks and benches are the lead's job at integration, run one at
+  a time on a quiet box. GPU soaks only in WSL under the 80% cap. Soak batches of at most 8 worlds on the PC.
+- `.claude/hooks/guard_heavy.py` runs before every Bash call and blocks a heavy command when free RAM is under
+  2.5 GB (4 GB for a full suite or soak), or when 10+ python, 3+ Godot or 2+ Blender processes exist. A block is
+  not a retry prompt: wait for your own process, or do less.
+- After a crash, the user runs `tools\kill_orphans.ps1` (add `-KeepServers` to spare a playtest server); the lead
+  never leaves a server or soak running past its use.
+- Shared-checkout rounds: teams re-read a shared file right before each edit and never run git.
+
 ## Rules
 - Pure JAX in `game/` and `bots/`: no Python `if` on traced values, no loops over entities, masks over fixed shapes,
   randomness only via `next_key`, constants only in `game/config.py`, coordinates only in `game/world_layout.py`.
