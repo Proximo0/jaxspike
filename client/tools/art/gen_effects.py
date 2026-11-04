@@ -3,7 +3,8 @@ look with soft glow, written to client/assets/anim/fx/<name>.png plus fx.json (f
 
     python client/tools/art/gen_effects.py [--out client/assets/anim/fx] [--size 128]
 
-Effects: cast_circle (looping magic circle with runes, rotates and pulses, 8 frames), hit_spark (one-shot star burst
+Effects: cast_circle (looping magic circle with runes, rotates and pulses, 8 frames), bolt (6), arrow_shower (8),
+magnum_break (6) per skill, hit_spark (one-shot star burst
 with motion streaks, 6 frames), level_up (one-shot rising golden rays and sparkles, 10 frames), heal (one-shot
 green-white cross sparkles, 8 frames). Anchor = the effect centre on the entity's feet (cast) or body (hit, heal).
 """
@@ -138,7 +139,91 @@ def heal(size, n):
     return frames, 80, False, [size // 2, int(size * 0.55)]
 
 
-EFFECTS = {"cast_circle": (cast_circle, 8), "hit_spark": (hit_spark, 6), "level_up": (level_up, 10), "heal": (heal, 8)}
+def bolt(size, n):
+    """A magic bolt (Cold/Fire/Lightning bolt family): a crackling column dropping onto the target, 6 frames."""
+    frames = []
+    rnd = random.Random(11)
+    for i in range(n):
+        t = i / (n - 1)
+        img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        d = ImageDraw.Draw(img)
+        cx, feet = size / 2, size * 0.86
+        fade = int(255 * (1.0 if t < 0.5 else (1.0 - t) / 0.5))
+        top = feet - size * 0.95 * min(1.0, t * 2.2)
+        # jagged core
+        pts = [(cx, feet)]
+        y = feet
+        while y > top:
+            y -= size * 0.09
+            pts.append((cx + rnd.uniform(-1, 1) * size * 0.08, y))
+        d.line(pts, fill=(140, 200, 255, fade), width=max(3, size // 14))
+        d.line(pts, fill=(240, 250, 255, fade), width=max(1, size // 32))
+        # impact flash at the feet once the bolt lands
+        if t > 0.35:
+            r = size * 0.18 * (1.0 + (t - 0.35))
+            d.ellipse((cx - r, feet - r * 0.45, cx + r, feet + r * 0.45), fill=(170, 220, 255, int(fade * 0.7)))
+        frames.append(glow(img, size // 18, 1.5))
+    return frames, 60, False, [size // 2, int(size * 0.86)]
+
+
+def arrow_shower(size, n):
+    """Arrows raining on an area: 8 frames, each arrow falls and sticks, with a dust ring on landing."""
+    frames = []
+    rnd = random.Random(21)
+    arrows = [(rnd.uniform(0.15, 0.85), rnd.uniform(0.3, 0.85), rnd.uniform(0.0, 0.5)) for _ in range(12)]
+    for i in range(n):
+        t = i / (n - 1)
+        img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        d = ImageDraw.Draw(img)
+        fade = int(255 * (1.0 if t < 0.75 else (1.0 - t) / 0.25))
+        for ax, ay, delay in arrows:
+            p = min(1.0, max(0.0, (t - delay) / 0.4))
+            x, y_land = ax * size, ay * size
+            y = y_land - (1.0 - p) * size * 0.9
+            ln = size * 0.16
+            d.line((x + ln * 0.25, y - ln, x, y), fill=(120, 80, 40, fade), width=max(2, size // 40))
+            d.polygon([(x, y), (x - ln * 0.12, y - ln * 0.28), (x + ln * 0.16, y - ln * 0.22)], fill=(200, 200, 210, fade))
+            d.polygon([(x + ln * 0.25, y - ln), (x + ln * 0.05, y - ln * 0.85), (x + ln * 0.35, y - ln * 0.8)], fill=(230, 80, 80, fade))
+            if p >= 1.0 and t - delay < 0.6:
+                r = size * 0.05
+                d.ellipse((x - r, y - r * 0.4, x + r, y + r * 0.4), outline=(220, 200, 160, int(fade * 0.6)), width=max(1, size // 64))
+        frames.append(glow(img, size // 40, 1.1))
+    return frames, 70, False, [size // 2, int(size * 0.6)]
+
+
+def magnum_break(size, n):
+    """A fiery burst around the caster: an expanding ring of flame with embers, 6 frames."""
+    frames = []
+    rnd = random.Random(31)
+    embers = [(rnd.uniform(0, 2 * math.pi), rnd.uniform(0.5, 1.0)) for _ in range(14)]
+    for i in range(n):
+        t = (i + 0.5) / n
+        img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        d = ImageDraw.Draw(img)
+        cx, cy = size / 2, size * 0.62
+        fade = int(255 * (1.0 if t < 0.55 else (1.0 - t) / 0.45))
+        rx = size * 0.46 * (0.25 + 0.75 * t)
+        ry = rx * 0.45
+        lw = max(3, int(size / 12 * (1.0 - t * 0.6)))
+        d.ellipse((cx - rx, cy - ry, cx + rx, cy + ry), outline=(255, 140, 40, fade), width=lw)
+        d.ellipse((cx - rx * 0.9, cy - ry * 0.9, cx + rx * 0.9, cy + ry * 0.9), outline=(255, 230, 120, int(fade * 0.8)), width=max(1, lw // 2))
+        # flame tongues on the ring
+        for k in range(10):
+            a = k * math.pi / 5 + t * 1.5
+            x, y = cx + rx * math.cos(a), cy + ry * math.sin(a)
+            h = size * 0.2 * (1.0 - t * 0.4)
+            d.polygon([(x - h * 0.3, y), (x + h * 0.3, y), (x, y - h)], fill=(255, 180, 60, fade))
+        for a, s_ in embers:
+            r = rx * (0.6 + 0.6 * t) * s_
+            x, y = cx + r * math.cos(a), cy + r * math.sin(a) * 0.45 - t * size * 0.25
+            e = size * 0.02
+            d.ellipse((x - e, y - e, x + e, y + e), fill=(255, 220, 120, fade))
+        frames.append(glow(img, size // 16, 1.5))
+    return frames, 60, False, [size // 2, int(size * 0.62)]
+
+
+EFFECTS = {"cast_circle": (cast_circle, 8), "hit_spark": (hit_spark, 6), "level_up": (level_up, 10), "heal": (heal, 8),
+           "bolt": (bolt, 6), "arrow_shower": (arrow_shower, 8), "magnum_break": (magnum_break, 6)}
 
 
 def main():

@@ -1472,6 +1472,15 @@
   },
   "item.etc": {
    "path": "res://assets/icons/etc.png"
+  },
+  "fx.bolt": {
+   "path": "res://assets/anim/fx/bolt.png"
+  },
+  "fx.arrow_shower": {
+   "path": "res://assets/anim/fx/arrow_shower.png"
+  },
+  "fx.magnum_break": {
+   "path": "res://assets/anim/fx/magnum_break.png"
   }
  }
 }

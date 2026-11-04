@@ -53,6 +53,45 @@
     64,
     70
    ]
+  },
+  "bolt": {
+   "file": "bolt.png",
+   "image": "res://assets/anim/fx/bolt.png",
+   "frame_w": 128,
+   "frame_h": 128,
+   "frames": 6,
+   "delay_ms": 60,
+   "loop": false,
+   "anchor": [
+    64,
+    110
+   ]
+  },
+  "arrow_shower": {
+   "file": "arrow_shower.png",
+   "image": "res://assets/anim/fx/arrow_shower.png",
+   "frame_w": 128,
+   "frame_h": 128,
+   "frames": 8,
+   "delay_ms": 70,
+   "loop": false,
+   "anchor": [
+    64,
+    76
+   ]
+  },
+  "magnum_break": {
+   "file": "magnum_break.png",
+   "image": "res://assets/anim/fx/magnum_break.png",
+   "frame_w": 128,
+   "frame_h": 128,
+   "frames": 6,
+   "delay_ms": 60,
+   "loop": false,
+   "anchor": [
+    64,
+    79
+   ]
   }
  }
 }
