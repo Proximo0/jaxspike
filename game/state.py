@@ -96,13 +96,14 @@ def empty_inputs():
         "sell": jnp.full((MAX_PLAYERS,), -1, jnp.int32),    # shop: inventory slot
         "sit": jnp.zeros((MAX_PLAYERS,), jnp.bool_),        # survival: toggle sitting (anim SIT; HP regen twice as often)
         "teleport": jnp.full((MAX_PLAYERS,), -1, jnp.int32),  # waybell teleport: destination town index (ro_waybell)
+        "pvp": jnp.zeros((MAX_PLAYERS,), jnp.bool_),        # pvp: toggle the PK flag (ro_pvp.phase; refused in towns)
     }
 
 
 def make_empty_world(key):
     """Blank world with no walls, no players, no monsters. Used by tests and as a base."""
     from game import (ro_anim, ro_craft, ro_drops, ro_items, ro_monster_modes, ro_move, ro_mvp,  # lazy: next_key
-                      ro_party, ro_skills, ro_stats)
+                      ro_party, ro_pvp, ro_skills, ro_stats)
     return {
         "walls": jnp.zeros((MAP, MAP), jnp.int8),
         "terrain": jnp.full((MAP, MAP), T_GRASS, jnp.int8),
@@ -149,4 +150,5 @@ def make_empty_world(key):
         "move": ro_move.make_state(),
         "anim": ro_anim.make_state(),
         "monai": ro_monster_modes.make_state(),
+        "pvp": ro_pvp.make_state(),  # ro4-pvp: PK flag, pvp_kills, pvp_deaths
     }

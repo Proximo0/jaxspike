@@ -10,6 +10,7 @@ const BAR_H: float = 4.0
 const BAR_BG: Color = Color(0.25, 0.05, 0.05, 0.9)
 const BAR_FG: Color = Color(0.25, 0.85, 0.35)
 const LABEL_COLOR: Color = Color(1.0, 1.0, 1.0)
+var label_color: Color = LABEL_COLOR  ## red for PK-enabled players (EntityLayer sets it)
 const OWN_RING: Color = Color(1.0, 1.0, 1.0, 0.9)
 const LABEL_SHADOW: Color = Color(0.0, 0.0, 0.0, 0.8)
 
@@ -138,7 +139,7 @@ func _draw() -> void:
 		var sz: Vector2 = font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, label_px)
 		var pos := Vector2(-sz.x * 0.5, top - 3.0)
 		draw_string(font, pos + Vector2(1, 1), label, HORIZONTAL_ALIGNMENT_LEFT, -1, label_px, LABEL_SHADOW)
-		draw_string(font, pos, label, HORIZONTAL_ALIGNMENT_LEFT, -1, label_px, LABEL_COLOR)
+		draw_string(font, pos, label, HORIZONTAL_ALIGNMENT_LEFT, -1, label_px, label_color)
 
 
 ## Draws the clip frame with the feet at FEET_Y; false when the sheet has no such frame (the quad is drawn).

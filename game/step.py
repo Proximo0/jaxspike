@@ -7,7 +7,7 @@ Each phase is a pure function world -> world (or world, inputs -> world).
 import jax
 import jax.numpy as jnp
 
-from game import (combat, loot, monsters, movement, ro_anim, ro_craft, ro_items, ro_waybell, ro_mvp, ro_party,
+from game import (combat, loot, monsters, movement, ro_anim, ro_craft, ro_items, ro_waybell, ro_mvp, ro_party, ro_pvp,
                   ro_shop, ro_skills, ro_stats, ro_warps, survival)
 
 
@@ -19,6 +19,7 @@ def step(world, inputs):
     world = monsters.monster_ai(world)
     world = ro_skills.phase(world, inputs)
     world = combat.combat(world, inputs)
+    world = ro_pvp.phase(world, inputs)  # PK toggle (ro4-pvp)
     world = loot.loot(world)
     world = ro_stats.phase(world, inputs)
     world = ro_items.phase(world, inputs)

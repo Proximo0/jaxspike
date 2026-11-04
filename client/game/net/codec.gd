@@ -101,7 +101,7 @@ static func _bin_row(data: PackedByteArray, off: int, anim: bool, names: Diction
 		e["t"] = data.decode_s32(off + 16)
 		var hit: int = data.decode_s32(off + 20)
 		if hit != 0:
-			e["h"] = maxi(hit, 0)  # -1 is the server-side miss marker: decodes as h = 0
+			e["h"] = hit if hit < -1 else maxi(hit, 0)  # -1 is the miss marker (h = 0); h <= -2 is a crit of |h|
 		e["s"] = data.decode_s16(off + 24)
 		e["m"] = data.decode_s16(off + 26)
 		e["a"] = data.decode_s8(off + 28)

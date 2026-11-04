@@ -404,6 +404,16 @@ for m in kept:
         rmax = max(rmax, math.hypot(p.x, p.y))
 height = max(zmax - zmin, 0.1)
 log("bounds z", round(zmin, 3), round(zmax, 3), "height", round(height, 3), "radius", round(rmax, 3))
+# "center": put the kept meshes' bounding-box centre on the origin (icons of a weapon that sits at a hand in the
+# rest pose; props modelled off-centre); the camera then looks straight at it with no feet shift
+CENTER = bool(JOB.get("center", False))
+if CENTER:
+    xs = [p.x for m in kept for p in [m.evaluated_get(dg).matrix_world @ v.co for v in m.evaluated_get(dg).data.vertices]]
+    ys = [p.y for m in kept for p in [m.evaluated_get(dg).matrix_world @ v.co for v in m.evaluated_get(dg).data.vertices]]
+    cx, cy, cz = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2, (zmin + zmax) / 2
+    pivot.location = (-cx, -cy, -cz)
+    rmax = max(max(xs) - min(xs), max(ys) - min(ys)) / 2
+    log("centered", round(cx, 3), round(cy, 3), round(cz, 3))
 
 # outline thickness: "outline_rel" is a fraction of the model height (thicker, darker lines read as anime ink);
 # "outline" (world units) is the older absolute form
@@ -566,6 +576,9 @@ mb = float(JOB.get("margin_bottom", 10))
 mt = float(JOB.get("margin_top", 6))
 r_fit = min(rmax, height * float(JOB.get("radius_cap", 0.3)))
 proj_h = height * math.cos(ELEV) + 2.0 * r_fit * math.sin(ELEV)
+if CENTER:
+    # a centred prop or weapon may be long sideways: fit its largest extent, whichever axis
+    proj_h = max(proj_h, 2.0 * rmax * float(JOB.get("fit_pad", 1.05)))
 fit_px = FH - mb - mt
 upp = proj_h / fit_px / zoom  # world units per output pixel
 cam_data.ortho_scale = upp * max(FW, FH)
@@ -574,6 +587,9 @@ cam_data.ortho_scale = upp * max(FW, FH)
 base_px = r_fit * math.sin(ELEV) / upp * float(JOB.get("base_lift", 0.6))
 cam_data.shift_y = (FH / 2.0 - mb - base_px) / max(FW, FH)
 ANCHOR = [FW / 2.0, FH - mb]
+if CENTER:
+    cam_data.shift_y = 0.0
+    ANCHOR = [FW / 2.0, FH / 2.0]
 log("ortho_scale", round(cam_data.ortho_scale, 4), "shift_y", round(cam_data.shift_y, 4), "anchor", ANCHOR)
 
 sun_data = bpy.data.lights.new("jx_sun", "SUN")
@@ -682,7 +698,7 @@ for aname, spec in JOB["actions"].items():
             scene.frame_set(int(math.floor(ft)), subframe=float(ft - math.floor(ft)))
             bpy.ops.render.render(write_still=True)
             total += 1
-    log("action", aname, "clip", spec["clip"], "frames", [round(x, 2) for x in frames])
+    log("action", aname, "clip", spec.get("clip", "(static)"), "frames", [round(x, 2) for x in frames])
 
 meta = {"anchor": ANCHOR, "frame": [FW, FH], "supersample": SS, "rendered": total, "height": height}
 with open(out_dir + "/_meta.json", "w", encoding="utf-8") as fh:

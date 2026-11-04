@@ -44,6 +44,7 @@ except ImportError:  # --bench-ticks opens no socket: it runs in a venv without 
 from bots.ro_policies import ro_bot_inputs as bot_inputs  # noqa: E402
 from bots.runner import make_world_batch  # noqa: E402
 from game import ro_anim, ro_craft, ro_items, ro_mvp, ro_party, ro_skills, ro_stats  # noqa: E402
+from game import ro_pvp  # noqa: E402  (ro4-pvp)
 from game.config import (DIR_DELTAS, INV_SLOTS, MAX_PLAYERS, MAX_VIEWERS, PATH_STUCK_TICKS,  # noqa: E402
                          PLAYER_MAX_HP, SAVE_EVERY_TICKS, TICK_MS)
 from game.data import items as item_data  # noqa: E402
@@ -54,6 +55,7 @@ from game.view import changed_mask, entity_table, view_update  # noqa: E402
 from game.world_layout import TOWNS, temple_tiles, town_boxes  # noqa: E402
 from net import characters  # noqa: E402
 from net.accounts import AccountStore  # noqa: E402
+from net.cards import card_events, card_messages  # noqa: E402  (ro4-cards)
 from net.chat import ChatRouter  # noqa: E402
 from net.waybell import new_storage, transfer  # noqa: E402
 from net.pathing import find_path  # noqa: E402
@@ -112,7 +114,9 @@ def _tick_fn(world, hmask, hmove, hattack, heat, hro, prev_tab, known, viewer_sl
     inputs["sit"] = jnp.where(hmask, hro.get("sit", z), bots.get("sit", z))
     m1 = jnp.full((MAX_PLAYERS,), -1, jnp.int32)  # ro3-world3: waybell teleport destination town (-1 = none)
     inputs["teleport"] = jnp.where(hmask, hro.get("teleport", m1), bots.get("teleport", m1))
+    inputs["pvp"] = jnp.where(hmask, hro.get("pvp", z), bots.get("pvp", z))  # ro4-pvp: PK toggle (one-shot)
     pos_before = world["players"]["pos"]
+    drops_before, top_before = world["drops"], world["mvp"]["top_damager"]  # ro4-cards: card_events compare
     world = step(world, inputs)
     tab = entity_table(world)
     send, gone, known_next = view_update(tab, changed_mask(prev_tab, tab), viewer_slot, known)
@@ -123,7 +127,9 @@ def _tick_fn(world, hmask, hmove, hattack, heat, hro, prev_tab, known, viewer_sl
             "warped": jnp.max(jnp.abs(p["pos"] - pos_before), axis=1) > 1,  # ro3-wire: a warp/teleport/respawn moved the player this tick (snap.you.warped)
             "ro": {**_ro_blocks(world), "derived": {"max_hp": d["max_hp"], "max_sp": d["max_sp"]}},
             "anim": {"amotion_ms": ro_anim.amotion_ms(world, d)[:MAX_PLAYERS]},  # snap.you (docs/anim_wire.md)
-            "mvp": {"event": world["mvp"]["event"], "event_head": world["mvp"]["event_head"]}}
+            "mvp": {"event": world["mvp"]["event"], "event_head": world["mvp"]["event_head"]},
+            **({"pvp": dict(world["pvp"])} if "pvp" in world else {}),  # ro4-pvp: snap.you.pvp / pvp_kills / pvp_deaths
+            "cards": card_events(drops_before, world["drops"], world["monsters"], top_before, p)}  # ro4-cards
     return world, tab, known_next, pull
 
 
@@ -139,6 +145,8 @@ def _reset_rows_fn(world, fresh, slot, kills, deaths):
         world = {**world, blk: {**cur, **new}}
     st = world["stats"]
     st = {**st, "kills_seen": st["kills_seen"].at[slot].set(kills), "deaths_seen": st["deaths_seen"].at[slot].set(deaths)}
+    if "pvp" in world:  # ro4-pvp: a slot changing hands starts with PK off and no PvP record
+        world = {**world, "pvp": {k: v.at[slot].set(jnp.zeros((), v.dtype)) for k, v in world["pvp"].items()}}
     return {**world, "stats": st}
 
 
@@ -175,10 +183,12 @@ if "sit" not in _NONE_INPUTS:  # ro3-wire: until game/state.py carries the key
     _NONE_INPUTS["sit"] = np.zeros(MAX_PLAYERS, bool)
 if "teleport" not in _NONE_INPUTS:  # ro3-world3's waybell teleport input, same deal
     _NONE_INPUTS["teleport"] = np.full(MAX_PLAYERS, -1, np.int32)
-_RO_INPUT_KEYS = tuple(_RO_INPUT_KEYS) + tuple(k for k in ("sit", "teleport") if k not in _RO_INPUT_KEYS)
+if "pvp" not in _NONE_INPUTS:  # ro4-pvp: PK toggle, until game/state.py carries the key
+    _NONE_INPUTS["pvp"] = np.zeros(MAX_PLAYERS, bool)
+_RO_INPUT_KEYS = tuple(_RO_INPUT_KEYS) + tuple(k for k in ("sit", "teleport", "pvp") if k not in _RO_INPUT_KEYS)
 _TOWN_BOXES = np.asarray(town_boxes())
 _RO_MESSAGES = frozenset(("allot", "job", "skill", "learn", "use_item", "equip", "refine", "drop", "gather", "craft",
-                          "party", "chat", "storage", "save", "buy", "sell", "sit", "teleport"))
+                          "party", "chat", "storage", "save", "buy", "sell", "sit", "teleport", "pvp"))
 PARTY_OP = {"create": 1, "leave": 2, "invite": 3, "accept": 4}
 
 
@@ -193,6 +203,8 @@ def _initial_world(seed: int) -> dict:
     if seed not in _world_cache:
         batched = make_world_batch(seed, 1)
         _world_cache[seed] = jax.tree_util.tree_map(lambda x: x[0], batched)
+        if "pvp" not in _world_cache[seed]:  # ro4-pvp: until game/state.py's make_empty_world carries the block
+            _world_cache[seed] = {**_world_cache[seed], "pvp": ro_pvp.make_state()}
     return jax.tree_util.tree_map(lambda x: x, _world_cache[seed])  # fresh containers per server
 
 
@@ -599,6 +611,10 @@ class GameServer:
         names = {s: self.owner[s] for s in self._humans()}
         self._route_chat(pull, names, [m for m in chat if m["slot"] in names])  # senders still online
         self._mvp_events(pull, names)
+        for m in card_messages(pull["cards"], names, self.tick):  # ro4-cards: world-wide card announcement
+            text = encode(m)
+            for s in self.conn:
+                self._enqueue(s, text)
         self._send_snapshots(pull, names, viewer)
         if self.tick % SAVE_EVERY_TICKS == 0:
             self._periodic_save(pull)
@@ -714,7 +730,7 @@ class GameServer:
         per pulled array). A slot that is not dirty and not on a full snap gets `you` = {pos, hp} only."""
         tab = pull["tab"]
         leaves = jax.tree_util.tree_leaves({"players": pull["players"], "safe": pull["safe"], "ro": pull["ro"],
-                                            "anim": pull.get("anim", {}),
+                                            "anim": pull.get("anim", {}), "pvp": pull.get("pvp", {}),
                                             "tab": {k: tab[k][:MAX_PLAYERS] for k in ("speed_ms",) if k in tab}})
         prev, self._you_prev = self._you_prev, leaves
         if prev is None or len(prev) != len(leaves):
@@ -1001,6 +1017,8 @@ class GameServer:
             pend["sit"][slot] = True
         elif t == "teleport":  # docs/world_wire.md: waybell teleport to a town index
             pend["teleport"][slot] = msg["town"]
+        elif t == "pvp":  # ro4-pvp: flip the PK flag on the next tick
+            pend["pvp"][slot] = True
 
 
 def bench_ticks(seed: int, n: int) -> None:

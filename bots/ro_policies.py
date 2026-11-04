@@ -15,6 +15,7 @@ from bots.ro_craft_policy import craft_bot_inputs
 from bots.ro_items_policy import engine_inputs, item_inputs, wants_potions
 from bots.ro_nav_policy import nav_moves
 from bots.ro_party_policy import party_inputs
+from bots.ro_pvp_policy import pvp_overrides
 from bots.ro_skills_policy import cast_inputs, learn_input
 from bots.ro_stats_policy import bot_allot, bot_job
 
@@ -47,4 +48,7 @@ def ro_bot_inputs(world, key):
         inp["sit"] = sit
     if "teleport" in engine_inputs():  # waybell teleport: bots never buy one (yet); -1 = none
         inp["teleport"] = jnp.full_like(inp["allot"], -1)
+    if "pvp" in engine_inputs():
+        inp["pvp"] = jnp.zeros_like(inp["attack"])  # bots never toggle PK; duellists fight on the arena floor
+    inp = pvp_overrides(world, inp)  # ro4-pvp: slot % 10 == 0 duels in the Solmera arena
     return inp

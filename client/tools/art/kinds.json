@@ -515,7 +515,9 @@
     "target": ".*",
     "size": 0.22,
     "up": 0.5
-   }
+   },
+   "portrait_zoom": 1.0,
+   "portrait_bottom": -70
   },
   "wrigglet": {
    "folder": "wrigglet",
@@ -549,8 +551,8 @@
    "hide": [
     "^Icosphere"
    ],
-   "portrait_zoom": 0.85,
-   "portrait_bottom": -40
+   "portrait_zoom": 0.8,
+   "portrait_bottom": -30
   },
   "moonbun": {
    "folder": "moonbun",
@@ -589,7 +591,9 @@
     "target": ".*",
     "size": 0.2,
     "up": 0.55
-   }
+   },
+   "portrait_zoom": 1.0,
+   "portrait_bottom": -70
   },
   "emberblob": {
    "folder": "emberblob",
@@ -667,8 +671,8 @@
    "hide": [
     "^Icosphere"
    ],
-   "portrait_zoom": 0.85,
-   "portrait_bottom": -40
+   "portrait_zoom": 0.8,
+   "portrait_bottom": -30
   },
   "bramblet": {
    "folder": "bramblet",
@@ -708,7 +712,7 @@
     "size": 0.22,
     "up": 0.5
    },
-   "portrait_zoom": 1.1,
+   "portrait_zoom": 1.0,
    "portrait_bottom": -70
   },
   "fiddlehop": {
@@ -743,8 +747,8 @@
    "hide": [
     "^Icosphere"
    ],
-   "portrait_zoom": 0.85,
-   "portrait_bottom": -40
+   "portrait_zoom": 0.8,
+   "portrait_bottom": -30
   },
   "capling": {
    "folder": "capling",
@@ -787,8 +791,8 @@
     "up": 0.5,
     "lift": 0.22
    },
-   "portrait_zoom": 0.85,
-   "portrait_bottom": -40
+   "portrait_zoom": 0.8,
+   "portrait_bottom": -30
   },
   "pilferbug": {
    "folder": "pilferbug",
@@ -824,7 +828,9 @@
     "h": 0.36,
     "alpha": 70,
     "blur": 2.0
-   }
+   },
+   "portrait_zoom": 1.0,
+   "portrait_bottom": -70
   },
   "rotling": {
    "folder": "rotling",
@@ -863,7 +869,9 @@
     "target": ".*",
     "size": 0.22,
     "up": 0.5
-   }
+   },
+   "portrait_zoom": 1.0,
+   "portrait_bottom": -70
   },
   "snarlfang": {
    "folder": "snarlfang",
@@ -897,8 +905,8 @@
    "hide": [
     "^Icosphere"
    ],
-   "portrait_zoom": 0.85,
-   "portrait_bottom": -40
+   "portrait_zoom": 0.8,
+   "portrait_bottom": -30
   },
   "clackbone": {
    "folder": "clackbone",
@@ -925,7 +933,9 @@
    },
    "bone_scales": {
     "head": 1.3
-   }
+   },
+   "portrait_zoom": 1.0,
+   "portrait_bottom": -70
   },
   "gallopeck": {
    "folder": "gallopeck",
@@ -968,7 +978,9 @@
     "target": ".*",
     "size": 0.22,
     "up": 0.5
-   }
+   },
+   "portrait_zoom": 1.0,
+   "portrait_bottom": -70
   },
   "sandgulper": {
    "folder": "sandgulper",
@@ -1011,7 +1023,9 @@
     "target": ".*",
     "size": 0.22,
     "up": 0.5
-   }
+   },
+   "portrait_zoom": 1.0,
+   "portrait_bottom": -70
   },
   "clackbone_guard": {
    "folder": "clackbone_guard",
@@ -1038,7 +1052,9 @@
    },
    "bone_scales": {
     "head": 1.3
-   }
+   },
+   "portrait_zoom": 1.0,
+   "portrait_bottom": -70
   },
   "grumblebear": {
    "folder": "grumblebear",
@@ -1081,7 +1097,9 @@
     "target": ".*",
     "size": 0.22,
     "up": 0.5
-   }
+   },
+   "portrait_zoom": 1.0,
+   "portrait_bottom": -70
   },
   "tombwrap": {
    "folder": "tombwrap",
@@ -1118,7 +1136,9 @@
    ],
    "bone_scales": {
     "head": 1.3
-   }
+   },
+   "portrait_zoom": 1.0,
+   "portrait_bottom": -70
   },
   "gildscarab": {
    "folder": "gildscarab",
@@ -1158,7 +1178,9 @@
     "h": 0.36,
     "alpha": 70,
     "blur": 2.0
-   }
+   },
+   "portrait_zoom": 1.0,
+   "portrait_bottom": -70
   },
   "scorchstripe": {
    "folder": "scorchstripe",
@@ -1197,8 +1219,8 @@
    "hide": [
     "^Icosphere"
    ],
-   "portrait_zoom": 0.85,
-   "portrait_bottom": -40
+   "portrait_zoom": 0.8,
+   "portrait_bottom": -30
   },
   "npc_shop": {
    "role": "npc",

@@ -30,7 +30,7 @@ import numpy as np
 
 from bots.policies import HUNT_RADIUS
 from bots.ro_party_policy import leader_of
-from game.config import MAP, MAX_PLAYERS, MONSTER_ATTACK_COOLDOWN
+from game.config import MAP, MAX_PLAYERS, MONSTER_ATTACK_COOLDOWN, TICK_MS  # noqa: F401
 from game.data import monsters as mdata
 from game.data.monsters import LEVEL as MON_LEVEL
 from game.data.terrain import T_WARP
@@ -58,7 +58,7 @@ FLOOR_PCT = 10
 SAFE_DIST = 3           # field rest only when no aggressive or provoked monster is within this many cells
 # Monster swing period the bot's estimate assumes: the engine's (combat.py swings every MONSTER_ATTACK_COOLDOWN
 # ticks); switch to max(1, (mdata.ADELAY_MS + TICK_MS // 2) // TICK_MS) per kind together with combat.
-MON_SWING_TICKS = jnp.full(mdata.LEVEL.shape, MONSTER_ATTACK_COOLDOWN, jnp.int32)
+MON_SWING_TICKS = jnp.maximum(1, (jnp.asarray(mdata.ADELAY_MS) + TICK_MS // 2) // TICK_MS)  # follows combat (ADELAY_MS)
 DIVE_PCT = 70           # leave for a dungeon only at or above this percent (= REST_PCT: rested bots dive)
 DUNGEON_MIN_LEVEL = 10  # base level from which bots walk into the easiest dungeon (Culvert monsters are level 6-16)
 BOT_CHASE_RANGE = 6     # same bound as bots.policies (3x3 spatial cells)

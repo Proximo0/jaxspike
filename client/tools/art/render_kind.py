@@ -339,7 +339,7 @@ def main():
             job["actions"] = {"idle": {"clip": idle["clip"] if isinstance(idle, dict) else idle, "frames": 1, "loop": True,
                                        "hit": None, "span": [0.0, 1.0]}}
             job.update({"frame": [256, 256], "dirs": 1, "yaw": float(spec.get("portrait_yaw", 35.0)),
-                        "zoom": float(spec.get("portrait_zoom", 1.35)), "margin_bottom": float(spec.get("portrait_bottom", -120.0)),
+                        "zoom": float(spec.get("portrait_zoom", 1.1)), "margin_bottom": float(spec.get("portrait_bottom", -80.0)),
                         "margin_top": 10, "elev_deg": float(spec.get("portrait_elev", 20.0)), "squash": 0.0})
             secs = run_blender(blender, job, work)
             fr = shrink(Image.open(os.path.join(work, "idle_d0_f00.png")).convert("RGBA"), args.ss)

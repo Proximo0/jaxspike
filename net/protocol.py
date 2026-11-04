@@ -16,7 +16,7 @@ from game.data import monsters as monster_data
 from game.data import skills as skill_data
 from game.data import stats as stats_data
 from game.data import terrain as terrain_data
-from game import ro_shop, world_layout
+from game import ro_items, ro_shop, world_layout
 from game.view import N_VIEW_ENTITIES, NODE_KIND_BASE
 from net.chat import CHAT_KINDS, validate_chat
 
@@ -107,6 +107,8 @@ def _validate_ro(t, msg: dict) -> dict | None:
         return {"t": t, "op": msg["op"], "slot": msg["slot"]} if ok else None
     if t == "save":
         return {"t": t}
+    if t == "pvp":  # ro4-pvp: toggle the PK flag on the next tick (refused in towns by the engine)
+        return {"t": t}
     return None
 
 
@@ -185,7 +187,8 @@ def build_welcome_static() -> dict:
         "world": {"towns": towns, "dungeons": dungeons, "warps": warps,
                   "terrain_names": list(terrain_data.TERRAIN_NAMES), "monsters": monsters,
                   "zones": zones, "portals": portals, "shops": shop_tiles, "waybell_teleport": waybell_teleport,
-                  "save_points": save_points},
+                  "save_points": save_points,
+                  "pvp": pvp_world()},  # ro4-pvp
         "shops": ro_shop.stock_for_client(),  # docs/items_wire.md: per-town NPC stock
         "items": item_data.table_for_client(), "drops": drops_data.table_for_client(),
         "skills": {"names": list(sk.SKILL_NAME), "jobs": list(stats_data.JOB_NAMES), "list": skill_list},
@@ -198,6 +201,7 @@ def build_welcome_static() -> dict:
         "max_job_level": list(stats_data.MAX_JOB_LEVEL), "base_exp_len": len(stats_data.BASE_EXP_TABLE),
         "job_exp_len": len(stats_data.JOB_EXP_TABLE[1]),
         "mvp_kinds": [m.name if m.mvp else None for m in monster_data.MONSTERS],
+        "cards": ro_items.card_table_for_client(),  # ro4-cards (docs/cards_wire.md): the card album table
     }
 
 
@@ -209,6 +213,13 @@ def welcome_message(slot: int, tick_ms: int, maps: tuple[str, str], static: dict
     if static:
         msg.update(static)
     return msg
+
+
+def card_message(item: int, kind: int, finder: str | None, tick: int) -> dict:
+    """S->C `card` (docs/cards_wire.md): a world-wide announcement that a monster dropped a card. `finder` is the
+    finder's name, None for a bot or nobody (shown as 'Someone')."""
+    return {"t": "card", "item": item, "kind": kind, "finder": finder, "tick": tick,
+            "mvp": item in item_data.MVP_CARDS, "text": ro_items.announce_text(finder, item)}
 
 
 _ANIM_COLS = ("action", "face", "start_tick", "dur_ms", "speed_ms", "hit")
@@ -230,7 +241,7 @@ def entity_rows(ids: np.ndarray, tab: dict, names: dict) -> list[dict]:
         if anim is not None and k < 100:  # docs/anim_wire.md: a, d, t, m, s and h only on a hit this tick
             ent.update(zip(_ANIM_KEYS, (col[i] for col in anim[:5])))
             if anim[5][i]:  # ro3-wire: hit column -1 = a swing missed this tick, sent as h: 0
-                ent["h"] = max(anim[5][i], 0)
+                ent["h"] = wire_hit(anim[5][i])
         if k == 0:
             ent["name"] = names.get(e, "bot")
         elif k >= 100:
@@ -257,6 +268,28 @@ def _pairs(row: np.ndarray, *more: np.ndarray) -> list[list[int]]:
     idx = np.flatnonzero(row > 0)
     cols = [idx.tolist(), row[idx].tolist()] + [m[idx].tolist() for m in more]
     return [list(t) for t in zip(*cols)]
+
+
+def wire_hit(hit: int) -> int:
+    """The `h` value of an entity row from the engine's hit column (docs/anim_wire.md): -1 (every swing missed) is 0
+    = Miss, a crit (ro4-pvp: the engine sends -damage, always <= -2) stays negative, a plain hit is its damage."""
+    return 0 if hit == -1 else int(hit)
+
+
+def pvp_world() -> dict:
+    """welcome.world.pvp (ro4-pvp): the arena floor box and its gate (PvP always on there) and the per-zone PvP
+    flags (fields need both players PK-enabled; towns never)."""
+    return {"arena": world_layout.arena_box().tolist(), "gate": world_layout.arena_gate().tolist(),
+            "zones": [bool(f) for f in world_layout.pvp_zone()]}
+
+
+def _pvp_you(pull: dict, slot: int) -> dict:
+    """snap.you PvP fields (ro4-pvp): pvp = PK flag, pvp_kills, pvp_deaths; absent when the pull has no pvp rows."""
+    pv = pull.get("pvp")
+    if pv is None:
+        return {}
+    return {"pvp": bool(pv["pk"][slot]), "pvp_kills": int(pv["pvp_kills"][slot]),
+            "pvp_deaths": int(pv["pvp_deaths"][slot])}
 
 
 def ro_you(pull: dict, slot: int) -> dict:
@@ -288,6 +321,7 @@ def ro_you(pull: dict, slot: int) -> dict:
         "craft": {"level": cr["level"][slot].tolist(), "exp": cr["exp"][slot].tolist()},
         "party": int(pa["party_id"][slot]), "leader": bool(pa["leader"][slot]),
         **_anim_you(pull, slot),
+        **_pvp_you(pull, slot),
     }
 
 
@@ -452,7 +486,7 @@ def decode_snap_bin(data: bytes) -> dict | None:
         if anim and k < 100:
             ent.update(a=a, d=d, t=t, m=m, s=s)
             if hit:
-                ent["h"] = max(hit, 0)  # -1 (a miss) decodes as h: 0
+                ent["h"] = wire_hit(hit)  # -1 (a miss) decodes as h: 0, a crit stays negative
         if k == 0:
             ent["name"] = names.get(str(e_id), "bot")
         elif k < 100:

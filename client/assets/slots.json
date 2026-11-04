@@ -411,211 +411,73 @@
    ]
   },
   "item.gold_coin": {
-   "path": "res://assets/kenney/tiny-town/tilemap_packed.png",
-   "region": [
-    144,
-    112,
-    16,
-    16
-   ]
+   "path": "res://assets/icons/gold_coin.png"
   },
   "item.meat": {
-   "path": "res://assets/kenney/tiny-town/tilemap_packed.png",
-   "region": [
-    160,
-    128,
-    16,
-    16
-   ]
+   "path": "res://assets/icons/meat.png"
   },
   "item.sword": {
-   "path": "res://assets/kenney/tiny-dungeon/tilemap_packed.png",
-   "region": [
-    160,
-    128,
-    16,
-    16
-   ]
+   "path": "res://assets/icons/sword.png"
   },
   "item.potion_red": {
-   "path": "res://assets/kenney/tiny-dungeon/tilemap_packed.png",
-   "region": [
-    112,
-    144,
-    16,
-    16
-   ]
+   "path": "res://assets/icons/potion_red.png"
   },
   "item.potion_blue": {
-   "path": "res://assets/kenney/tiny-dungeon/tilemap_packed.png",
-   "region": [
-    128,
-    144,
-    16,
-    16
-   ]
+   "path": "res://assets/icons/potion_blue.png"
   },
   "item.dagger": {
-   "path": "res://assets/kenney/tiny-dungeon/tilemap_packed.png",
-   "region": [
-    112,
-    128,
-    16,
-    16
-   ]
+   "path": "res://assets/icons/dagger.png"
   },
   "item.bow": {
-   "path": "res://assets/kenney/tiny-town/tilemap_packed.png",
-   "region": [
-    160,
-    144,
-    16,
-    16
-   ]
+   "path": "res://assets/icons/bow.png"
   },
   "item.staff": {
-   "path": "res://assets/kenney/tiny-dungeon/tilemap_packed.png",
-   "region": [
-    144,
-    160,
-    16,
-    16
-   ]
+   "path": "res://assets/icons/staff.png"
   },
   "item.mace": {
-   "path": "res://assets/kenney/tiny-dungeon/tilemap_packed.png",
-   "region": [
-    144,
-    144,
-    16,
-    16
-   ]
+   "path": "res://assets/icons/mace.png"
   },
   "item.axe": {
-   "path": "res://assets/kenney/tiny-dungeon/tilemap_packed.png",
-   "region": [
-    160,
-    144,
-    16,
-    16
-   ]
+   "path": "res://assets/icons/axe.png"
   },
   "item.shield": {
-   "path": "res://assets/kenney/tiny-dungeon/tilemap_packed.png",
-   "region": [
-    80,
-    128,
-    16,
-    16
-   ]
+   "path": "res://assets/icons/shield.png"
   },
   "item.armor": {
-   "path": "res://assets/kenney/tiny-dungeon/tilemap_packed.png",
-   "region": [
-    96,
-    128,
-    16,
-    16
-   ]
+   "path": "res://assets/icons/armor.png"
   },
   "item.hat": {
-   "path": "res://assets/kenney/tiny-dungeon/tilemap_packed.png",
-   "region": [
-    48,
-    112,
-    16,
-    16
-   ]
+   "path": "res://assets/icons/hat.png"
   },
   "item.boots": {
-   "path": "res://assets/kenney/tiny-town/tilemap_packed.png",
-   "region": [
-    112,
-    160,
-    16,
-    16
-   ]
+   "path": "res://assets/icons/boots.png"
   },
   "item.garment": {
-   "path": "res://assets/kenney/tiny-dungeon/tilemap_packed.png",
-   "region": [
-    96,
-    80,
-    16,
-    16
-   ]
+   "path": "res://assets/icons/garment.png"
   },
   "item.ring": {
-   "path": "res://assets/kenney/tiny-dungeon/tilemap_packed.png",
-   "region": [
-    128,
-    64,
-    16,
-    16
-   ]
+   "path": "res://assets/icons/ring.png"
   },
   "item.card": {
-   "path": "res://assets/kenney/tiny-dungeon/tilemap_packed.png",
-   "region": [
-    16,
-    80,
-    16,
-    16
-   ]
+   "path": "res://assets/icons/card.png"
   },
   "item.ore": {
-   "path": "res://assets/kenney/tiny-dungeon/tilemap_packed.png",
-   "region": [
-    0,
-    32,
-    16,
-    16
-   ]
+   "path": "res://assets/icons/ore.png"
   },
   "item.herb": {
-   "path": "res://assets/kenney/tiny-town/tilemap_packed.png",
-   "region": [
-    80,
-    16,
-    16,
-    16
-   ]
+   "path": "res://assets/icons/herb.png"
   },
   "item.fish": {
-   "path": "res://assets/kenney/tiny-town/tilemap_packed.png",
-   "region": [
-    144,
-    160,
-    16,
-    16
-   ]
+   "path": "res://assets/icons/fish.png"
   },
   "item.1": {
-   "path": "res://assets/kenney/tiny-town/tilemap_packed.png",
-   "region": [
-    144,
-    112,
-    16,
-    16
-   ]
+   "path": "res://assets/icons/gold_coin.png"
   },
   "item.2": {
-   "path": "res://assets/kenney/tiny-town/tilemap_packed.png",
-   "region": [
-    160,
-    128,
-    16,
-    16
-   ]
+   "path": "res://assets/icons/meat.png"
   },
   "item.3": {
-   "path": "res://assets/kenney/tiny-dungeon/tilemap_packed.png",
-   "region": [
-    160,
-    128,
-    16,
-    16
-   ]
+   "path": "res://assets/icons/sword.png"
   },
   "ui.panel": {
    "path": "res://assets/kenney/ui-pack-rpg-expansion/panel_blue.png"

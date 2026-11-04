@@ -386,8 +386,9 @@ def town_decor():
     boxes, centers = town_boxes().tolist(), town_centers().tolist()
     for t, ((x0, y0, x1, y1), (cx, cy)) in enumerate(zip(boxes, centers)):
         sh = TOWN_STREET_HALF[t]
-        if t == 0:      # Solmera: castle block NW (the fountains are town_fountains)
+        if t == 0:      # Solmera: castle block NW (the fountains are town_fountains), then the PvP arena ring SW
             out.append((t, "wall", x0 + 4, y0 + 4, cx - sh - 3, cy - ph - 4, 1, 1))
+            out += [(t, "wall", ax0, ay0, ax1, ay1, 1, 1) for ax0, ay0, ax1, ay1 in arena_walls()]  # ro4-pvp
         elif t == 1:    # Lunavell: a 2-wide moat ring just outside the plaza (the streets bridge it)
             a, b = ph + 1, ph + 2
             out += [(t, "water", cx - b, cy - b, cx + b, cy - a, 1, 1), (t, "water", cx - b, cy + a, cx + b, cy + b, 1, 1),
@@ -431,3 +432,69 @@ def _check_shops_inside():
 
 
 _check_shops_inside()
+
+
+# ----------------------------------------------------------------------------------------------
+# PvP (ro4-pvp). Every zone carries a PvP flag (`pvp_zone`): towns never, dungeons never, fields only when
+# PVP_FIELDS is on (off in v1, where a field fight would also need both players PK-enabled). The arena is a
+# walled ARENA_SIDE square in the south-west quadrant of Solmera (between the plaza and the south wall, west of
+# the north-south street) with an ARENA_GATE_TILES gap in its north wall: PvP is always on inside it, PK flag or
+# not. It is drawn as town decor (four wall rects, appended after the castle) and stays part of the Solmera zone.
+# ----------------------------------------------------------------------------------------------
+PVP_FIELDS = False         # v1: no open-field PvP
+ARENA_TOWN = 0             # TOWNS index (Solmera)
+ARENA_SIDE = 16            # wall ring side in tiles (interior ARENA_SIDE - 2 square)
+ARENA_WALL_GAP = 3         # tiles between the town wall ring and the arena's west wall
+ARENA_PLAZA_GAP = 1        # floor rows between the plaza edge and the arena's north wall
+ARENA_GATE_TILES = 2       # gate width, at the east end of the north wall (the side facing the temple)
+
+
+def pvp_zone():
+    """Return bool [N_ZONES]: PvP allowed in this zone (outside the arena; both players must be PK-enabled)."""
+    return np.array([kind == ZONE_FIELD and PVP_FIELDS for _, kind, *_ in ZONES], bool)
+
+
+def arena_ring():
+    """Return (x0, y0, x1, y1) inclusive bounds of the arena's wall ring."""
+    bx0 = int(town_boxes()[ARENA_TOWN][0])
+    cy = int(town_centers()[ARENA_TOWN][1])
+    x0 = bx0 + 1 + ARENA_WALL_GAP
+    y0 = cy + plaza_half() + 1 + ARENA_PLAZA_GAP
+    return x0, y0, x0 + ARENA_SIDE - 1, y0 + ARENA_SIDE - 1
+
+
+def arena_box():
+    """Return int32 [4]: inclusive (x0, y0, x1, y1) of the arena floor (inside the ring): PvP always on here."""
+    x0, y0, x1, y1 = arena_ring()
+    return np.array([x0 + 1, y0 + 1, x1 - 1, y1 - 1], np.int32)
+
+
+def arena_gate():
+    """Return int32 [ARENA_GATE_TILES, 2]: the gate tiles in the north wall (walkable floor)."""
+    x0, y0, x1, _ = arena_ring()
+    return np.array([(x1 - ARENA_GATE_TILES + k, y0) for k in range(ARENA_GATE_TILES)], np.int32)
+
+
+def arena_walls():
+    """Return [(x0, y0, x1, y1)] inclusive wall rects of the ring, the gate left open."""
+    x0, y0, x1, y1 = arena_ring()
+    gx0 = x1 - ARENA_GATE_TILES
+    return [(x0, y0, gx0 - 1, y0), (x1, y0, x1, y0), (x0, y1, x1, y1), (x0, y0, x0, y1), (x1, y0, x1, y1)]
+
+
+def in_arena(pos):
+    """Return bool [N]: each tile pos int [N, 2] is on the arena floor."""
+    x0, y0, x1, y1 = arena_box().tolist()
+    return (pos[:, 0] >= x0) & (pos[:, 0] <= x1) & (pos[:, 1] >= y0) & (pos[:, 1] <= y1)
+
+
+def _check_arena_inside():
+    x0, y0, x1, y1 = arena_ring()
+    bx0, by0, bx1, by1 = town_boxes()[ARENA_TOWN].tolist()
+    cx = int(town_centers()[ARENA_TOWN][0])
+    assert x0 > bx0 + 1 and y1 < by1 - 1, "arena runs into the town wall"
+    assert x1 < cx - TOWN_STREET_HALF[ARENA_TOWN], "arena runs into the north-south street"
+    assert y0 > int(town_centers()[ARENA_TOWN][1]) + plaza_half(), "arena runs into the plaza"
+
+
+_check_arena_inside()

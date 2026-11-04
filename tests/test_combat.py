@@ -3,7 +3,7 @@ import jax.numpy as jnp
 
 from game import ro_items, ro_stats
 from game.combat import combat
-from game.config import PLAYER_MAX_HP, MONSTER_ATTACK_COOLDOWN, MONSTER_HP, MONSTER_RESPAWN_TICKS
+from game.config import PLAYER_MAX_HP, TICK_MS, MONSTER_ATTACK_COOLDOWN, MONSTER_HP, MONSTER_RESPAWN_TICKS
 from game.data import monsters as mdata
 from game.state import empty_inputs, make_empty_world
 
@@ -192,7 +192,8 @@ def test_monster_hits_adjacent_player_in_atk_range():
     assert all(max(1, int(mdata.ATK_MIN[kind]) - soft) <= d <= int(mdata.ATK_MAX[kind]) - soft for d in hits)
     assert len(set(hits)) > 1  # uniform in a range, not a constant
     o = combat(w, empty_inputs())
-    assert int(o["monsters"]["attack_cd"][0]) == MONSTER_ATTACK_COOLDOWN
+    period = max(1, (int(mdata.ADELAY_MS[kind]) + TICK_MS // 2) // TICK_MS)  # RO attack delay per kind (round 4)
+    assert int(o["monsters"]["attack_cd"][0]) == period
     hp1 = int(o["players"]["hp"][0])
     o2 = combat(o, empty_inputs())
     assert int(o2["players"]["hp"][0]) == hp1  # on cooldown

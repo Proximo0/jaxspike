@@ -59,5 +59,5 @@ func test_loads_art_anim_layout_when_present() -> void:
 	var s: ActSheet = ActSheet.load_act("res://assets/anim/blobbin/act.json")
 	assert_true(s != null, "blobbin act loads")
 	assert_true(s.has_action("walk"))
-	assert_eq(int(s.actions["walk"]["rows"]), 5)
+	assert_true(int(s.actions["walk"]["rows"]) == 5 or int(s.actions["walk"]["rows"]) == 8, "5 mirrored or 8 drawn directions")
 	assert_true(s.frame_texture(s.resolve(ClipSelect.WALK, 6, false)["anim"], 0) != null)

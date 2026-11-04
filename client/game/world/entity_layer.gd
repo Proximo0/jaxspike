@@ -47,6 +47,11 @@ var _damage: DamageLayer = null
 var _recs: Dictionary = {}  ## id -> LayerEntityRec
 var _rec_list: Array[LayerEntityRec] = []  ## _recs values, rebuilt when ids come or go
 var _recs_dirty: bool = false
+var card_fx: CardSparkle = null  ## ro4-cards: sparkles over card drops, made on the first one
+## ro4-pvp: the arena floor (welcome.world.pvp.arena; Hud.set_welcome sets it). Players standing on it, or whose
+## row carries `pk: true`, can be attacked: their name is drawn in PVP_NAME_COLOR.
+static var pvp_arena: Rect2i = Rect2i()
+const PVP_NAME_COLOR: Color = Color(1.0, 0.36, 0.3)
 
 
 ## What the per-frame loop needs about one entity, without dictionary lookups.
@@ -79,6 +84,7 @@ class LayerEntityRec:
 	var c_tile_px: float = -1.0
 	var c_label_px: int = -1
 	var c_animated: bool = false
+	var c_pvp: bool = false
 	# Clip cache of the newest key, read once per key change instead of per frame.
 	var i_frames: int = 1
 	var i_delay: float = 100.0
@@ -170,6 +176,7 @@ func refresh(now_ms: float) -> void:
 		if rec.animated:
 			_animate(rec, render)
 	_draw_pops(render, tile_px)
+	_card_sparkles(render, tile_px)  # ro4-cards
 
 
 func _sync_all(render: float, tile_px: float, label_px: int) -> void:
@@ -237,7 +244,8 @@ func _update(id: int, render: float, tile_px: float, label_px: int) -> void:
 	var job: int = int(e.get("job", 0))
 	var mkind: int = int(e.get("mkind", -1))
 	var own: bool = id == own_id
-	if not (rec.c_valid and rec.c_kind == kind and rec.c_hp == hp and rec.c_max_hp == max_hp
+	var pvp: bool = cat == ViewMath.CAT_PLAYER and pvp_marked(e)
+	if not (rec.c_valid and rec.c_kind == kind and rec.c_hp == hp and rec.c_max_hp == max_hp and rec.c_pvp == pvp
 			and rec.c_own == own and rec.c_tile_px == tile_px and rec.c_label_px == label_px
 			and rec.c_animated == animated and rec.c_job == job and rec.c_mkind == mkind
 			and typeof(rec.c_name) == typeof(nm) and rec.c_name == nm
@@ -254,6 +262,10 @@ func _update(id: int, render: float, tile_px: float, label_px: int) -> void:
 		rec.c_mkind = mkind
 		rec.c_name = nm
 		rec.c_item = item
+		rec.c_pvp = pvp
+		if "label_color" in sprite:  # ro4-pvp: EntitySprite draws the name in label_color when it has one
+			sprite.set("label_color", PVP_NAME_COLOR if pvp else EntitySprite.LABEL_COLOR)
+			sprite.queue_redraw()
 		var label: String = String(nm) if cat == ViewMath.CAT_PLAYER else ""
 		var tex: Texture2D = null if animated else entity_texture(e, cat)
 		sprite.configure(kind, own, label, ViewMath.hp_fraction(hp, max_hp),
@@ -261,6 +273,15 @@ func _update(id: int, render: float, tile_px: float, label_px: int) -> void:
 	sprite.visible = true
 	sprite.z_index = 10 if id == own_id else 2 - mini(cat, ViewMath.CAT_DROP)
 	configured_count += 1
+
+
+## ro4-pvp: true when the row is PvP-attackable: it carries `pk: true`, or its tile is on the arena floor.
+static func pvp_marked(e: Dictionary) -> bool:
+	if bool(e.get("pk", false)):
+		return true
+	if pvp_arena.size == Vector2i.ZERO or not e.has("pos"):
+		return false
+	return pvp_arena.has_point(Vector2i(ViewMath.to_vec(e["pos"])))
 
 
 ## Picks and sets the clip frame of one animated entity at server time `render`.
@@ -378,6 +399,25 @@ func _resolve_hits(render: float) -> void:
 		if target != null and target.action == ClipSelect.HURT:
 			target.flinch_ms = at  # RO: the flinch lands with the number, at the attacker's atk frame
 	_hits.clear()
+
+
+## ro4-cards: gold sparkles over card drops (ids from CardAlbum.card_ids, the last welcome.cards).
+func _card_sparkles(render: float, tile_px: float) -> void:
+	var pts := PackedVector2Array()
+	if not CardAlbum.card_ids.is_empty():
+		for rec: LayerEntityRec in _rec_list:
+			if rec.cat == ViewMath.CAT_DROP and rec.sprite != null and rec.sprite.visible \
+					and (typeof(rec.c_item) == TYPE_INT or typeof(rec.c_item) == TYPE_FLOAT) \
+					and CardAlbum.is_card(int(rec.c_item)):
+				pts.append(rec.sprite.position)
+	if card_fx == null:
+		if pts.is_empty():
+			return
+		card_fx = CardSparkle.new()
+		card_fx.name = "CardSparkle"
+		card_fx.z_index = 20
+		add_child(card_fx)
+	card_fx.show_at(pts, render, tile_px)
 
 
 func _draw_pops(render: float, tile_px: float) -> void:

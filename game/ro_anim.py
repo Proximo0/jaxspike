@@ -46,6 +46,9 @@ def make_state():
         # ro-anim's own bookkeeping (not on the wire)
         "swing_tick": jnp.full((N,), -(2**30), jnp.int32), "last_pos": jnp.zeros((N, 2), jnp.int32),
         "still": z(jnp.int16),
+        # ro4-pvp: True where a hit this tick was a critical (combat rewrites the column every tick); the wire sends
+        # such a hit as a negative h (a crit deals at least 2, so -1 stays the Miss marker)
+        "crit": z(jnp.bool_),
     }
 
 
@@ -212,4 +215,5 @@ def wire_fields(world):
     a = world["anim"]
     return {"action": a["action"].astype(jnp.int32), "face": a["face"].astype(jnp.int32),
             "start_tick": a["start_tick"], "dur_ms": a["dur_ms"].astype(jnp.int32), "speed_ms": speed,
-            "hit": a["hit_dmg"]}
+            "hit": jnp.where(a["crit"] & (a["hit_dmg"] > 0), -a["hit_dmg"], a["hit_dmg"]) if "crit" in a
+            else a["hit_dmg"]}  # ro4-pvp: crit = negative h

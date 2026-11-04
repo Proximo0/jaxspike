@@ -36,6 +36,22 @@ def monsters_per_band(worlds):
     return np.asarray(jax.vmap(one)(worlds).sum(0))
 
 
+def cards_in_world(worlds):
+    """ro4-cards: card units that exist across the batch (carried stacks, socketed cards, card piles on the ground).
+
+    A proxy for "cards found" while bots.runner has no per-tick card counter: a pile that expires before anyone
+    picks it up is missed, and a card sold to a shop leaves the count. Use stats["cards"] when the runner has it.
+    """
+    from game.data import items as item_data
+    inv = worlds["players"]["inv"]
+    is_card = item_data.KIND[inv] == item_data.KIND_CARD
+    carried = jnp.sum(jnp.where(is_card, jnp.maximum(worlds["items"]["inv_count"], 1), 0))
+    socketed = jnp.sum(item_data.KIND[worlds["items"]["inv_cards"]] == item_data.KIND_CARD)
+    d = worlds["drops"]
+    ground = jnp.sum(d["active"] & (item_data.KIND[d["item"]] == item_data.KIND_CARD))
+    return int(carried + socketed + ground)
+
+
 def check_invariants(worlds):
     """Return a list of violation strings across the batch (empty means clean)."""
     w = jax.device_get(worlds)
@@ -112,17 +128,21 @@ def main(batch=8, chunks=10, ticks_per_chunk=100, seed=0):
         items = int(jnp.sum(stats["items"]))
         tick = (c + 1) * ticks_per_chunk
         per_bot = 1000 / max(n_bots * tick, 1)  # cumulative counters -> per bot per 1000 ticks
+        lvl = float(jnp.mean(worlds["stats"]["base_level"][:, :n_bots // batch]))
         print(
             f"chunk {c + 1:2d} (tick {tick:5d}): "
             f"kills={kills} deaths={deaths} alive_players={alive} items_held={items} "
             f"invariant_violations={len(probs)} | per bot per 1k ticks: kills={kills * per_bot:.2f} "
-            f"deaths={deaths * per_bot:.2f}",
+            f"deaths={deaths * per_bot:.2f} | base lv {lvl:.2f} | monsters by band {monsters_per_band(worlds) / batch}",
             flush=True,
         )
     dt = time.perf_counter() - t0
     print(f"total {chunks * ticks_per_chunk} ticks x {batch} worlds in {dt:.1f}s")
+    n_cards = int(jnp.sum(stats["cards"])) if "cards" in stats else cards_in_world(worlds)  # ro4-cards column
+    print(f"cards found {n_cards} = {n_cards * 1000 / max(kills, 1):.3f} per 1000 kills "
+          f"(expected 0.100: every card is 1 in 10000; {'runner counter' if 'cards' in stats else 'held proxy'})")
     print(f"kills/bot/1k {kills * per_bot:.2f} deaths/bot/1k {deaths * per_bot:.2f} "
-          f"(targets 3-5 and 0.3-0.6 at base levels 1-10, docs/round3_contract.md); "
+          f"(targets 3-5 and 0.3-0.6 at base levels 1-10, docs/round4_contract.md); "
           f"base level mean {float(jnp.mean(worlds['stats']['base_level'][:, :n_bots // batch])):.2f}")
     if total_problems:
         print("FIRST VIOLATIONS:")

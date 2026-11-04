@@ -28,6 +28,7 @@ var job_exp_label: Label
 var ryn_label: Label
 var weight_label: Label
 var safe_badge: Label
+var pvp_badge: Label  ## ro4-pvp: "PvP" on the arena floor, "PK" with the flag on, then kills/deaths
 var stats: StatSection
 var stats_hint: Label
 var _notice := NoticeFeed.new()
@@ -60,6 +61,12 @@ func _ready() -> void:
 	safe_badge.theme_type_variation = &"InfoBadge"
 	safe_badge.visible = false
 	head.add_child(safe_badge)
+	pvp_badge = Label.new()
+	pvp_badge.name = "PvpBadge"
+	pvp_badge.theme_type_variation = &"InfoBadge"
+	pvp_badge.add_theme_color_override("font_color", EntityLayer.PVP_NAME_COLOR)
+	pvp_badge.visible = false
+	head.add_child(pvp_badge)
 	job_label = Label.new()
 	box.add_child(job_label)
 	level_label = Label.new()
@@ -148,6 +155,7 @@ func bind(s: NetSession) -> void:
 
 func set_welcome(msg: Dictionary) -> void:
 	welcome = msg
+	EntityLayer.pvp_arena = arena_rect(msg)
 	if stats != null:
 		stats.set_welcome(msg)
 	if minimap != null:
@@ -191,6 +199,9 @@ func refresh(delta: float = 0.0) -> void:
 	ryn_label.text = r["ryn"]
 	weight_label.text = r["weight"]
 	safe_badge.visible = bool(you.get("safe", false))
+	var pvp_text: String = pvp_badge_text(you, EntityLayer.pvp_arena)
+	pvp_badge.text = pvp_text
+	pvp_badge.visible = pvp_text != ""
 	_notice.observe(session.store.snaps, session.store.notice)
 	notice_label.text = _notice.hud_line(delta)
 	if stats.visible:
@@ -235,6 +246,34 @@ static func info_rows(you: Dictionary, own: Dictionary, welcome_msg: Dictionary)
 		"ryn": "Ryn %s" % ryn_text(int(you.get("ryn", 0))),
 		"weight": weight_text(you),
 	}
+
+
+## ro4-pvp: the arena floor as a Rect2i from welcome.world.pvp.arena ([x0, y0, x1, y1] inclusive); empty without it.
+static func arena_rect(welcome_msg: Dictionary) -> Rect2i:
+	var world: Variant = welcome_msg.get("world")
+	if typeof(world) != TYPE_DICTIONARY:
+		return Rect2i()
+	var pvp: Variant = (world as Dictionary).get("pvp")
+	if typeof(pvp) != TYPE_DICTIONARY:
+		return Rect2i()
+	var b: Variant = (pvp as Dictionary).get("arena")
+	if typeof(b) != TYPE_ARRAY or (b as Array).size() != 4:
+		return Rect2i()
+	var a: Array = b
+	return Rect2i(int(a[0]), int(a[1]), int(a[2]) - int(a[0]) + 1, int(a[3]) - int(a[1]) + 1)
+
+
+## ro4-pvp badge: "PvP" on the arena floor, "PK" with the PK flag on elsewhere, "" otherwise; " K/D" appended once
+## the player has a PvP record (you.pvp_kills / you.pvp_deaths).
+static func pvp_badge_text(you: Dictionary, arena: Rect2i) -> String:
+	var pos := Vector2i(ViewMath.to_vec(you.get("pos", [-1, -1])))
+	var in_arena: bool = arena.size != Vector2i.ZERO and you.has("pos") and arena.has_point(pos)
+	var text: String = "PvP" if in_arena else ("PK" if bool(you.get("pvp", false)) else "")
+	var k: int = int(you.get("pvp_kills", 0))
+	var d: int = int(you.get("pvp_deaths", 0))
+	if text != "" and k + d > 0:
+		text += " %d/%d" % [k, d]
+	return text
 
 
 ## RO shows exp as a percentage with one decimal; a maxed level (next 0) reads "MAX".
