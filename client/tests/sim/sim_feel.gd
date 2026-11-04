@@ -2,7 +2,9 @@ extends "res://tests/sim/sim_base.gd"
 ## Team client-feel over FakeLink: a GameView fed a welcome (128 map with a town, a dungeon box, a warp and a kafra)
 ## and snaps, with the feel pieces wired the way the lead's game_view lines will wire them. Checks the basic info
 ## window, the zone banner on entry (town -> dungeon -> field), the minimap texture and markers, the path preview,
-## the target ring, the smooth zoom, the chat window's System tab and the audio cues. With FEEL_SHOT=<png path> in
+## the target ring, the smooth zoom, the chat window's System tab and the audio cues; round 3: the stat section under
+## the info window (C), notices once, F2 camera_zoom live, warp camera snap, skill bar grey-out, cast bar seconds and
+## RO damage numbers. With FEEL_SHOT=<png path> in
 ## a windowed run it also saves a screenshot of the view.
 
 const MAP_N: int = 128
@@ -143,6 +145,94 @@ func run() -> Array:
 	link.push_inbound(snap_text(4, Vector2i(64, 100), {"level": 13}, ""))
 	await _feel_frames(2)
 	rows.append(row("banner_field", hud.banner.title.text == "Prontera Field" and hud.banner.zone["kind"] == "field", hud.banner.title.text))
+
+	# ---- round 3 (ro3-client) ----
+	# Warp camera snap: the 1-tile step (snap 2) was no warp, the two jumps (snaps 3 and 4) were.
+	rows.append(row("warp_snaps_counted", view.player_input.follow.snaps == 2, "snaps=%d" % view.player_input.follow.snaps))
+	link.push_inbound(snap_text(5, Vector2i(65, 100), {"level": 13, "warped": true}, ""))
+	await _feel_frames(1)
+	var cam_tile: Vector2 = ViewMath.tile_center(Vector2(65, 100), view._tile_px())
+	rows.append(row("warp_flag_snaps_camera", view.player_input.follow.snaps == 3 and view.camera.position == cam_tile,
+			"snaps=%d cam=%s" % [view.player_input.follow.snaps, str(view.camera.position)]))
+	link.push_inbound(snap_text(6, Vector2i(66, 100), {"level": 13}, ""))
+	await _feel_frames(1)
+	rows.append(row("warp_flag_one_tick", view.player_input.follow.snaps == 3, "snaps=%d" % view.player_input.follow.snaps))
+
+	# Notices: the same text in two snaps is two System lines; one snap over many frames is one; the HUD line holds.
+	var sys0: int = chat.visible_lines(ChatWindow.TAB_SYSTEM).size()
+	link.push_inbound(snap_text(7, Vector2i(66, 100), {"level": 13}, "blocked"))
+	await _feel_frames(4)
+	link.push_inbound(snap_text(8, Vector2i(66, 100), {"level": 13}, "blocked"))
+	await _feel_frames(4)
+	link.push_inbound(snap_text(9, Vector2i(66, 100), {"level": 13}, ""))
+	await _feel_frames(2)
+	var sys1: int = chat.visible_lines(ChatWindow.TAB_SYSTEM).size()
+	rows.append(row("notice_once_per_snap", sys1 == sys0 + 2 and hud.notice_label.text == "blocked",
+			"lines %d -> %d hud=%s" % [sys0, sys1, hud.notice_label.text]))
+
+	# Stat section under the info window: C shows it with the stats, C hides it again.
+	link.push_inbound(snap_text(10, Vector2i(66, 100), {"level": 13, "stats": [5, 4, 3, 2, 1, 1], "stat_points": 3, "skill_points": 2}, ""))
+	await _feel_frames(2)
+	var key := InputEventKey.new()
+	key.physical_keycode = KEY_C
+	key.pressed = true
+	hud.call("_unhandled_key_input", key)
+	await _feel_frames(2)
+	var shown: bool = hud.stats.visible and hud.stats.stat_labels[0].text == "5" and hud.stats.points_label.text.contains("3")
+	var info_h: float = hud.info.size.y
+	hud.call("_unhandled_key_input", key)
+	await _feel_frames(2)
+	rows.append(row("status_section_toggle", shown and not hud.stats.visible and hud.info.size.y < info_h,
+			"stat0=%s open=%.0f closed=%.0f" % [hud.stats.stat_labels[0].text, info_h, hud.info.size.y]))
+
+	# F2 Tuning camera_zoom applies live (eased), the wheel still works afterwards.
+	Tuning.shared().set_value("camera_zoom", 1.3)
+	for _i: int in range(600):
+		if is_equal_approx(view.camera.zoom.x, 1.3):
+			break
+		await _feel_frames(1)
+	var tuned_ok: bool = is_equal_approx(view.camera.zoom.x, 1.3)
+	view.player_input.zoom.wheel(1)
+	await _feel_frames(2)
+	rows.append(row("tuning_zoom_live", tuned_ok and view.camera.zoom.x > 1.3, "zoom=%.3f" % view.camera.zoom.x))
+	Tuning.shared().reset()
+
+	# Skill bar greys out during after_delay (not during a cast); the cast bar reads cast_left as seconds.
+	var cast: CastBar = null
+	for p: Node in view.panels:
+		if p is CastBar:
+			cast = p as CastBar
+	link.push_inbound(snap_text(11, Vector2i(66, 100), {"level": 13, "after_delay": 5}, ""))
+	await _feel_frames(2)
+	var grey: bool = view.skill_bar.greyed and view.skill_bar.buttons[0].modulate == SkillBar.GREY
+	link.push_inbound(snap_text(12, Vector2i(66, 100), {"level": 13, "after_delay": 0, "casting": 2, "cast_left": 4}, ""))
+	await _feel_frames(2)
+	var casting_grey: bool = (not view.skill_bar.greyed and cast != null and cast.visible and cast.time_label.text.begins_with("0.")
+			and cast.track.seconds_left(100) > 0.25 and cast.track.seconds_left(100) <= 0.4)
+	link.push_inbound(snap_text(13, Vector2i(66, 100), {"level": 13, "after_delay": 0, "casting": 0, "cast_left": 0}, ""))
+	await _feel_frames(2)
+	rows.append(row("skill_bar_after_delay", grey and casting_grey and not view.skill_bar.greyed and not cast.visible,
+			"grey=%s casting=%s time=%s" % [grey, casting_grey, cast.time_label.text if cast != null else "-"]))
+
+	# RO damage numbers: a hit on the monster (white), a hit on you (red) and a miss on the monster; fed from `h`.
+	var dmg_snap: Dictionary = Codec.decode(snap_text(14, Vector2i(66, 100), {"level": 13, "hp": 140}, ""))
+	(dmg_snap["ents"][0] as Dictionary)["h"] = 10
+	(dmg_snap["ents"][2] as Dictionary)["h"] = 7
+	link.push_inbound(Codec.encode(dmg_snap))
+	await _feel_frames(2)
+	var miss_snap: Dictionary = Codec.decode(snap_text(15, Vector2i(66, 100), {"level": 13, "hp": 140}, ""))
+	(miss_snap["ents"][2] as Dictionary)["h"] = 0
+	link.push_inbound(Codec.encode(miss_snap))
+	await _feel_frames(3)
+	var seen: Dictionary = {}
+	for p2: Dictionary in view.entity_layer.shown_pops:
+		seen[[int(p2["id"]), int(p2["dmg"])]] = true
+	var pending: int = view.entity_layer.pops.pending()
+	rows.append(row("damage_numbers_fed", (seen.has([0, 10]) or pending > 0) and (seen.has([601, 7]) or pending > 0)
+			and DamageStyle.kind_of(10, true, false) == DamageStyle.OWN and DamageStyle.kind_of(7, false, false) == DamageStyle.NORMAL
+			and DamageStyle.kind_of(0, false, false) == DamageStyle.MISS and DamageStyle.text_of(0, DamageStyle.MISS) == "Miss"
+			and DamageStyle.color_of(DamageStyle.CRIT) != DamageStyle.color_of(DamageStyle.NORMAL),
+			"shown=%s pending=%d" % [str(seen.keys()), pending]))
 
 	var shot: String = OS.get_environment("FEEL_SHOT")
 	if shot != "" and DisplayServer.get_name() != "headless":

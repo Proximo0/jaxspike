@@ -17,6 +17,22 @@ func test_fake_link_lag_ordering() -> void:
 	assert_eq(l.pending(), 0)
 
 
+func test_fake_link_mixed_bytes_and_text_order() -> void:
+	var l := FakeLink.new()
+	l.connect_to("x")
+	l.push_inbound("a")
+	l.push_inbound_bytes(PackedByteArray([1, 2]))
+	l.push_inbound("b")
+	var p: Array = l.poll_packets()
+	assert_eq(p.size(), 3)
+	assert_eq(p[0], "a")
+	assert_eq(p[1], PackedByteArray([1, 2]))
+	assert_eq(p[2], "b")
+	l.push_inbound_bytes(PackedByteArray([3]))
+	l.push_inbound("c")
+	assert_eq(l.poll(), ["c"] as Array[String])
+
+
 func test_fake_link_records_outbound_only_when_open() -> void:
 	var l := FakeLink.new()
 	l.send("dropped")

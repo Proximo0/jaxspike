@@ -23,6 +23,25 @@ func test_upsert_moves_and_keeps_prev_pos() -> void:
 	assert_eq(s.notice, "hi")
 
 
+func test_you_warped_is_per_tick() -> void:
+	var s := EntityStore.new()
+	var a: Dictionary = _snap(1, [], [], true)
+	(a["you"] as Dictionary)["warped"] = true
+	s.apply_snap(a)
+	assert_true(s.you["warped"])
+	s.apply_snap(_snap(2, [], [], false))
+	assert_false(s.you["warped"])
+
+
+func test_miss_h_zero_is_kept() -> void:
+	var s := EntityStore.new()
+	var e: Dictionary = _ent(600, 1, 1)
+	e["h"] = 0
+	s.apply_snap(_snap(1, [e], [], true))
+	assert_true(s.get_ent(600).has("h"))
+	assert_eq(int(s.get_ent(600)["h"]), 0)
+
+
 func test_gone_deletes() -> void:
 	var s := EntityStore.new()
 	s.apply_snap(_snap(1, [_ent(600, 1, 1), _ent(5, 2, 2)], [], true))

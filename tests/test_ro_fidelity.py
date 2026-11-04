@@ -94,20 +94,30 @@ def _derived(job=NOV, level=1, **stats):
     return {k: int(v[0]) for k, v in ro_stats.derived(w).items()}
 
 
-@pytest.mark.xfail(reason="engine: ro_stats.derived aspd/aps lines (docs/ro_fidelity.md E1)", strict=False)
 def test_engine_attack_delay_is_two_amotions():
-    # Thief, knife, AGI 1 DEX 1: ASPD 150 + (200-150)*(4+1)/1000 = 150 -> 1 swing/s = 1000 ms = round(1000/TICK) ticks
+    # Thief bare-handed (fist 160), AGI 1 DEX 1: ASPD 200 - 40*995//1000 = 161 -> amotion 390 ms, delay 780 ms
     d = _derived(job=THF)
-    assert d["aspd_ticks"] == (1000 + TICK_MS // 2) // TICK_MS
+    assert d["aspd"] == 161 and d["aspd_ticks"] == (780 + TICK_MS // 2) // TICK_MS
+    # with a knife (150): ASPD 151 -> amotion 490 ms, delay 980 ms
+    from game import ro_stats
+    from game.state import make_empty_world
+    from game.ro_items import make_state as make_items
+    st = ro_stats.make_state()
+    st["job"] = st["job"].at[0].set(THF)
+    w = {**make_empty_world(jax.random.PRNGKey(0)), "stats": st}
+    it = make_items()
+    it["equip"] = it["equip"].at[0, I.EQ_WEAPON].set(0)
+    it["inv_count"] = it["inv_count"].at[0, 0].set(1)
+    w["players"] = {**w["players"], "inv": w["players"]["inv"].at[0, 0].set(I.ITEM_KNIFE)}
+    d = {k: int(v[0]) for k, v in ro_stats.derived({**w, "items": it}).items()}
+    assert d["aspd"] == 151 and d["aspd_ticks"] == (980 + TICK_MS // 2) // TICK_MS
 
 
-@pytest.mark.xfail(reason="engine: ro_stats.derived max_hp/max_sp should read JOB_BASE_*_TABLE_J (E2)", strict=False)
 def test_engine_max_hp_exact():
     assert _derived(job=NOV, level=1)["max_hp"] == 40
     assert _derived(job=SWD, level=50, vit=30)["max_hp"] == 1179 * 130 // 100
 
 
-@pytest.mark.xfail(reason="engine: HIT = BaseLv + DEX, FLEE = BaseLv + AGI, MATK min/max (E3)", strict=False)
 def test_engine_hit_flee_pre_renewal():
     d = _derived(level=10, dex=20, agi=30)
     assert d["hit"] == 10 + 20 and d["flee"] == 10 + 30

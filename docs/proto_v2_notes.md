@@ -64,7 +64,39 @@ window only. `--embedded` (server thread plus one client thread each, one proces
 server: its 480-client runs starve the server of the GIL. `python -m net.server --bench-ticks N [--platform gpu]`
 times the device tick plus host pull at 512 viewers without sockets.
 
-BENCH_TABLE
+### Numbers (2026-11-02, Windows CPU box shared with 11 other sessions at ~90% load, so single runs are noisy)
+Before = the code before netperf2, `--embedded` (the only mode then), JSON. After = `--spawn`, all changes above.
+TICK 100 ms, 20 s windows; bytes = snap payload bytes per client per second; overruns = ticks over budget or late.
+
+| clients | run | snaps/client/s | bytes/client/s | overruns / ticks |
+|---|---|---|---|---|
+| 50 | before, JSON | 7.82 | 14015 | 19 / 146 |
+| 200 | before, JSON | 4.27 (71 of 200 refused at the handshake) | 11633 | 56 / 142 |
+| 480 | before, JSON | not measured (the import broke mid-run) | | |
+| 50 | after, JSON | 10.00 | 7436 | 0 / 200 |
+| 50 | after, bin | 10.00 | 3137 | 7 / 200 (noise: max tick 116 ms at trivial load) |
+| 200 | after, JSON | 10.00 | 15924 | 0 / 200 |
+| 200 | after, bin | 9.80 | 6979 | 3 / 190 |
+| 480 | after, JSON | 9.05 | 28103 | 14 / 180 |
+| 480 | after, bin | 9.98 | 12570 | 0 / 200 |
+| 480 | after, JSON, `--no-pipeline` | 8.14 | 27476 | 28 / 160 |
+| 480 | after, bin, `--no-pipeline` | 8.00 | 12340 | 26 / 160 |
+
+Bytes per client grow with the client count because every bench client starts in one of 5 temple squares: at 480
+each one sees about 100 moving players. Earlier "after" runs with permessage-deflate on: 480 JSON 6.1 snaps/s and 35
+overruns (profile: zlib 27% of the loop); turning compression off took 480 bin from 5.7 to 10.0 snaps/s.
+
+Device tick plus host pull at 512 viewers (`--bench-ticks 60`, E = 8704): CPU p50 43.8 ms, p95 53.5 ms; GPU (WSL,
+CUDA) p50 26.8 ms, p95 34.3 ms. `bench/bench_view.py` (step + view, E with and without the 2048 node rows) shows no
+measurable cost from the nodes at this noise level (p50 51 ms with nodes, 66-80 ms without, run in that order).
+
+### Round 3 (after the round-2 integration, 2026-11-02 evening, box at 97% CPU with 13 teams; paused by the lead)
+Device tick plus pull at 512 viewers on CPU is now p50 229.5 ms, p95 357.9 ms, min 183.9 ms (was 43.8 / 53.5 / 37.4
+before the integration; the lead's GPU soak shows the tick about 3x dearer, the rest is load). At a 100 ms tick on
+CPU the device tick alone is over budget, so 500 clients cannot hold 10 Hz whatever the wire does: 500 JSON gave
+6.41 snaps/s with 104 overruns in 200 ticks, 500 bin 1.50 snaps/s (70 ticks in a 30 s window). These runs measure the
+loaded box, not the server; rerun on a quiet box (command in the ro3-netperf hand-back). `--bench-ticks` now runs
+without the websockets package (the WSL GPU venv has none); `start()` says to install it.
 
 Still not done: `max_hp` only on first appearance (`EntityStore._upsert` needs `old.get("max_hp")` first).
 

@@ -20,9 +20,20 @@ import numpy as np
 
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[1]))
 
-from game import ro_stats  # noqa: E402
+from game import ro_spawns, ro_stats  # noqa: E402
+from game.world_layout import dungeon_index  # noqa: E402
 from bots.runner import make_world_batch, run_games  # noqa: E402
 from game.config import MAP, MONSTER_HP, ITEM_ID_LIMIT, DROP_TTL, T_TEMPLE  # noqa: E402
+
+
+def monsters_per_band(worlds):
+    """int [N_BANDS + 1] active monsters summed over the batch: per field band, then all dungeons together."""
+    def one(w):
+        m = w["monsters"]
+        band = jnp.where(dungeon_index(m["pos"]) >= 0, ro_spawns.N_BANDS, ro_spawns.band_of(w, m["pos"]))
+        return jnp.bincount(jnp.where(m["active"], band, ro_spawns.N_BANDS + 1), length=ro_spawns.N_BANDS + 2)[:-1]
+
+    return np.asarray(jax.vmap(one)(worlds).sum(0))
 
 
 def check_invariants(worlds):
@@ -85,6 +96,9 @@ def main(batch=8, chunks=10, ticks_per_chunk=100, seed=0):
     worlds = make_world_batch(seed, batch)
     kinds = np.asarray(worlds["monsters"]["kind"])[np.asarray(worlds["monsters"]["active"])]
     print(f"monsters per world by kind: {np.bincount(kinds, minlength=len(MONSTER_HP)) / batch}", flush=True)
+    print(f"monsters per world by band (field 0..{ro_spawns.N_BANDS - 1}, then dungeons): "
+          f"{monsters_per_band(worlds) / batch}", flush=True)
+    n_bots = int(jnp.sum(worlds["players"]["active"]))
     total_problems = []
     t0 = time.perf_counter()
     for c in range(chunks):
@@ -96,14 +110,20 @@ def main(batch=8, chunks=10, ticks_per_chunk=100, seed=0):
         deaths = int(jnp.sum(stats["deaths"]))
         alive = int(jnp.sum(stats["alive"]))
         items = int(jnp.sum(stats["items"]))
+        tick = (c + 1) * ticks_per_chunk
+        per_bot = 1000 / max(n_bots * tick, 1)  # cumulative counters -> per bot per 1000 ticks
         print(
-            f"chunk {c + 1:2d} (tick {(c + 1) * ticks_per_chunk:5d}): "
+            f"chunk {c + 1:2d} (tick {tick:5d}): "
             f"kills={kills} deaths={deaths} alive_players={alive} items_held={items} "
-            f"invariant_violations={len(probs)}",
+            f"invariant_violations={len(probs)} | per bot per 1k ticks: kills={kills * per_bot:.2f} "
+            f"deaths={deaths * per_bot:.2f}",
             flush=True,
         )
     dt = time.perf_counter() - t0
     print(f"total {chunks * ticks_per_chunk} ticks x {batch} worlds in {dt:.1f}s")
+    print(f"kills/bot/1k {kills * per_bot:.2f} deaths/bot/1k {deaths * per_bot:.2f} "
+          f"(targets 3-5 and 0.3-0.6 at base levels 1-10, docs/round3_contract.md); "
+          f"base level mean {float(jnp.mean(worlds['stats']['base_level'][:, :n_bots // batch])):.2f}")
     if total_problems:
         print("FIRST VIOLATIONS:")
         for p_ in total_problems[:15]:

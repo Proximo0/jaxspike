@@ -2,7 +2,8 @@
 import jax
 import jax.numpy as jnp
 
-from game.config import HUNT_RETREAT_HP, ITEM_MEAT, MAP, MAX_PLAYERS, PLAYER_MAX_HP
+from game import ro_stats
+from game.config import ITEM_MEAT, MAP, MAX_PLAYERS, PLAYER_MAX_HP
 from game.map_gen import DIST_UNREACHABLE
 from game.ro_move import DIR_DELTAS9, dir_toward
 from game.spatial import build_grid, nearest_in_block
@@ -11,6 +12,11 @@ from game.world_layout import RAT_RING, TOWNS
 BOT_CHASE_RANGE = 6  # manhattan; must stay <= CELL since the search is 3x3 cells only
 HUNT_RADIUS = int(RAT_RING * MAP)  # bots hunt between half and twice this walking distance from their gate
 HEADING_TICKS = 50  # ticks a hunting bot keeps one wander heading
+# Thresholds as a percentage of derived max_hp (ro3-balance): a level-1 Novice has 40 hp, a level-10 one ~100,
+# so absolute HP cut-offs (the old config HUNT_RETREAT_HP = 16) stop meaning anything after a few levels.
+RETREAT_PCT = 40    # below this: walk home to rest (bots.ro_nav_policy has its own RETREAT_PCT for hunters)
+REST_PCT = 100      # in town below this: stand still until healed
+EAT_PCT = 50        # eat meat below this
 
 _DIRS = jnp.array(DIR_DELTAS9[1:], jnp.int32)  # moves 1..8: S, SW, W, NW, N, NE, E, SE
 _DIRS9 = jnp.array(DIR_DELTAS9, jnp.int32)  # index by move code 0..8
@@ -54,18 +60,26 @@ def _gate_moves(world):
     return toward, away, can_toward, can_away, own
 
 
+def _max_hp(world):
+    """int32 [MAX_PLAYERS] derived max hp (PLAYER_MAX_HP for a world without the stats block)."""
+    if "stats" in world:
+        return ro_stats.derived(world)["max_hp"].astype(jnp.int32)
+    return jnp.full((MAX_PLAYERS,), PLAYER_MAX_HP, jnp.int32)
+
+
 def bot_inputs(world, key):
     """Return {"move": int32, "attack": bool, "eat": bool}, each [MAX_PLAYERS], for every player slot.
 
     A bot hunts near its home town: it walks out of the gate, away along the distance field until
-    HUNT_RADIUS, chases and fights monsters it meets, and heads home below HUNT_RETREAT_HP. In town
-    it rests until full HP, then goes out again.
+    HUNT_RADIUS, chases and fights monsters it meets, and heads home below RETREAT_PCT of its max hp. In
+    town it rests until REST_PCT, then goes out again.
     """
     pl, mon = world["players"], world["monsters"]
     live = pl["active"] & ~pl["dead"]
     on_pz = world["pz"][pl["pos"][:, 0], pl["pos"][:, 1]]
-    hurt = pl["hp"] < HUNT_RETREAT_HP
-    resting = on_pz & (pl["hp"] < PLAYER_MAX_HP)
+    hp, max_hp = pl["hp"].astype(jnp.int32), jnp.maximum(_max_hp(world), 1)
+    hurt = hp * 100 < RETREAT_PCT * max_hp
+    resting = on_pz & (hp * 100 < REST_PCT * max_hp)
 
     # nearest_in_block only sees the 3x3 cell block around the player, so this
     # is a bounded search: monsters beyond that block are never found, which is
@@ -105,5 +119,5 @@ def bot_inputs(world, key):
     move = jnp.where(live, move, 0).astype(jnp.int32)
     attack = chase & (dist == 1)
     has_meat = jnp.any(pl["inv"] == ITEM_MEAT, axis=1)
-    eat = live & (pl["hp"] < PLAYER_MAX_HP // 2) & has_meat
+    eat = live & (hp * 100 < EAT_PCT * max_hp) & has_meat
     return {"move": move, "attack": attack, "eat": eat}

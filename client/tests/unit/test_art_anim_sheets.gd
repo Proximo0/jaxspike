@@ -142,3 +142,49 @@ func test_clips_have_real_motion() -> void:
 				if _frame(img, fw, fh, 0, col).get_data() != first:
 					moved = true
 			assert_true(moved, "%s.%s frames all identical" % [kind, a])
+
+
+func test_round3_sheets_are_hires_prerenders() -> void:
+	# round 3 (ro3-art): every job and monster sheet is a Blender pre-render at 2x RO's native size
+	# (jobs 96x128, monsters >= 96 px), its feet anchor sits in the lower part of the frame, and the hit frame
+	# is frame 3 of the 6-frame attack (60 %).
+	var kinds: Array[String] = []
+	kinds.append_array(AssetSlots.JOB_NAMES)
+	kinds.append_array(AssetSlots.ANIM_MONSTER_KINDS)
+	for kind: String in kinds:
+		var act: Dictionary = _load_json("res://assets/anim/%s/act.json" % kind)
+		assert_false(act.is_empty(), kind)
+		if act.is_empty():
+			continue
+		var fw: int = int(act["frame_w"])
+		var fh: int = int(act["frame_h"])
+		var is_job: bool = kind in AssetSlots.JOB_NAMES
+		assert_true(fw >= 96 and fh >= (128 if is_job else 96), "%s: frame %dx%d is not hi-res" % [kind, fw, fh])
+		var anchor: Array = act["anchor"]
+		assert_true(float(anchor[1]) >= fh * 0.75 and float(anchor[1]) < fh, "%s: anchor y %s" % [kind, str(anchor[1])])
+		assert_eq(int(act["atk_frame"]), 3, "%s: atk_frame" % kind)
+		assert_eq(int(act["actions"]["attack"]["frames"]), 6, "%s: attack frames" % kind)
+		assert_true(String(act.get("source", "")).contains("render_kind"), "%s: source tag" % kind)
+
+
+func test_npc_sheets() -> void:
+	var reg: AssetSlots = AssetSlots.load_default()
+	for kind: String in ["npc_shop", "npc_kafra"]:
+		var act: Dictionary = _load_json("res://assets/anim/%s/act.json" % kind)
+		assert_false(act.is_empty(), "%s: act json" % kind)
+		if act.is_empty():
+			continue
+		var fw: int = int(act["frame_w"])
+		var fh: int = int(act["frame_h"])
+		for a: String in ["idle", "talk"]:
+			assert_true(reg.has(AssetSlots.anim_key(kind, a)), "%s.%s slot" % [kind, a])
+			var e: Dictionary = act["actions"][a]
+			assert_eq(int(e["frames"]), 4, "%s.%s frames" % [kind, a])
+			var img: Image = _load_png("res://assets/anim/%s/%s.png" % [kind, a])
+			assert_true(img != null, "%s.%s png" % [kind, a])
+			if img == null:
+				continue
+			assert_eq(img.get_height(), fh * DRAWN_ROWS, "%s.%s height" % [kind, a])
+			for row: int in range(DRAWN_ROWS):
+				for col: int in range(4):
+					assert_true(_opaque_count(_frame(img, fw, fh, row, col)) >= MIN_OPAQUE_PX, "%s.%s %d/%d empty" % [kind, a, row, col])

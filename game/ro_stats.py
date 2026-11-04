@@ -8,16 +8,21 @@ values and no loops over entities (the only loops are fixed-count lax.fori_loops
 import jax.numpy as jnp
 from jax import lax
 
-from game.config import MAX_MONSTERS, MAX_PLAYERS
+from game.config import MAX_MONSTERS, MAX_PLAYERS, TICK_MS
+from game.data import items as item_data
+from game import ro_mvp, ro_party
 from game.data.stats import (  # noqa: F401  (ids and tables re-exported for the other M1 files)
     BASE_EXP_TABLE_J,
     BASE_HP_TABLE_J,
     BASE_SP_TABLE_J,
-    DEATH_PENALTY_MIN_LEVEL,
     DEATH_PENALTY_PERMILLE,
     JOB_ACOLYTE,
     JOB_ARCHER,
-    JOB_ASPD_BASE_J,
+    HP_REGEN_SIT_TICKS,
+    HP_REGEN_TICKS,
+    JOB_BASE_HP_TABLE_J,
+    JOB_BASE_SP_TABLE_J,
+    JOB_WEAPON_ASPD_J,
     JOB_EXP_TABLE_J,
     JOB_HP_FACTOR_J,
     JOB_MAGE,
@@ -45,9 +50,7 @@ from game.data.stats import (  # noqa: F401  (ids and tables re-exported for the
     STAT_POINTS_START,
     STAT_STR,
     STAT_VIT,
-    TICK_HZ_X1000,
 )
-from game.spatial import build_grid, nearest_in_block
 
 MAX_LEVELS_PER_TICK = 4  # fixed fori_loop trip count for base and job level-ups (more exp just carries over)
 
@@ -61,7 +64,7 @@ def _zeros():
 
 def _fresh_max_sp():
     """max_sp of a fresh Novice (level 1, int 1), same formula as derived()."""
-    return int(BASE_SP_TABLE_J[1]) * int(JOB_SP_FACTOR_J[JOB_NOVICE]) // 1000 * (100 + 1) // 100
+    return int(JOB_BASE_SP_TABLE_J[JOB_NOVICE, 1]) * (100 + 1) // 100
 
 
 def make_state():
@@ -105,24 +108,51 @@ def derived(world):
     job = jnp.clip(s["job"], 0, NUM_JOBS - 1)
     st, ag, vi, it, dx, lk = (s[k] for k in _STAT_KEYS)
 
-    max_hp = BASE_HP_TABLE_J[lvl] * JOB_HP_FACTOR_J[job] // 1000 * (100 + vi) // 100
-    max_sp = BASE_SP_TABLE_J[lvl] * JOB_SP_FACTOR_J[job] // 1000 * (100 + it) // 100
+    max_hp = JOB_BASE_HP_TABLE_J[job, lvl] * (100 + vi) // 100
+    max_sp = JOB_BASE_SP_TABLE_J[job, lvl] * (100 + it) // 100
     atk = st + (st // 10) ** 2 + dx // 5 + lk // 5
-    matk = it + it * it // 49
-    hit = 175 + lvl + dx
-    flee = 100 + lvl + ag
-    soft_def = vi // 2 + vi * vi // 150
-    mdef = it // 2 + vi // 5
+    matk_min = it + (it // 7) ** 2
+    matk_max = it + (it // 5) ** 2
+    matk = (matk_min + matk_max) // 2
+    hit = lvl + dx
+    flee = lvl + ag
+    soft_def = vi
+    mdef = it + vi // 2
     crit = 10 + lk * 3
     cast_mult = jnp.clip(1000 - dx * 1000 // 150, 0, 1000)
-    aspd = jnp.clip(JOB_ASPD_BASE_J[job] + (ag * 4 + dx) // 10, 150, 190)
-    aps = 1500 + (aspd - 150) * 45  # attacks per second x1000
-    aspd_ticks = jnp.maximum(1, (TICK_HZ_X1000 + aps // 2) // aps)  # round to nearest tick
+    # ASPD by job and worn weapon class (rAthena job_aspd); a class the job cannot use falls back to the fist column.
+    if "items" in world:
+        equip = world["items"]["equip"][:, item_data.EQ_WEAPON]
+        inv = world["players"]["inv"]
+        item = jnp.take_along_axis(inv, jnp.clip(equip, 0, inv.shape[1] - 1)[:, None], axis=1)[:, 0]
+        wc = jnp.where(equip >= 0, item_data.CLASS[item], item_data.WC_NONE)
+    else:
+        wc = jnp.zeros((MAX_PLAYERS,), _I32)
+    base = JOB_WEAPON_ASPD_J[job, wc]
+    base = jnp.where(base > 0, base, JOB_WEAPON_ASPD_J[job, 0])
+    aspd = jnp.minimum(190, 200 - (200 - base) * (1000 - (4 * ag + dx)) // 1000)
+    aspd_ticks = jnp.maximum(1, (20 * (200 - aspd) + TICK_MS // 2) // TICK_MS)  # attack delay = 2 x amotion
     out = {
         "max_hp": max_hp, "max_sp": max_sp, "atk": atk, "matk": matk, "hit": hit, "flee": flee,
         "def": soft_def, "mdef": mdef, "crit": crit, "cast_mult": cast_mult, "aspd_ticks": aspd_ticks,
+        "aspd": aspd,
     }
     return {k: v.astype(_I32) for k, v in out.items()}
+
+
+def hp_regen(world, sitting):
+    """HP each living player regains THIS tick: 1 + max_hp // 200 + vit // 5 on the regen tick, else 0.
+
+    Every HP_REGEN_TICKS ticks standing, every HP_REGEN_SIT_TICKS where `sitting` (bool [MAX_PLAYERS], derived by
+    the caller from the anim action). Survival writes hp.
+    """
+    p, s = world["players"], world["stats"]
+    alive = p["active"] & ~p["dead"]
+    sit = jnp.asarray(sitting).astype(jnp.bool_)
+    tick = world["tick"]
+    on = jnp.where(sit, tick % HP_REGEN_SIT_TICKS == 0, tick % HP_REGEN_TICKS == 0)
+    amount = 1 + derived(world)["max_hp"] // 200 + s["vit"] // 5
+    return jnp.where(alive & on, amount, 0).astype(_I32)
 
 
 def _level_loop(level, exp, active, need_fn, max_level):
@@ -149,23 +179,23 @@ def phase(world, inputs):
     job_in = inputs.get("job", jnp.full((MAX_PLAYERS,), -1, _I32))
 
     # --- 1. Kill credit and exp -------------------------------------------------------------------------------
-    # Combat only bumps players.kills (to the lowest-slot adjacent hitter) and sets monsters.died; it does not say
-    # which monster went to whom. So: the kills delta tells us WHO scored this tick, and the nearest monster that
-    # died this tick (grid lookup, no [P, M] table) tells us WHICH one. Combat credits only adjacent hitters, so
-    # the died monster is at distance <= 1. Several scorers can see the same corpse; scatter-min of the slot makes
-    # the lowest slot the sole claimant, matching combat's rule. A scorer that finds no corpse gets nothing.
-    # M5 (parties) replaces only this payout step.
-    kill_delta = p["kills"] - s["kills_seen"]
-    table, _ = build_grid(m["pos"], m["died"])
-    midx, mdist = nearest_in_block(table, p["pos"], m["pos"])
-    claims = act & (kill_delta > 0) & (mdist <= 1)
-    claim = jnp.full((MAX_MONSTERS,), MAX_PLAYERS, _I32)
-    claim = claim.at[jnp.where(claims, midx, MAX_MONSTERS)].min(slot, mode="drop")
-    paid = m["died"] & (claim < MAX_PLAYERS)
+    # The killer of each monster that died this tick is the player with the most cumulative damage on it
+    # (ro_mvp.top_damager, fed by combat and by skill hits through ro_mvp.record_damage), as in RO: melee, ranged
+    # and skill kills all pay. The gain is then shared through ro_party.share_exp (even split among living party
+    # members in the same zone within the level range, +10% per extra member); solo players keep their gain.
+    # A world without the mvp block (legacy tests) pays nobody. `kills_seen` stays a ledger of players.kills.
+    if "mvp" in world:
+        killer = ro_mvp.credit_of(world)
+    else:
+        killer = jnp.full((MAX_MONSTERS,), -1, _I32)
+    paid = m["died"] & (killer >= 0)
     kind = jnp.clip(m["kind"], 0, MONSTER_BASE_EXP_J.shape[0] - 1)
-    dest = jnp.where(paid, claim, MAX_PLAYERS)  # unpaid monsters scatter out of bounds and are dropped
+    dest = jnp.where(paid, killer, MAX_PLAYERS)  # unpaid monsters scatter out of bounds and are dropped
     base_gain = _zeros().at[dest].add(jnp.where(paid, MONSTER_BASE_EXP_J[kind], 0), mode="drop")
     job_gain = _zeros().at[dest].add(jnp.where(paid, MONSTER_JOB_EXP_J[kind], 0), mode="drop")
+    if "party" in world:
+        base_gain = ro_party.share_exp(world, base_gain)
+        job_gain = ro_party.share_exp(world, job_gain)
     base_exp = s["base_exp"] + jnp.where(act, base_gain, 0)
     job_exp = s["job_exp"] + jnp.where(act, job_gain, 0)
 
@@ -205,10 +235,12 @@ def phase(world, inputs):
     jlv = jnp.where(ok_job, 1, jlv)
     job_exp = jnp.where(ok_job, 0, job_exp)
 
-    # --- 6. Death penalty (a death since last tick; no de-levelling, floor 0) --------------------------------
-    died_now = act & (p["deaths"] - s["deaths_seen"] > 0) & (blv >= DEATH_PENALTY_MIN_LEVEL)
-    loss = BASE_EXP_TABLE_J[jnp.clip(blv, 0, MAX_BASE_LEVEL)] * DEATH_PENALTY_PERMILLE // 1000
-    base_exp = jnp.where(died_now, jnp.maximum(0, base_exp - loss), base_exp)
+    # --- 6. Death penalty (a death since last tick; 1% of the base AND job exp requirement, Novices exempt) ----
+    died_now = act & (p["deaths"] - s["deaths_seen"] > 0) & (job != JOB_NOVICE)
+    loss_b = BASE_EXP_TABLE_J[jnp.clip(blv, 0, MAX_BASE_LEVEL)] * DEATH_PENALTY_PERMILLE // 1000
+    loss_j = JOB_EXP_TABLE_J[job, jnp.clip(jlv, 0, JOB_EXP_TABLE_J.shape[1] - 1)] * DEATH_PENALTY_PERMILLE // 1000
+    base_exp = jnp.where(died_now, jnp.maximum(0, base_exp - loss_b), base_exp)
+    job_exp = jnp.where(died_now, jnp.maximum(0, job_exp - loss_j), job_exp)
 
     # --- 7. SP: recompute max_sp from the new stats, regen on schedule, refill on respawn --------------------
     new_s = {**s, **{k: stack[i] for i, k in enumerate(_STAT_KEYS)}, "base_level": blv, "job": job}

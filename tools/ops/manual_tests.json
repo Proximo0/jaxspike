@@ -1,0 +1,2 @@
+[{"suite": "GPU soak, 64 worlds x 1000 ticks, 377 s (kills 2.2, deaths 1.1 per bot per 1000 ticks)", "passed": 64000, "failed": 0,
+  "source": "lead-2026-11-02-round2-integration.md (lead's WSL run; not re-measured by the collector)", "measured": "2026-11-02T22:00:00Z"}]

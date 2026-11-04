@@ -12,7 +12,7 @@ Item ids are the `game/data/items.py` ids (`N_ITEMS = 300`, the full id space; 0
           {id, name, kind, cls, atk, def, matk, element, slots, weight, buy, sell, heal_hp, heal_sp,
            weapon_level, stackable, bonus, bonus_value, card_bonus, card_value}
 "drops":  game.data.drops.table_for_client()     list per monster kind:
-          {kind, drops: [{item, chance, count}], zeny_min, zeny_max}      chance is per mille
+          {kind, drops: [{item, chance, count}], zeny_min, zeny_max}      chance is per 10000 (round 3; was per mille)
 ```
 Both are static, built once per server (like the maps) and sent only in `welcome`. `kind` is the item kind id
 (0 none, 1 etc, 2 consumable, 3 weapon, 4 armor, 5 card); `cls` is the weapon class for weapons and the slot type for
@@ -30,7 +30,8 @@ armor and cards (see `items_brief.md`); `bonus`/`card_bonus` are `BONUS_*` ids 0
 `{"item":0,"count":0,"refine":0,"cards":[0,0,0,0]}`. Source arrays: `players.inv` (item), and `world["items"]`
 `inv_count`, `inv_refine`, `inv_cards`, `equip`, `zeny`. They join the tick's single host pull for the viewer rows
 (one numpy transfer, no per-client device reads). Only the viewer's own row is sent; other players' gear is not
-on the wire in M3. Ground drops keep `{kind:"d", item, pos}`; until `drops["count"]` exists each drop is one unit.
+on the wire in M3. Ground drops keep `{kind:"d", item, pos}` on the wire; the engine-side drop fields (count, refine, cards) are
+round 3 (below) and are not sent.
 
 ## Client messages (all C->S)
 
@@ -120,3 +121,46 @@ reset to none after one step). Order inside the phase: sell, then buy. Prices: b
 from learned Discount / Overcharge. A buy needs the zeny and a stack of the same stackable id below MAX_STACK or a
 free slot. Refusals are silent; the server may diff `zeny`/`inv` for a notice ("not enough zeny", "inventory full",
 "no shop here").
+
+## Round 3 (ro3-items3) additions
+
+### Drop chances per 10000
+`game/data/drops.py` `DROP_CHANCE` is per 10000 (rAthena's rate column, docs/ro_fidelity.md section 2): every card is
+`1` = 0.01 % (classic; was 1 per mille, 10x). `ro_drops.roll_drops` rolls `U[0,1) * 10000 < chance`.
+`welcome.drops[k].drops[i].chance` is per 10000 too (no client reads it yet).
+
+### Ground drops keep count, refine and cards
+The drops block grows three fields (lead lines for `game/state.py`, fresh arrays from `ro_drops.drop_fields()`):
+```
+"count":  int32 [MAX_DROPS]               units in the pile (a gold coin pile's count is its zeny)
+"refine": int32 [MAX_DROPS]               refine level of a dropped weapon/armor
+"cards":  int32 [MAX_DROPS, MAX_CARDS]    compounded card ids, 0 = empty socket
+```
+Every writer spreads `**drops` so the fields survive (`ro_drops.place_drops`, `ro_items._drop`,
+`ro_monster_modes._place`); each also works without the fields (one unit, no refine, no cards) until the lead adds
+them, by a Python check on the dict structure, never on values. Player `drop` of a +5 slotted sword puts that sword
+on the ground; `ro_drops.pickup(world) -> (world, picked)` replaces `loot._pickup` (ro3-wire's line:
+`world, picked = ro_drops.pickup(world)`), copying count/refine/cards into `items.inv_count/inv_refine/inv_cards`;
+`picked` is bool [MAX_PLAYERS] for the pickup clip. A looter monster that picks a pile up and spills it on death
+keeps one unit (ro3-perf's `_place` sets count 1): defect, see the hand-back.
+
+### Coins carry the rolled zeny
+`items.ZENY_PER_COIN = 1`: a gold coin stack's count IS its zeny. A kill nobody is credited with leaves one coin pile
+with `count = rolled zeny` (2..5 x level; MVPs 100..200 x level); `ro_items._normalize` turns a picked-up pile into
+exactly that zeny (no flat 10 any more). Credited kills still pay `items.zeny` directly (loot.py, ro3-exp).
+
+### Client shop panel (`client/game/ui/shop_panel.gd/.tscn`)
+No key: it opens when `you.pos` is on or next to (Chebyshev distance 1, the engine's `_NEAR`) a tile of
+`welcome.world.shops` and shows that town's `welcome.shops[town]` stock. Prices mirror `ro_shop`: buy
+`max(BUY * (100 - d) // 100, 1)`, sell `SELL * (100 + o) // 100` with `d`/`o` = `min(5 + 2 * level, 24)` from the
+player's learned Discount / Overcharge (`you.learned` pairs, skill ids looked up by name in
+`welcome.skills.names`). Buy sends `{"t": "buy", "item": id}`, Sell (non-empty, not-worn slots) sends
+`{"t": "sell", "slot": slot}`; zeny and the sell list refresh from `snap.you`. Close dismisses the panel until the
+player leaves the shop's range. Lead lines in `client/game/world/game_view.gd`: `PANEL_SCENES` gets
+`"res://game/ui/shop_panel.tscn",` and `PANEL_POS` gets `"ShopPanel": Vector2(1300, 250),`.
+
+### Inventory panel: compare tooltips, Sell and Drop affordances
+Hovering an unworn weapon/armor shows `ATK 25 (worn Knife 17, +8)` / `DEF 4 (worn Hat 2, +2)` and
+`Slots 3 (worn 1)` against the item in the equip slot it would take (refine included: weapon atk + refine *
+(0, 2, 3, 5, 7)[weapon_level], armor def + refine). The right-click menu adds `Sell` (same `sell` message) when the
+player is next to a shop tile, and the Drop entry reads `Drop 1` on a stack (one unit leaves, like the engine).

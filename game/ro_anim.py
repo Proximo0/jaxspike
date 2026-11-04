@@ -25,6 +25,7 @@ IDLE, WALK, SIT, PICKUP, STANDBY, ATTACK, HURT, DEAD, CAST = range(9)
 ACTION_NAMES = ("idle", "walk", "sit", "pickup", "standby", "attack", "hurt", "dead", "cast")
 HURT_MS = 300
 STANDBY_MS = 3000
+DEAD_VISIBLE_MS = 3000  # ro3-wire: a corpse stays on the wire (view.py vis) this long after the dead clip starts
 DEFAULT_SPEED_MS = 150
 # Without world["move"], legacy monsters step every MOVE_TICKS ticks: stay "walk" that long between steps.
 LEGACY_STILL_TICKS = int(jnp.max(mdata.MOVE_TICKS))
@@ -98,11 +99,32 @@ def note_hit(world, mask, dmg):
         return world
     a, t = world["anim"], world["tick"]
     dmg = jnp.asarray(dmg, jnp.int32)
-    hit_dmg = jnp.where(mask, jnp.where(a["hit_tick"] == t, a["hit_dmg"] + dmg, dmg), a["hit_dmg"])
+    prior = jnp.maximum(a["hit_dmg"], 0)  # a miss (-1) recorded earlier this tick is replaced by the hit
+    hit_dmg = jnp.where(mask, jnp.where(a["hit_tick"] == t, prior + dmg, dmg), a["hit_dmg"])
     world = {**world, "anim": {**a, "hit_dmg": hit_dmg.astype(jnp.int32),
                                "hit_tick": jnp.where(mask, t, a["hit_tick"]).astype(jnp.int32)}}
     flinch = mask & _isin(world["anim"]["action"].astype(jnp.int32), _FLINCHABLE)
     return set_action(world, flinch, HURT, HURT_MS)
+
+
+def note_miss(world, mask):
+    """Record "every swing at it missed this tick" where mask (bool [N]): hit_dmg = -1 (the wire sends h = 0,
+    docs/anim_wire.md) unless a hit already landed this tick; no flinch. No-op without the block."""
+    if "anim" not in world:
+        return world
+    a, t = world["anim"], world["tick"]
+    fresh = mask & (a["hit_tick"] != t)
+    return {**world, "anim": {**a, "hit_dmg": jnp.where(fresh, -1, a["hit_dmg"]).astype(jnp.int32),
+                              "hit_tick": jnp.where(fresh, t, a["hit_tick"]).astype(jnp.int32)}}
+
+
+def dying(world):
+    """bool [N]: the entity shows its dead clip and died within DEAD_VISIBLE_MS (the corpse window on the wire)."""
+    if "anim" not in world:
+        return jnp.zeros((N,), jnp.bool_)
+    a, t = world["anim"], world["tick"]
+    since = jnp.minimum(t - a["start_tick"], _ELAPSED_CAP) * TICK_MS
+    return (a["action"] == DEAD) & (since < DEAD_VISIBLE_MS)
 
 
 def on_combat(world, p_swing, p_tgt, m_swing, m_tgt, dmg_to_monsters, dmg_to_players):
@@ -118,6 +140,10 @@ def on_combat(world, p_swing, p_tgt, m_swing, m_tgt, dmg_to_monsters, dmg_to_pla
     face = dir_toward(tgt_pos - _ent_pos(world))
     world = set_action(world, swing, ATTACK, amotion_ms(world), face)
     dmg = jnp.concatenate([dmg_to_players, dmg_to_monsters]).astype(jnp.int32)
+    # ro3-wire: a target that was swung at and took nothing this tick shows "Miss" (hit_dmg -1, h = 0 on the wire)
+    swung_at = (jnp.zeros((N,), jnp.bool_).at[MAX_PLAYERS + p_tgt].max(p_swing, mode="drop")
+                .at[m_tgt].max(m_swing, mode="drop"))
+    world = note_miss(world, swung_at & (dmg <= 0))
     return note_hit(world, dmg > 0, dmg)
 
 

@@ -21,15 +21,29 @@ var state: InputState = InputState.new()
 var click_filter: Callable = Callable()
 var entity_layer: EntityLayer = null  ## Optional: enables entity cursor states.
 var zoom: ZoomControl = ZoomControl.new(ViewMath.tuned("camera_zoom", ViewMath.DEFAULT_CAMERA_ZOOM))
+var follow: CameraFollow = CameraFollow.new()
 var cursor: int = CursorState.WALK
 var cursor_changes: int = 0
 var _cursor_tex: Dictionary = {}  ## state -> ImageTexture
+
+
+func _ready() -> void:
+	var tun: Tuning = Tuning.shared()
+	if not tun.changed.is_connected(_on_tuning_changed):
+		tun.changed.connect(_on_tuning_changed)
+
+
+## F2 Tuning moves the zoom target live; the wheel's zoom is never written back (that would re-trigger the slider).
+func _on_tuning_changed(field: String, value: float) -> void:
+	if field == "camera_zoom":
+		zoom.retarget(value)
 
 
 func _process(delta: float) -> void:
 	if camera != null:
 		zoom.update(delta)
 		camera.zoom = zoom.vec()
+	_follow_warp(delta)
 	if session == null or not enabled:
 		return
 	_update_cursor()
@@ -39,6 +53,24 @@ func _process(delta: float) -> void:
 			_key(KEY_SPACE), _key(KEY_E))
 	if changed:
 		session.send_input(state.move, state.attack, state.eat)
+
+
+## Holds the camera on the own tile across a warp until the drawn sprite arrives (GameView._follow runs first).
+func _follow_warp(delta: float) -> void:
+	if session == null or camera == null or session.store.you.is_empty():
+		return
+	var you: Dictionary = session.store.you
+	var tile_v: Vector2 = ViewMath.to_vec(you.get("pos"))
+	var tile: Vector2i = Vector2i(roundi(tile_v.x), roundi(tile_v.y))
+	var tile_px: float = ViewMath.tuned("tile_px", ViewMath.DEFAULT_TILE_PX)
+	var drawn: Vector2 = Vector2(tile)
+	if entity_layer != null:
+		var p: Vector2 = entity_layer.world_pos_of(session.slot)
+		if p != Vector2.INF:
+			drawn = p / tile_px - Vector2(0.5, 0.5)  # sprite centre -> tile coordinates
+	if follow.observe(tile, session.store.tick, bool(you.get("warped", false)), drawn, delta):
+		camera.position = ViewMath.tile_center(Vector2(tile), tile_px)
+		camera.reset_smoothing()
 
 
 func _unhandled_input(event: InputEvent) -> void:

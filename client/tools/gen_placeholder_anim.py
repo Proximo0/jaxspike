@@ -1,7 +1,7 @@
 """Procedural chibi anime-style placeholder sheets for round 2 (docs/round2_contract.md 1.4).
 
-Writes `client/assets/anim/<kind>/<action>.png` plus `client/assets/anim/<kind>/act.json` for the 7 jobs and the
-20 monster kinds, and `client/assets/anim/_review/contact_sheet.png` for review. Stdlib only (zlib PNG writer, no Pillow).
+Writes `client/assets/anim/<kind>/<action>.png` plus `client/assets/anim/<kind>/act.json` for the 7 jobs, the
+20 monster kinds and the 2 NPC kinds, and `client/assets/anim/_review/contact_sheet.png` for review. Stdlib only (zlib PNG writer, no Pillow).
 
 Sheet format: rows = directions 0..4 (S, SW, W, NW, N); rows 5..7 (NE, E, SE) are mirrored by the client from
 rows 3..1 ("mirror": true). Columns = frames. Every frame is frame_w x frame_h with the feet at `anchor`.
@@ -28,14 +28,16 @@ FACE = {0: (0.0, 1.0), 1: (-0.71, 0.71), 2: (-1.0, 0.0), 3: (-0.71, -0.71), 4: (
 
 PLAYER_ACTIONS = ["idle", "walk", "sit", "pickup", "standby", "attack", "hurt", "dead", "cast"]
 MONSTER_ACTIONS = ["idle", "walk", "attack", "hurt", "dead"]
+NPC_ACTIONS = ["idle", "talk"]
 # action -> (frames, delay_ms, loop)
 CLIP = {
     "idle": (4, 200, True), "walk": (8, 75, True), "sit": (4, 300, True), "pickup": (4, 100, False),
     "standby": (4, 150, True), "attack": (6, 100, False), "hurt": (4, 75, False), "dead": (5, 120, False),
-    "cast": (6, 100, True),
+    "cast": (6, 100, True), "talk": (4, 160, True),
 }
 ATK_FRAME = 3
 
+NPCS = ["npc_shop", "npc_kafra"]
 JOBS = ["novice", "swordsman", "mage", "archer", "acolyte", "thief", "merchant"]
 # engine order (game/data/monsters.py)
 MONSTERS = [
@@ -47,6 +49,7 @@ MONSTERS = [
 OUTLINE_DARK = 0.32
 EYE_DARK = (40, 24, 48)
 WHITE = (255, 255, 255)
+HURT_FLASH = (255, 70, 50)  # saturated red-orange flinch flash (never white: that washes the figure out)
 N4 = ((1, 0), (-1, 0), (0, 1), (0, -1))
 
 
@@ -172,7 +175,10 @@ class Canvas:
                 self.put(xx, yy, c)
 
     def tint(self, c, t):
-        self.p = [None if v is None else mix(v, c, t) for v in self.p]
+        """Flash colour; outline-dark pixels (luminance < 70) are left alone so edges stay crisp."""
+        def lum(v):
+            return 0.299 * v[0] + 0.587 * v[1] + 0.114 * v[2]
+        self.p = [None if v is None else (v if lum(v) < 70 else mix(v, c, t)) for v in self.p]
 
     def bbox(self):
         xs, ys = [], []
@@ -238,7 +244,7 @@ def pose_for(action, i, n):
     t = i / n
     p = {"bob": 0.0, "lunge": 0.0, "leg": 0.0, "arm": 0.0, "eyes": "open", "crouch": 0.0, "hop": 0.0,
          "sx": 1.0, "sy": 1.0, "fall": 0.0, "weapon": 20.0, "arms_up": 0.0, "mouth": 0.0, "flash": None,
-         "sit": False, "stance": 0.0, "cast": -1.0, "reach": 0.0}
+         "sit": False, "stance": 0.0, "cast": -1.0, "reach": 0.0, "wave": None}
     if action == "idle":
         p["bob"] = [0, 1, 1, 0][i % 4]
         p["sy"] = [1.0, 0.97, 0.97, 1.0][i % 4]
@@ -279,16 +285,21 @@ def pose_for(action, i, n):
         p["eyes"] = "hurt" if i < 3 else "open"
         p["sx"] = [1.15, 1.08, 1.03, 1.0][i]
         p["sy"] = [0.85, 0.92, 0.97, 1.0][i]
-        p["flash"] = [(WHITE, 0.6), ((255, 60, 60), 0.3), None, None][i]
+        p["flash"] = [(HURT_FLASH, 0.45), (HURT_FLASH, 0.2), None, None][i]
         p["arm"] = [-1, -1, -0.5, 0][i]
         p["weapon"] = -40
     elif action == "dead":
         p["fall"] = [0.0, 0.25, 0.6, 0.92, 1.0][i]
         p["eyes"] = "hurt" if i == 0 else "dead"
-        p["flash"] = [((255, 60, 60), 0.3), None, None, None, None][i]
+        p["flash"] = [(HURT_FLASH, 0.45), None, None, None, None][i]
         p["lunge"] = [-2, -3, -3, -3, -3][i]
         p["sx"] = [1.0, 1.05, 1.12, 1.25, 1.35][i]
         p["sy"] = [1.0, 0.9, 0.7, 0.5, 0.42][i]
+    elif action == "talk":  # npc: nod and wave the near hand, mouth chatters
+        p["bob"] = [0, 1.5, 0, 1.5][i % 4]
+        p["wave"] = [-1.0, 0.0, 1.0, 0.0][i % 4]
+        p["mouth"] = [1, 0, 1, 0][i % 4]
+        p["sy"] = [1.0, 0.97, 1.0, 0.97][i % 4]
     elif action == "cast":
         p["arms_up"] = 1.0
         p["cast"] = t
@@ -361,6 +372,12 @@ HUMANOID = {
     "merchant": dict(skin="#ffd9b8", hair="#a0602a", hair_style="short", outfit="#e8902a", outfit2="#7a4a20",
                      shoes="#5a3018", eye="#a06a2a", gear="cap", gear_c="#c0402a", weapon="axe", robe=False,
                      pack=True),
+    "npc_shop": dict(skin="#ffd9b8", hair="#6a3a1a", hair_style="short", outfit="#e8d8b0", outfit2="#3aa0d8",
+                     shoes="#5a3018", eye="#3a8a4a", gear="cap", gear_c="#e8902a", weapon="sign", robe=False,
+                     apron=True, pouch=True),
+    "npc_kafra": dict(skin="#ffe0c8", hair="#8a5a3a", hair_style="short", outfit="#1f3fa0", outfit2="#ffffff",
+                      shoes="#f4f4fa", eye="#2a6ad0", gear="kafra", gear_c="#ffffff", weapon="clipboard",
+                      robe=True, kafra=True),
     "orc_warrior": dict(skin="#5ab04a", hair="#3a2a1a", hair_style="none", outfit="#8a5a30", outfit2="#c0c0c8",
                         shoes="#3a2a1a", eye="#ffd020", gear="horns", gear_c="#9aa0b0", weapon="axe", robe=False,
                         tusks=True, scale=1.15, bulky=True),
@@ -426,6 +443,26 @@ def draw_weapon(cv, kind, hx_, hy, ang, s, spec):
         mx, my = tip(10)
         blade.poly([(mx, my), (tx, ty), (tx + px_ * 6, ty + py_ * 6 + 1), (mx + px_ * 6, my + py_ * 6 - 1)])
         cv.stamp(blade)
+    elif kind == "clipboard":
+        tx, ty = tip(9)
+        board = Part(hx("#8a5a30"))
+        board.poly([(tx - 5 * s, ty - 7 * s), (tx + 5 * s, ty - 7 * s), (tx + 5 * s, ty + 6 * s), (tx - 5 * s, ty + 6 * s)])
+        cv.stamp(board)
+        paper = Part(hx("#fffaf0"))
+        paper.poly([(tx - 3.5 * s, ty - 5 * s), (tx + 3.5 * s, ty - 5 * s), (tx + 3.5 * s, ty + 4.5 * s), (tx - 3.5 * s, ty + 4.5 * s)], shading=False)
+        cv.stamp(paper)
+        for k in range(3):
+            cv.dot(tx - 2 * s, ty - 3 * s + k * 3 * s, hx("#6a7a9a"), int(4 * s), 1)
+        cv.dot(tx - 1, ty - 8 * s, hx("#d8d8e0"), 3, 2)
+    elif kind == "sign":
+        tx, ty = tip(11)
+        post = Part(hx("#8a5a30"))
+        post.thick_line(hx_, hy, tx, ty, 1.8 * s)
+        cv.stamp(post)
+        board = Part(hx("#f0c040"), shiny=True)
+        board.poly([(tx - 6 * s, ty - 4 * s), (tx + 6 * s, ty - 4 * s), (tx + 6 * s, ty + 4 * s), (tx - 6 * s, ty + 4 * s)])
+        cv.stamp(board)
+        cv.dot(tx - 1, ty - 2 * s, hx("#8a4a10"), 3, int(3 * s))  # a coin mark
     elif kind == "bow":
         bow = Part(hx("#a0602a"))
         perp = a + math.pi / 2
@@ -492,6 +529,9 @@ def draw_humanoid(cv, name, d, p, ax, ay):
         if sp.get("arms_fwd") and p["arms_up"] == 0:
             oy = 18
             ox = sign * 5 + fx * 7
+        if p["wave"] is not None and sign == near and not sp.get("prop_hand"):
+            oy = 20
+            ox = sign * 9.5 * bulky + p["wave"] * 2.5
         return ox, oy
 
     def draw_arm(sign, swing):
@@ -581,6 +621,23 @@ def draw_humanoid(cv, name, d, p, ax, ay):
         if sp.get("torn"):
             cv.dot(X(-4), Y(8), shade_of(outfit), 2, 2)
             cv.dot(X(3), Y(11), skin, 2, 2)
+        if sp.get("apron") and not back:
+            ap = Part(hx("#fffaf0"))
+            ap.poly([(X(-4.5 + fx * 1.5), Y(13)), (X(4.5 + fx * 1.5), Y(13)), (X(5.5 + fx * 1.5), Y(3)),
+                     (X(-5.5 + fx * 1.5), Y(3))])
+            cv.stamp(ap)
+            cv.dot(X(-1 + fx * 1.5), Y(8), outfit2, 2, 2)
+        if sp.get("pouch"):
+            pc = Part(hx("#b8802a"))
+            pc.ellipse(X(6.5 * (1 if not side else 0) - fx * 4), Y(6), 3.0 * s, 3.2 * s)
+            cv.stamp(pc)
+            cv.dot(X(6.5 * (1 if not side else 0) - fx * 4) - 1, Y(6) - 1, hx("#f0d040"), 2, 2)
+        if sp.get("kafra") and not back:
+            tr = Part(WHITE)
+            tr.poly([(X(-3), Y(18)), (X(3), Y(18)), (X(1.5), Y(8)), (X(-1.5), Y(8))], shading=False)
+            cv.stamp(tr)
+            cv.dot(X(-1 + fx * 1), Y(18), hx("#e0303a"), 3, 2)
+            cv.dot(X(-8 * bulky), Y(3), outfit2, int(16 * bulky) + 1, 1)  # skirt hem
         if sp.get("scarf"):
             sc = Part(outfit2)
             sc.ellipse(X(0), Y(20), 6.5 * s, 2.6 * s)
@@ -696,6 +753,15 @@ def draw_humanoid(cv, name, d, p, ax, ay):
             if not back:
                 cv.dot(X(-3 + fx * 3), Y(head_y + 7), WHITE, 1, 1)
                 cv.dot(X(2 + fx * 3), Y(head_y + 6), WHITE, 1, 1)
+        elif g == "kafra":
+            band = Part(gc)
+            band.ellipse(X(0), Y(head_y + 7.5), (hr + 0.4) * s, 2.6 * s, shading=False)
+            cv.stamp(band)
+            bow = Part(hx("#2a4ac0"))
+            bow.ellipse(X(7 - fx * 1), Y(head_y + 9), 3.0 * s, 2.4 * s)
+            bow.ellipse(X(-7 - fx * 1), Y(head_y + 9), 3.0 * s, 2.4 * s)
+            cv.stamp(bow)
+            cv.dot(X(-1), Y(head_y + 10), hx("#e0303a"), 3, 2)
         elif g == "cap":
             c = Part(gc)
             c.ellipse(X(0), Y(head_y + 6.5), (hr + 0.3) * s, 5.0 * s)
@@ -891,8 +957,25 @@ def draw_bug(cv, name, d, p, ax, ay):
                            head_y - 7 * s, 1.2, shading=False)
         cv.stamp(ant)
         if not back:
-            draw_eyes(cv, head_x, head_y, fx, back, p["eyes"] if p["eyes"] != "open" else "hollow",
-                      (255, 255, 255), sep=2.0 * s, big=False)
+            if gold and p["eyes"] == "open":  # red glowing eyes with a hot core
+                side_ = abs(fx) > 0.9
+                for ex in ([head_x + fx * 5] if side_ else [head_x - 2.2 * s + fx * 3, head_x + 2.2 * s + fx * 3]):
+                    cv.dot(ex - 2, head_y - 2, (255, 70, 40), 4, 3)
+                    cv.dot(ex - 1, head_y - 1, (255, 200, 120), 2, 1)
+                    cv.put(ex - 2, head_y - 2, WHITE)
+            else:
+                draw_eyes(cv, head_x, head_y, fx, back, p["eyes"] if p["eyes"] != "open" else "hollow",
+                          (255, 255, 255), sep=2.0 * s, big=False)
+            if gold and p["mouth"]:
+                cv.dot(head_x + fx * 4 - 1, head_y + 5, (150, 30, 50), 3, 2)
+        if gold:  # little crown: three gold points and a ruby
+            cr = Part(hx("#ffe040"), shiny=True)
+            ccx, ccy = head_x - fx * 1.0, head_y - 4.6 * s
+            cr.poly([(ccx - 5, ccy + 1), (ccx + 5, ccy + 1), (ccx + 5, ccy - 3), (ccx + 2.5, ccy - 1),
+                     (ccx, ccy - 5), (ccx - 2.5, ccy - 1), (ccx - 5, ccy - 3)])
+            cv.stamp(cr)
+            cv.dot(ccx - 1, ccy - 1, (230, 30, 60), 2, 2)
+            cv.put(ccx - 1, ccy - 1, (255, 190, 200))
     if back:
         head()
     shell = Part(shell_c, shiny=True)
@@ -906,11 +989,17 @@ def draw_bug(cv, name, d, p, ax, ay):
         for t in range(int(-6 * s), int(5 * s)):
             cv.put(cx + t, cy - 3 * s, split)
     if gold:
-        cv.dot(cx - 3 * s, cy - 5 * s, (255, 255, 230), 2, 1)
-        horn = Part(hx("#fff0a0"))
-        horn.poly([(head_x - 2, head_y - 3 * s), (head_x + 2, head_y - 3 * s), (head_x + fx * 4, head_y - 9 * s)])
-        if not back:
-            cv.stamp(horn)
+        # shining shell: a diagonal highlight band across the shell pixels plus sparkles
+        bandc = (255, 252, 205)
+        for (px_, py_), col in list(shell.px.items()):
+            u = (px_ - (cx - fx * 1.5 * s)) * 0.8 + (py_ - (cy - 1.5 * s)) * 1.0
+            if -9.5 < u < -6.5 and col != shell.line:
+                cv.put(px_, py_, bandc)
+            elif -5.0 < u < -4.0 and col != shell.line:
+                cv.put(px_, py_, mix(col, bandc, 0.6))
+        cv.dot(cx + 5 * s, cy - 6 * s, WHITE, 1, 3)
+        cv.dot(cx + 4 * s, cy - 5 * s, WHITE, 3, 1)
+        cv.dot(cx - 9 * s, cy + 2 * s, (255, 245, 150), 1, 2)
     if not back:
         head()
 
@@ -1068,8 +1157,8 @@ def draw_hode(cv, d, p, ax, ay):
 QUADS = {
     "wolf": dict(c="#8a9ac8", belly="#e8eef8", s=1.3, ears="point", eye="#ffd020", tail="bushy", snout=True),
     "bigfoot": dict(c="#a0642a", belly="#d8a060", s=1.75, ears="round", eye="#2a1a1a", tail="stub", snout=True),
-    "eddga": dict(c="#ff9a1a", belly="#fff4d8", s=1.8, ears="round", eye="#30c040", tail="long", snout=True,
-                  stripes=True),
+    "eddga": dict(c="#ff9a1a", belly="#fff4d8", s=1.8, ears="round", eye="#30c040", tail="bush", snout=True,
+                  stripes=True, mvp=True),
 }
 
 
@@ -1111,6 +1200,16 @@ def draw_quad(cv, name, d, p, ax, ay):
             t = Part(c)
             if sp["tail"] == "bushy":
                 t.ellipse(a, b - 2 * s, 3.2 * s, 4.5 * s)
+            elif sp["tail"] == "bush":  # big bushy striped tail curling up behind
+                t.thick_line(a, b, a - fx * 6 * s, b - 5 * s, 4.2 * s)
+                t.ellipse(a - fx * 7 * s, b - 8 * s, 3.6 * s, 4.6 * s)
+                cv.stamp(t)
+                for k in range(3):
+                    ty_ = b - 4 * s - k * 2.6 * s
+                    tx_ = a - fx * (4 + k * 1.2) * s
+                    cv.dot(tx_ - 2, ty_, (40, 24, 20), 5, 1)
+                t = Part(hx("#fff4d8"))
+                t.ellipse(a - fx * 7.5 * s, b - 11.5 * s, 1.8 * s, 1.6 * s, shading=False)
             elif sp["tail"] == "long":
                 t.thick_line(a, b, a - fx * 5 * s, b - 6 * s, 2.4 * s)
                 t.ellipse(a - fx * 5 * s, b - 6 * s, 1.8 * s, 1.8 * s)
@@ -1122,9 +1221,12 @@ def draw_quad(cv, name, d, p, ax, ay):
             bd.ellipse(a, b, (R * 0.95 + (L - R * 0.95 + 2) * abs(fx)) * p["sx"], R * 0.9 * p["sy"])
             cv.stamp(bd)
             if sp.get("stripes"):
-                for k in (-2, 0, 2):
-                    for t_ in range(int(3 * s)):
-                        cv.put(a + k * 2.6 * s * (abs(fx) * 0.8 + 0.4), b - R * 0.8 + t_, (40, 24, 20))
+                for k in (-3, -1.5, 0, 1.5, 3):
+                    for t_ in range(int(3.4 * s)):
+                        xx = a + k * 2.6 * s * (abs(fx) * 0.8 + 0.4)
+                        if cv.get(int(xx), int(b - R * 0.8 + t_)) not in (None,):
+                            cv.put(xx, b - R * 0.8 + t_, (40, 24, 20))
+                            cv.put(xx + 1, b - R * 0.8 + t_ + 1, (40, 24, 20))
             if not back:
                 bl = Part(hx(sp["belly"]))
                 bl.ellipse(a + fx * L * 0.3, b + R * 0.35, R * 0.5, R * 0.35, shading=False)
@@ -1143,17 +1245,43 @@ def draw_quad(cv, name, d, p, ax, ay):
             cv.stamp(hd)
             if sp.get("stripes"):
                 cv.dot(a - 1, b - 4.5 * s, (40, 24, 20), 2, int(2 * s))
+                for k in (-3.5, 3.5):
+                    cv.dot(a + k * s - 1, b - 3.5 * s, (40, 24, 20), 2, int(1.6 * s))
             if not back and sp["snout"]:
                 sn = Part(hx(sp["belly"]))
                 sn.ellipse(a + fx * 3.5 * s, b + 2 * s, 3 * s, 2.2 * s)
                 cv.stamp(sn)
                 cv.dot(a + fx * 5 * s - 0.5, b + 1 * s, (30, 20, 30), 2, 1)
-                if p["mouth"]:
+                if p["mouth"] and sp.get("mvp"):  # fierce roar: wide open maw, fangs and tongue
+                    mx_, my_ = a + fx * 3.0 * s - 3, b + 2.6 * s
+                    cv.dot(mx_ - 1, my_ - 1, (40, 10, 20), 8, 7)
+                    cv.dot(mx_, my_ + 3, (230, 80, 100), 6, 2)
+                    cv.dot(mx_ - 1, my_ - 1, WHITE, 2, 3)
+                    cv.dot(mx_ + 5, my_ - 1, WHITE, 2, 3)
+                    cv.dot(mx_ + 1, my_ + 4, WHITE, 1, 2)
+                    cv.dot(mx_ + 4, my_ + 4, WHITE, 1, 2)
+                elif p["mouth"]:
                     cv.dot(a + fx * 3.5 * s - 1, b + 3.5 * s, (170, 30, 50), 3, 2)
                     cv.put(a + fx * 3.5 * s - 1, b + 3.5 * s, WHITE)
             if not back:
                 style = p["eyes"]
                 draw_eyes(cv, a, b - 1 * s, fx, back, style, hx(sp["eye"]), sep=2.6 * s, big=s > 1.2)
+                if sp.get("mvp"):
+                    # eye patch over one eye (screen-right), a scar over the other, brow ridge for a fierce look
+                    side_ = abs(fx) > 0.9
+                    pex = a + (fx * 5 if side_ else 2.6 * s + fx * 3)
+                    if not side_ or fx < 0:
+                        pt_ = Part(hx("#2a1a2a"))
+                        pt_.ellipse(pex, b - 1 * s, 1.7 * s, 1.6 * s, shading=False)
+                        cv.stamp(pt_)
+                        cv.dot(pex - 1, b - 1 * s - 1, hx("#6a5a7a"), 1, 1)
+                        for k in range(4):  # strap up over the brow
+                            cv.put(pex - 2 + k, b - 1 * s - 3 - k * 0.5, (30, 20, 30))
+                    scx = a - 2.6 * s + fx * 3 if not side_ else a + fx * 5
+                    for k in range(int(3.5 * s)):  # scar slash across the eye
+                        cv.put(scx - 2 + k * 0.7, b - 1 * s - 4 + k, (255, 90, 90))
+                        cv.put(scx - 1 + k * 0.7, b - 1 * s - 4 + k, (150, 30, 40))
+                    cv.dot(a - 6 * s * (1 - 0.5 * abs(fx)) , b - 4 * s, (40, 24, 20), int(4 * s), 1)
 
     for kind, _depth, a, b in sorted(items, key=lambda it: (it[1], {"leg": 0, "tail": 1, "body": 2, "head": 3}[it[0]])):
         if kind == "head" and not back and fy >= 0:
@@ -1216,6 +1344,8 @@ def kind_spec(name):
     """-> (frame_w, frame_h, anchor_x, anchor_y, draw_fn, dead_style, actions)"""
     if name in JOBS:
         return 48, 64, 24, 60, lambda cv, d, p, ax, ay: draw_humanoid(cv, name, d, p, ax, ay), "fall", PLAYER_ACTIONS
+    if name in NPCS:
+        return 48, 64, 24, 60, lambda cv, d, p, ax, ay: draw_humanoid(cv, name, d, p, ax, ay), "fall", NPC_ACTIONS
     if name in ("zombie", "skeleton", "soldier_skeleton", "mummy"):
         return 48, 64, 24, 60, lambda cv, d, p, ax, ay: draw_humanoid(cv, name, d, p, ax, ay), "fall", MONSTER_ACTIONS
     if name == "orc_warrior":
@@ -1309,7 +1439,7 @@ def contact_sheet(out_dir, kinds):
     cell = 80
     rows = []
     jobs = [k for k in kinds if k in JOBS]
-    mons = [k for k in kinds if k not in JOBS]
+    mons = [k for k in kinds if k not in JOBS and k not in NPCS]
     rows.append([(k, "idle", 0, 0) for k in jobs])
     for i in range(0, len(mons), 7):
         rows.append([(k, "idle", 0, 0) for k in mons[i:i + 7]])
@@ -1322,7 +1452,16 @@ def contact_sheet(out_dir, kinds):
     if "poring" in kinds:
         rows.append([("poring", "walk", 0, i) for i in range(8)])
         rows.append([("poring", a, 0, f) for a, f in (("attack", 3), ("hurt", 0), ("dead", 4))]
-                    + [("wolf", "walk", 2, i) for i in (0, 2, 4)] + [("eddga", "attack", 2, 3)])
+                    + [("wolf", "walk", 2, i) for i in (0, 2, 4)])
+        rows.append([("orc_warrior", "hurt", 0, i) for i in range(4)]
+                    + [("poring", "hurt", 0, i) for i in range(2)] + [("thief", "hurt", 0, i) for i in range(2)])
+        rows.append([("orc_warrior", "dead", 0, 0), ("poring", "dead", 0, 0), ("thief", "dead", 0, 0)])
+    for mvp in ("golden_thief_bug", "eddga"):
+        if mvp in kinds:
+            rows.append([(mvp, "idle", 0, 0), (mvp, "idle", 2, 0), (mvp, "walk", 2, 2), (mvp, "walk", 0, 2),
+                         (mvp, "attack", 2, 3), (mvp, "attack", 0, 3), (mvp, "dead", 2, 4), (mvp, "hurt", 2, 0)])
+    if any(k in kinds for k in NPCS):
+        rows.append([(k, a, d, f) for k in NPCS if k in kinds for d in (0, 2) for a, f in (("idle", 0), ("talk", 2))])
     ncols = max(len(r) for r in rows)
     W, H = ncols * cell, len(rows) * cell
     pix = [None] * (W * H)
@@ -1370,7 +1509,7 @@ def main(argv=None):
     ap.add_argument("--no-contact", action="store_true")
     ap.add_argument("--jobs", type=int, default=4, help="worker processes")
     a = ap.parse_args(argv)
-    kinds = a.only or (JOBS + MONSTERS)
+    kinds = a.only or (JOBS + MONSTERS + NPCS)
     os.makedirs(a.out, exist_ok=True)
     if a.jobs > 1 and len(kinds) > 1:
         from multiprocessing import Pool
@@ -1380,7 +1519,8 @@ def main(argv=None):
         for k in kinds:
             build_kind(k, a.out)
     index = {"version": 1, "jobs": JOBS, "monsters": MONSTERS,
-             "player_actions": PLAYER_ACTIONS, "monster_actions": MONSTER_ACTIONS}
+             "npcs": NPCS, "player_actions": PLAYER_ACTIONS, "monster_actions": MONSTER_ACTIONS,
+             "npc_actions": NPC_ACTIONS}
     if not a.only:
         with open(os.path.join(a.out, "index.json"), "w", newline="\n") as f:
             json.dump(index, f, indent=1)

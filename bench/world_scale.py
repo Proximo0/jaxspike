@@ -1,6 +1,6 @@
 """World-build scale bench (CPU): time terrain, distance fields and make_world_batch; report memory.
 
-Run from the repo root: python bench/world_scale.py [--batches 1 4] [--no-base] [--census TICKS]
+Run from the repo root: python bench/world_scale.py [--batches 1 4] [--no-base] [--ticks N] [--census TICKS]
 MAP is a config constant: to measure 2048, run this from a copy of the repo with MAP = 2048 in its
 game/config.py (docs/world_scale.md has the commands and the numbers). --census plays TICKS bot ticks
 and prints where the players and monsters are, per zone (world_layout.ZONES).
@@ -70,6 +70,8 @@ def main():
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--no-base", action="store_true", help="skip the plain (warp-less) distance_fields timing")
     ap.add_argument("--census", type=int, default=0, help="bot ticks before a per-zone census (0 = none)")
+    ap.add_argument("--ticks", type=int, default=0,
+                    help="time run_games over this many bot ticks, twice (compile + run, then run only); 0 = skip")
     args = ap.parse_args()
     print(f"MAP={MAP} devices={jax.devices()}", flush=True)
 
@@ -114,9 +116,24 @@ def main():
             print(f"  {name}: {mb(worlds[name]) / batch:.2f} MB/world")
         big = sorted(((mb(v) / batch, k) for k, v in worlds.items() if hasattr(v, "nbytes")), reverse=True)[:3]
         print("  largest world arrays: " + ", ".join(f"{k} {m:.2f}" for m, k in big), flush=True)
+        if args.ticks:
+            tick_time(worlds, args.ticks, batch)
         if args.census:
             census(worlds, args.census)
         del worlds
+
+
+def tick_time(worlds, ticks, batch):
+    """Build time is above; this is the tick: run_games(ticks) twice, the first call includes the jit compile."""
+    t = time.perf_counter()
+    jax.block_until_ready(run_games(worlds, ticks))
+    first = time.perf_counter() - t
+    t = time.perf_counter()
+    jax.block_until_ready(run_games(worlds, ticks))
+    second = time.perf_counter() - t
+    print(f"run_games({ticks} ticks, batch {batch}): first(with compile) {first:.1f}s  second {second:.1f}s  "
+          f"= {second / ticks * 1000:.1f} ms/tick, {second / ticks / batch * 1000:.2f} ms/world-tick; "
+          f"peak RSS {peak_rss_mb():.0f} MB", flush=True)
 
 
 def census(worlds, ticks):

@@ -54,6 +54,35 @@ func test_session_login_flow_over_fake_link() -> void:
 	assert_eq(s.last_error, "full")
 
 
+const SNAP_BIN: String = "SlMBA2MAAAAFAAEAPQAAAHsieW91Ijp7InBvcyI6WzEsMl0sImhwIjo1fSwibm90aWNlIjoiaGkiLCJuYW1lcyI6eyIwIjoibWUifX0AAAAAAQACAAUAAAAyAAAAWgAAAAAAAACWAAAAAQIBAAAAAwAEAAAAAAAAAAAAAAAAAAAAAACWAAAAAAACAAMABQAGACgAAAA8AAAAXwAAAAwAAADIALwCBQcDAGkABwAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAJQBCQAKAAEAAAABAAAAAAAAAAAAAAAAAAAAAAAHAA=="
+
+
+func test_session_login_format_defaults_to_bin() -> void:
+	var link := FakeLink.new()
+	var s := NetSession.new(link)
+	s.connect_to("x")
+	s.login("ann")
+	assert_eq(Codec.decode(link.sent[0])["format"], "bin")
+	s.snap_format = "json"
+	s.login("ann")
+	assert_eq(Codec.decode(link.sent[1])["format"], "json")
+
+
+func test_session_applies_binary_snap() -> void:
+	var link := FakeLink.new()
+	var s := NetSession.new(link)
+	var raw: PackedByteArray = Marshalls.base64_to_raw(SNAP_BIN)
+	link.push_inbound_bytes(raw)
+	var got: Array[Dictionary] = s.poll()
+	assert_eq(got.size(), 1)
+	assert_eq(s.store.tick, 99)
+	assert_eq(s.store.ids().size(), 5)
+	assert_eq(s.rx_bytes, raw.size())
+	link.push_inbound_bytes(raw.slice(0, raw.size() - 1))
+	s.poll()
+	assert_eq(s.bad_messages, 1)
+
+
 func test_session_records_traffic() -> void:
 	var path: String = "user://test_net_session.jsonl"
 	var link := FakeLink.new()

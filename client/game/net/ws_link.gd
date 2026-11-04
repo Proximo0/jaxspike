@@ -24,12 +24,28 @@ func connect_to(url: String) -> void:
 
 func poll() -> Array[String]:
 	var out: Array[String] = []
+	for p: Variant in _ws_link_drain():
+		if typeof(p) == TYPE_STRING:
+			out.append(String(p))
+	return out
+
+
+func poll_packets() -> Array:
+	return _ws_link_drain()
+
+
+## Shared loop: Strings for text frames, PackedByteArray for binary frames.
+func _ws_link_drain() -> Array:
+	var out: Array = []
 	if peer == null:
 		return out
 	peer.poll()
 	while peer.get_available_packet_count() > 0:
 		var pkt: PackedByteArray = peer.get_packet()
-		out.append(pkt.get_string_from_utf8())
+		if peer.was_string_packet():
+			out.append(pkt.get_string_from_utf8())
+		else:
+			out.append(pkt)
 	if peer.get_ready_state() == WebSocketPeer.STATE_CLOSED:
 		close_code = peer.get_close_code()
 	return out

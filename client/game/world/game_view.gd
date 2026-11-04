@@ -24,11 +24,11 @@ var audio: FeelAudio = null
 
 ## Placeholder layout on the 1920x1080 canvas: status left under the HUD, inventory right, others centre.
 const PANEL_POS: Dictionary = {
-	"StatusPanel": Vector2(8, 300), "InventoryPanel": Vector2(1660, 250), "SkillPanel": Vector2(420, 140),
+	"ShopPanel": Vector2(1300, 250), "InventoryPanel": Vector2(1660, 250), "SkillPanel": Vector2(420, 140),
 	"CraftPanel": Vector2(700, 140), "PartyPanel": Vector2(1000, 140), "ChatWindow": Vector2(8, 900),
 }
 const PANEL_SCENES: Array[String] = [
-	"res://game/ui/status_panel.tscn", "res://game/ui/skill_bar.tscn", "res://game/ui/skill_panel.tscn",
+	"res://game/ui/shop_panel.tscn", "res://game/ui/skill_bar.tscn", "res://game/ui/skill_panel.tscn",
 	"res://game/ui/inventory_panel.tscn", "res://game/ui/craft_panel.tscn", "res://game/ui/party_panel.tscn",
 	"res://game/ui/chat_window.tscn",
 ]

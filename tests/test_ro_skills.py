@@ -316,10 +316,10 @@ def test_kill_via_skill_sets_flags_and_credit():
 
 def test_magnum_break_hits_chebyshev_one_only():
     s = sk.SK_MAGNUM_BREAK
-    # RO Magnum Break is 5x5 (aoe 2); ro_skills_effects R_MAX = 1 still clips it to 3x3 (ro-fidelity engine line).
+    # RO Magnum Break is 5x5 (aoe 2); R_MAX = 2 in ro_skills_effects gives the 25 offsets.
     assert int(sk.SKILL_AOE[s]) == 2 and int(sk.SKILL_TARGET[s]) == sk.TARGET_SELF
     w = _sp(_learn(_world(monster_pos=(21, 20), kind=0), s), 50)
-    spots = [(19, 19), (20, 21), (22, 20), (20, 23)]  # diagonal (in), south (in), distance 2, distance 3
+    spots = [(19, 19), (20, 21), (22, 20), (20, 23)]  # diagonal (in), south (in), distance 2 (in), distance 3
     m = w["monsters"]
     for i, pos in enumerate(spots, start=1):
         m = {**m, "pos": m["pos"].at[i].set(jnp.array(pos)), "hp": m["hp"].at[i].set(MONSTER_HP[0]),
@@ -329,9 +329,9 @@ def test_magnum_break_hits_chebyshev_one_only():
     expect = _dmg(10, s, 1, int(el.MONSTER_ELEMENT[0]))  # kind 0 = Poring (Water) since the RO world merge
     assert expect > 0
     hps = [_hp(out, i) for i in range(5)]
-    assert hps[:3] == [MONSTER_HP[0] - expect] * 3
-    assert hps[3:] == [MONSTER_HP[0]] * 2
-    assert int(out["skills"]["skill_dmg"][0]) == 3 * expect
+    assert hps[:4] == [MONSTER_HP[0] - expect] * 4
+    assert hps[4:] == [MONSTER_HP[0]]
+    assert int(out["skills"]["skill_dmg"][0]) == 4 * expect
     assert int(out["skills"]["cooldown"][0, s]) == int(sk.SKILL_COOLDOWN[s, 1])
 
 
@@ -351,12 +351,30 @@ def test_magnum_break_kill_credit_goes_to_lowest_caster():
 
 
 # ---------------------------------------------------------------- heal and buffs
+def _heal_stats():
+    return {"base_level": jnp.full((MP,), 15, jnp.int32), "int": jnp.full((MP,), 25, jnp.int32)}
+
+
+def test_heal_level_3_base_15_int_25_heals_140():
+    s = sk.SK_HEAL
+    cast = int(sk.SKILL_CAST[s, 3])
+    w = _sp(_learn(_world(), s, 3), 50)
+    w["stats"] = _heal_stats()
+    p = w["players"]
+    p = {**p, "hp": p["hp"].at[1].set(1), "pos": p["pos"].at[1].set(jnp.array([22, 20])),
+         "active": p["active"].at[1].set(True)}
+    out = _run(_tick({**w, "players": p}, skill=s, target=1), cast + 1)
+    assert (15 + 25) // 8 * (4 + 24) == 140
+    assert int(out["players"]["hp"][1]) == min(1 + 140, PLAYER_MAX_HP)
+
+
 def test_heal_clamps_at_max_hp_and_heals_ally():
     s = sk.SK_HEAL
-    heal = (10 + 20) * int(sk.SKILL_POWER[s, 1]) // 1000 + int(sk.SKILL_FLAT_HEAL[s])
+    heal = (15 + 25) // 8 * (4 + 8 * 1)  # RO Heal: (base level 15 + INT 25) // 8 * (4 + 8 * lv) = 60
     assert heal > 0
     cast = int(sk.SKILL_CAST[s, 1])
     w = _sp(_learn(_world(), s), 50)
+    w["stats"] = _heal_stats()
     p = w["players"]
     p = {**p, "hp": p["hp"].at[0].set(PLAYER_MAX_HP - 3).at[1].set(1),
          "pos": p["pos"].at[1].set(jnp.array([22, 20])), "active": p["active"].at[1].set(True)}
@@ -416,7 +434,44 @@ def test_buff_stat_mods_keys_and_passives():
     assert int(ro_skills.buff_stat_mods(w)["hp_regen_pct"][0]) == 30
     w = _set(_set(w, "buffs", (0, sk.BUFF_INC_AGI), 50), "buff_level", (0, sk.BUFF_INC_AGI), 2)  # Inc AGI lvl 2
     mods = ro_skills.buff_stat_mods(w)
-    assert int(mods["agi_flat"][0]) == 4 and int(mods["aspd_pct"][0]) == 2
+    assert int(mods["agi_flat"][0]) == 4 and int(mods["aspd_pct"][0]) == 0  # E7: no direct ASPD bonus
+
+
+def _with_move(w):
+    if "move" in w:
+        return w
+    from game import ro_move
+    return ro_move.attach(w)[0]
+
+
+def test_increase_agi_sets_move_speed_120_then_back_to_150():
+    s, lvl = sk.SK_INCREASE_AGI, 1
+    cast = int(sk.SKILL_CAST[s, lvl])
+    w = _with_move(_sp(_learn(_world(), s, lvl), 50))
+    assert "move" in w
+    d = _derived(max_sp=500)
+    out = _run(_tick(w, d=d, skill=s, target=0), cast, d)
+    assert int(out["skills"]["buffs"][0, sk.BUFF_INC_AGI]) > 0
+    sp = out["move"]["speed_ms"]
+    assert sp.dtype == jnp.int16 and int(sp[0]) == 120 and int(sp[1]) == 150
+    assert int(sp[MP]) == int(w["move"]["speed_ms"][MP])  # monster rows untouched
+    out = _set(out, "buffs", (0, sk.BUFF_INC_AGI), 3)
+    for _ in range(10):
+        if int(out["skills"]["buffs"][0, sk.BUFF_INC_AGI]) == 0:
+            break
+        out = _run(out, 1, d)
+    assert int(out["skills"]["buffs"][0, sk.BUFF_INC_AGI]) == 0
+    out = _run(out, 1, d)
+    assert int(out["move"]["speed_ms"][0]) == 150
+
+
+def test_resolve_without_move_block_still_works():
+    s, lvl = sk.SK_INCREASE_AGI, 1
+    cast = int(sk.SKILL_CAST[s, lvl])
+    w = {k: v for k, v in _sp(_learn(_world(), s, lvl), 50).items() if k != "move"}
+    assert "move" not in w
+    out = _run(_tick(w, skill=s, target=0), cast)
+    assert "move" not in out and int(out["skills"]["buffs"][0, sk.BUFF_INC_AGI]) > 0
 
 
 def test_buffs_tick_down_without_casting():

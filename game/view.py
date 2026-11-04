@@ -4,6 +4,7 @@ Entity ids are global: players 0..MAX_PLAYERS-1, monsters MAX_PLAYERS + i, drops
 resource nodes MAX_PLAYERS + MAX_MONSTERS + MAX_DROPS + i (docs/craft_wire.md). E is the table's own length.
 See docs/m0_brief.md Part A.
 """
+import jax
 import jax.numpy as jnp
 
 from game import ro_anim, ro_stats
@@ -22,11 +23,14 @@ def entity_table(world):
     """Flat per-entity arrays over all E ids (players, monsters, drops, nodes). Nodes: vis = placed (a depleted node
     stays visible), hp = active 0/1, max_hp 1, kind NODE_KIND_BASE + node kind."""
     p, m, d, n = world["players"], world["monsters"], world["drops"], world["craft"]["nodes"]
+    dying = ro_anim.dying(world)  # corpse window: dead clip shown and died within DEAD_VISIBLE_MS
     mhp = jnp.asarray(MONSTER_HP, jnp.int32)[m["kind"]]
     zeros_d = jnp.zeros((MAX_DROPS,), jnp.int32)
     return {
         "pos": jnp.concatenate([p["pos"], m["pos"], d["pos"], n["pos"]]).astype(jnp.int32),
-        "vis": jnp.concatenate([p["active"] & ~p["dead"], m["active"], d["active"], n["placed"]]),
+        "vis": jnp.concatenate([p["active"] & (~p["dead"] | dying[:MAX_PLAYERS]),
+                                m["active"] | (dying[MAX_PLAYERS:] & (m["respawn_in"] > 0)), d["active"],
+                                n["placed"]]),
         "hp": jnp.concatenate([p["hp"], m["hp"], zeros_d, n["active"]]).astype(jnp.int32),
         "max_hp": jnp.concatenate([ro_stats.derived(world)["max_hp"].astype(jnp.int32), mhp, zeros_d,
                                    jnp.ones((MAX_NODES,), jnp.int32)]),
@@ -59,17 +63,12 @@ def changed_mask(prev, now):
 
 
 def _compact(key):
-    """key int32 [V, E] (>= _BIG = not a candidate) -> ids int32 [V, VIEW_K], ascending key, -1 padded."""
-    order = jnp.argsort(key, axis=1)[:, :VIEW_K]
-    ok = jnp.take_along_axis(key, order, axis=1) < _BIG
-    return jnp.where(ok, order, -1).astype(jnp.int32)
-
-
-def _scatter(ids, n):
-    """Bool [V, n] marking the emitted ids (-1 ignored)."""
-    rows = jnp.arange(ids.shape[0])[:, None]
-    cols = jnp.where(ids >= 0, ids, n)  # out of bounds, dropped
-    return jnp.zeros((ids.shape[0], n), jnp.bool_).at[rows, cols].set(True, mode="drop")
+    """key int32 [V, E] (>= _BIG = not a candidate; candidate keys unique) -> (ids int32 [V, VIEW_K] ascending key,
+    -1 padded; thresh int32 [V], the VIEW_K-th smallest key, or _BIG - 1 when the row has fewer candidates)."""
+    neg, idx = jax.lax.top_k(-key, VIEW_K)  # -key cannot overflow: keys <= _BIG or dist * n + ids < _BIG < 2**31
+    vals = -neg
+    ids = jnp.where(vals < _BIG, idx, -1).astype(jnp.int32)
+    return ids, jnp.minimum(vals[:, -1], _BIG - 1)  # thresh: a candidate is emitted iff key <= thresh
 
 
 def view_update(now, changed, viewer_slot, known):
@@ -87,9 +86,14 @@ def view_update(now, changed, viewer_slot, known):
 
     dist = d[..., 0] + d[..., 1]
     send = visible & (changed[None, :] | ~known)
-    send_ids = _compact(jnp.where(send, dist * n + ids, _BIG))
-    gone_ids = _compact(jnp.where(known & ~visible, ids, _BIG))
+    gone = known & ~visible
+    key_send = jnp.where(send, dist * n + ids, _BIG)
+    key_gone = jnp.where(gone, ids, _BIG)
+    send_ids, thresh_send = _compact(key_send)
+    gone_ids, thresh_gone = _compact(key_gone)
 
     # Unsent overflow stays unknown (retried); unsent gone stays known (retried).
-    known_next = (known & ~_scatter(gone_ids, n)) | _scatter(send_ids, n)
+    emitted_send = send & (key_send <= thresh_send[:, None])
+    emitted_gone = gone & (key_gone <= thresh_gone[:, None])
+    known_next = (known & ~emitted_gone) | emitted_send
     return send_ids, gone_ids, known_next

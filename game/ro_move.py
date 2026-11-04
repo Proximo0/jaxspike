@@ -31,6 +31,10 @@ _D9 = jnp.asarray(DIR_DELTAS9, jnp.int32)
 _IS_PLAYER = jnp.arange(N_ENT) < MAX_PLAYERS
 _IDX = jnp.arange(N_ENT, dtype=jnp.int32)
 _NO_TILE = MAP * MAP  # sentinel key, sorts after every real tile
+# Claim keys are plain tile indices (< MAP * MAP) and _occupied sorts 2 * key + 1: both fit int32 up to MAP 32767.
+# Never multiply a tile key by MAX_PLAYERS / N_ENT (that overflowed at MAP 2048); the stable sort in
+# _first_claims gives the lowest index the win. game/ro_warps.py and game/ro_kafra.py reuse these helpers.
+assert 2 * MAP * MAP + 1 < 2 ** 31, "tile keys no longer fit int32: switch _occupied/_first_claims to int64"
 # Monster ms/cell per kind: game/data/monsters.SPEED_MS once ro-monsters adds it, else MOVE_TICKS steps of 150 ms.
 _MON_SPEED = jnp.asarray(getattr(_mon_data, "SPEED_MS", _mon_data.MOVE_TICKS * DEFAULT_SPEED_MS), jnp.int32)
 _LEGACY_ACC = 30000  # legacy path: an accumulator this full steps on any due tick

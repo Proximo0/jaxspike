@@ -7,13 +7,16 @@ static func _welcome() -> Dictionary:
 	var kinds: Array = [0, 1, 2, 3, 4, 5]
 	var names: Array = ["", "Gold", "Red Potion", "Sword", "Cap", "Poring Card"]
 	for i: int in range(1, 6):
-		items.append({"id": i, "name": names[i], "kind": kinds[i]})
+		items.append({"id": i, "name": names[i], "kind": kinds[i], "buy": 10 * i, "sell": 5 * i})
 	return {"t": "welcome", "slot": 0, "items": items, "craft_items": {"100": "copper ore", "200": "copper bar"},
 			"recipes": [
 				{"id": 1, "inputs": [100, 100], "output": 200, "skill": 1, "level": 1, "exp": 5, "station": 6},
 				{"id": 2, "inputs": [100], "output": 200, "skill": 1, "level": 5, "exp": 5, "station": -1},
 			],
-			"craft_skills": {"SKILL_NAMES": ["a"], "LEVEL_EXP": [0, 50, 200, 450]}, "mvp_kinds": [null, null, "Orc Lord"]}
+			"craft_skills": {"SKILL_NAMES": ["a"], "LEVEL_EXP": [0, 50, 200, 450]}, "mvp_kinds": [null, null, "Orc Lord"],
+			"world": {"shops": [{"tile": [10, 11], "town": 1}]},
+			"shops": [{"town": 0, "name": "Prontera", "items": [2]}, {"town": 1, "name": "Geffen", "items": [2, 3]}],
+			"skills": {"names": ["Basic", "Discount", "Overcharge"]}}
 
 
 static func _snap(tick: int, extra: Dictionary, ents: Array) -> String:
@@ -54,7 +57,8 @@ func run() -> Array:
 	var craft_panel: CraftPanel = (load("res://game/ui/craft_panel.tscn") as PackedScene).instantiate()
 	var party_panel: PartyPanel = (load("res://game/ui/party_panel.tscn") as PackedScene).instantiate()
 	var chat: ChatBox = (load("res://game/ui/chat_box.tscn") as PackedScene).instantiate()
-	for p: Node in [inv_panel, craft_panel, party_panel, chat]:
+	var shop: ShopPanel = (load("res://game/ui/shop_panel.tscn") as PackedScene).instantiate()
+	for p: Node in [inv_panel, craft_panel, party_panel, chat, shop]:
 		host.add_child(p)
 		p.call("bind", session)
 	var wl: Dictionary = _welcome()
@@ -66,7 +70,7 @@ func run() -> Array:
 	link.push_inbound(_snap(1, {"craft": {"level": [1, 1, 1, 1, 1, 1], "exp": [0, 25, 0, 0, 0, 0]},
 			"members": ["Odin", "Bob"]}, nodes))
 	for m: Dictionary in session.poll():
-		for p: Node in [inv_panel, craft_panel, party_panel, chat]:
+		for p: Node in [inv_panel, craft_panel, party_panel, chat, shop]:
 			p.call("on_message", m)
 	await host.get_tree().process_frame
 	await host.get_tree().process_frame
@@ -147,6 +151,52 @@ func run() -> Array:
 	inv_panel.send_action("Store", 0)
 	rows.append(row("storage_in", _same(_last(link), {"t": "storage", "op": "in", "slot": 0}), ""))
 
+	# Shop panel (no skills learned: base prices).
+	rows.append(row("shop_opens_near_tile", shop.visible and shop.shop_name == "Geffen" and shop.rows_buy.size() == 2,
+			"%s %s" % [shop.visible, shop.shop_name]))
+	var smsg: Dictionary = shop.buy(2)
+	rows.append(row("shop_buy_sends", _same(_last(link), {"t": "buy", "item": 2}) and _same(smsg, {"item": 2}), ""))
+	smsg = shop.sell(0)
+	var worn_listed: bool = false
+	for sr: Dictionary in shop.rows_sell:
+		worn_listed = worn_listed or int(sr["slot"]) == 1
+	rows.append(row("shop_sell_sends", _same(_last(link), {"t": "sell", "slot": 0}) and not worn_listed,
+			link.sent[link.sent.size() - 1]))
+	rows.append(row("shop_prices", int(shop.rows_buy[0]["price"]) == 20 and int(shop.rows_buy[1]["price"]) == 30
+			and int(shop.rows_sell[0]["price"]) == 10, str(shop.rows_buy)))
+	link.push_inbound(_snap(4, {"zeny": 999}, []))
+	session.poll()
+	await host.get_tree().process_frame
+	await host.get_tree().process_frame
+	rows.append(row("shop_zeny_updates", shop.zeny_label.text == "Zeny 999", shop.zeny_label.text))
+	link.push_inbound(_snap(5, {"pos": [30, 30]}, []))
+	session.poll()
+	await host.get_tree().process_frame
+	await host.get_tree().process_frame
+	rows.append(row("shop_closes_when_away", not shop.visible, str(shop.town)))
+	link.push_inbound(_snap(6, {"pos": [10, 10]}, []))
+	session.poll()
+	await host.get_tree().process_frame
+	await host.get_tree().process_frame
+	var reopened: bool = shop.visible
+	shop.close()
+	var hidden: bool = not shop.visible
+	link.push_inbound(_snap(7, {"pos": [10, 10], "zeny": 5}, []))
+	session.poll()
+	await host.get_tree().process_frame
+	await host.get_tree().process_frame
+	var stays_hidden: bool = not shop.visible
+	link.push_inbound(_snap(8, {"pos": [30, 30]}, []))
+	session.poll()
+	await host.get_tree().process_frame
+	await host.get_tree().process_frame
+	link.push_inbound(_snap(9, {"pos": [10, 10]}, []))
+	session.poll()
+	await host.get_tree().process_frame
+	await host.get_tree().process_frame
+	rows.append(row("shop_close_button_dismisses", reopened and hidden and stays_hidden and shop.visible,
+			"%s %s %s %s" % [reopened, hidden, stays_hidden, shop.visible]))
+
 	# Chat.
 	chat.submit("/p hello party")
 	rows.append(row("chat_party_sent", _same(_last(link), {"t": "chat", "kind": "party", "text": "hello party"}), ""))
@@ -157,7 +207,7 @@ func run() -> Array:
 	rows.append(row("chat_log", chat.lines.size() == 3 and String(chat.lines[2]["text"]).contains("Orc Lord"),
 			str(chat.lines.size())))
 
-	for p: Node in [inv_panel, craft_panel, party_panel, chat]:
+	for p: Node in [inv_panel, craft_panel, party_panel, chat, shop]:
 		p.queue_free()
 	await host.get_tree().process_frame
 	return rows

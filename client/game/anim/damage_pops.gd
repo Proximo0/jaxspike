@@ -10,18 +10,18 @@ const RISE_TILES: float = 1.2
 const ATTACKER_RANGE: float = 10.0  ## cells; bows reach 9
 const MAX_POPS: int = 256
 
-var _pops: Array[Dictionary] = []  ## {id, dmg, show_ms, seq}
+var _pops: Array[Dictionary] = []  ## {id, dmg, show_ms, seq, crit}
 var _seq: int = 0
 
 
-func add(target_id: int, dmg: int, show_ms: float) -> void:
+func add(target_id: int, dmg: int, show_ms: float, crit: bool = false) -> void:
 	_seq += 1
-	_pops.append({"id": target_id, "dmg": dmg, "show_ms": show_ms, "seq": _seq})
+	_pops.append({"id": target_id, "dmg": dmg, "show_ms": show_ms, "seq": _seq, "crit": crit})
 	if _pops.size() > MAX_POPS:
 		_pops.remove_at(0)
 
 
-## Visible numbers at `now_ms`: {id, dmg, seq, rise (tiles above the head), alpha}. Drops expired ones.
+## Visible numbers at `now_ms`: {id, dmg, seq, crit, rise (tiles above the head), alpha}. Drops expired ones.
 func active(now_ms: float) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	var keep: Array[Dictionary] = []
@@ -34,7 +34,7 @@ func active(now_ms: float) -> Array[Dictionary]:
 			continue
 		var t: float = age / LIFE_MS
 		var alpha: float = clampf((LIFE_MS - age) / FADE_MS, 0.0, 1.0)
-		out.append({"id": p["id"], "dmg": p["dmg"], "seq": p["seq"], "rise": RISE_TILES * (1.0 - (1.0 - t) * (1.0 - t)),
+		out.append({"id": p["id"], "dmg": p["dmg"], "seq": p["seq"], "crit": p["crit"], "rise": RISE_TILES * (1.0 - (1.0 - t) * (1.0 - t)),
 				"alpha": alpha})
 	_pops = keep
 	return out

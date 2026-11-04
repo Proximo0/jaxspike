@@ -16,6 +16,7 @@ var last_error: String = ""
 var frame: int = 0  ## poll counter, used as the recorder frame number
 var rx_bytes: int = 0
 var bad_messages: int = 0
+var snap_format: String = "bin"  ## "bin" asks the server for binary snaps; "json" opts out
 
 
 func _init(l: NetLink = null) -> void:
@@ -32,7 +33,7 @@ func close() -> void:
 
 
 func login(player_name: String) -> void:
-	_send({"t": "login", "name": player_name})
+	_send({"t": "login", "name": player_name, "format": snap_format})
 
 
 func send_input(move: int, attack: bool, eat: bool) -> void:
@@ -47,11 +48,20 @@ func walk_to(x: int, y: int) -> void:
 func poll() -> Array[Dictionary]:
 	frame += 1
 	var out: Array[Dictionary] = []
-	for text: String in link.poll():
-		rx_bytes += text.length()
-		if recorder != null:
-			recorder.record_in(frame, text)
-		var msg: Dictionary = Codec.decode(text)
+	for pkt: Variant in link.poll_packets():
+		var msg: Dictionary = {}
+		if typeof(pkt) == TYPE_PACKED_BYTE_ARRAY:
+			var data: PackedByteArray = pkt
+			rx_bytes += data.size()
+			msg = Codec.decode_snap_bin(data)
+			if recorder != null and not msg.is_empty():
+				recorder.record_in(frame, Codec.encode(msg))
+		else:
+			var text: String = String(pkt)
+			rx_bytes += text.length()
+			if recorder != null:
+				recorder.record_in(frame, text)
+			msg = Codec.decode(text)
 		if msg.is_empty():
 			bad_messages += 1
 			continue

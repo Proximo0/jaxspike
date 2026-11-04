@@ -201,9 +201,12 @@ def test_combat_hook_attack_faces_target_and_hits_show():
     amo = int(A.amotion_ms(w1)[0])
     assert int(w1["anim"]["dur_ms"][0]) == amo > 0
     dealt = MONSTER_HP[1] - int(w1["monsters"]["hp"][0])
-    assert int(w1["anim"]["hit_dmg"][M0]) == dealt
+    assert int(w1["anim"]["hit_dmg"][M0]) == (dealt if dealt else -1)  # ro3-wire: a miss records -1 (h = 0)
     if dealt:
         assert _act(w1, M0) in (A.HURT, A.ATTACK)
+    else:
+        assert _act(w1, M0) != A.HURT  # a miss never flinches
+    assert int(w1["anim"]["hit_tick"][M0]) == int(w1["tick"])
 
 
 def test_on_combat_monster_swing_and_player_damage():

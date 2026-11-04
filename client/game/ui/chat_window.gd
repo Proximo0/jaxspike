@@ -13,7 +13,7 @@ const TAB_SYSTEM: int = 3
 var tab_bar: TabBar
 var current_tab: int = TAB_ALL
 var unread: Array[int] = [0, 0, 0, 0]
-var _last_notice: String = ""
+var _notices: NoticeFeed = NoticeFeed.new()
 
 
 func _ready() -> void:
@@ -43,11 +43,9 @@ func _ready() -> void:
 func _process(_delta: float) -> void:
 	if session == null:
 		return
-	var n: String = session.store.notice
-	if n != _last_notice:
-		_last_notice = n
-		if n != "":
-			add_line({"text": n, "color": kind_color("system"), "kind": "system"})
+	var n: String = _notices.observe(session.store.snaps, session.store.notice)
+	if n != "":
+		add_line({"text": n, "color": kind_color("system"), "kind": "system"})
 
 
 func select_tab(i: int) -> void:

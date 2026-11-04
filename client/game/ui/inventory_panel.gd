@@ -19,6 +19,10 @@ const ACT_UNEQUIP: String = "Unequip"
 const ACT_REFINE: String = "Refine"
 const ACT_DROP: String = "Drop"
 const ACT_STORE: String = "Store"
+const ACT_SELL: String = "Sell"
+const ACT_DROP_ONE: String = "Drop 1"
+const REFINE_ATK_BY_LEVEL: Array[int] = [0, 2, 3, 5, 7]  ## per refine, by weapon level (ro_items.REFINE_ATK)
+const SHOP_NEAR_TILES: int = 1
 const SLOT_PX: int = 52
 const EQUIPPED_TINT: Color = Color(0.75, 1.0, 0.75)
 
@@ -29,6 +33,7 @@ var slots: AssetSlots = null
 var rows: Array[Dictionary] = []  ## last computed slot rows (slot_rows)
 var equip_rows: Array[Dictionary] = []
 var storage_known: bool = false
+var at_shop: bool = false  ## a shop tile is within 1 tile of the player (enables Sell)
 var storage_items: Array = []  ## cached `you.storage` (the server sends it only on change)
 var zeny_label: Label
 var slot_buttons: Array[Button] = []
@@ -136,6 +141,7 @@ func refresh() -> void:
 	var you: Dictionary = session.store.you if session != null else {}
 	_synced_version = session.store.version if session != null else -1
 	var items: Array = _items()
+	at_shop = near_shop_tile(_pos_tile(you.get("pos")), _shops())
 	rows = slot_rows(you, items, welcome)
 	equip_rows = equip_slot_rows(you, items, welcome)
 	zeny_label.text = "Zeny %d" % int(you.get("zeny", 0))
@@ -156,6 +162,24 @@ func refresh() -> void:
 func _items() -> Array:
 	var v: Variant = welcome.get("items")
 	return v as Array if typeof(v) == TYPE_ARRAY else []
+
+
+func _shops() -> Array:
+	var w: Variant = welcome.get("world")
+	if typeof(w) == TYPE_DICTIONARY:
+		var sh: Variant = (w as Dictionary).get("shops")
+		if typeof(sh) == TYPE_ARRAY:
+			return sh as Array
+	return []
+
+
+## A tile as Vector2i, or [x, y] after decode (anything else gives a far-away tile).
+static func _pos_tile(v: Variant) -> Vector2i:
+	if typeof(v) == TYPE_VECTOR2I:
+		return v as Vector2i
+	if typeof(v) == TYPE_ARRAY and (v as Array).size() >= 2:
+		return Vector2i(int((v as Array)[0]), int((v as Array)[1]))
+	return Vector2i(-100000, -100000)
 
 
 func _show_slot(b: Button, r: Dictionary) -> void:
@@ -224,7 +248,7 @@ func click_equip(index: int) -> Dictionary:
 func open_menu(slot: int, at: Vector2i) -> void:
 	if slot < 0 or slot >= rows.size():
 		return
-	menu_actions = menu_for(rows[slot], storage_known)
+	menu_actions = menu_for(rows[slot], storage_known, at_shop)
 	if menu_actions.is_empty():
 		return
 	menu_slot = slot
@@ -324,7 +348,75 @@ static func slot_rows(you: Dictionary, items: Array, welcome_msg: Dictionary = {
 			"equip_index": eq_idx, "icon_key": AssetSlots.item_key(item),
 			"tooltip": "" if empty else tooltip_text(nm, refine, cards, welcome_msg),
 		})
+	var eq: Variant = you.get("equip")
+	for r: Dictionary in out:
+		if bool(r["empty"]) or bool(r["equipped"]):
+			continue
+		var wi: int = equip_target(items, int(r["item"]))
+		var wr: Dictionary = {}
+		if wi >= 0 and typeof(eq) == TYPE_ARRAY and wi < (eq as Array).size():
+			var ws: int = int((eq as Array)[wi])
+			if ws >= 0 and ws < INV_SLOTS and not bool(out[ws]["empty"]):
+				wr = out[ws]
+		var ct: String = compare_text(r, wr, items)
+		if ct != "":
+			r["tooltip"] = String(r["tooltip"]) + "\n" + ct
 	return out
+
+
+## Equipment index an item would be worn in (weapon 0, armor by cls 1..6), -1 for anything else.
+static func equip_target(items: Array, id: int) -> int:
+	var info: Dictionary = item_info(items, id)
+	match int(info.get("kind", 0)):
+		KIND_WEAPON:
+			return 0
+		KIND_ARMOR:
+			var c: int = int(info.get("cls", 0))
+			return c if c >= 1 and c <= 6 else -1
+	return -1
+
+
+## ATK (weapon) or DEF (armor) including refine.
+static func gear_stat(items: Array, id: int, refine: int) -> int:
+	var info: Dictionary = item_info(items, id)
+	if int(info.get("kind", 0)) == KIND_WEAPON:
+		var wl: int = clampi(int(info.get("weapon_level", 1)), 0, REFINE_ATK_BY_LEVEL.size() - 1)
+		return int(info.get("atk", 0)) + refine * REFINE_ATK_BY_LEVEL[wl]
+	return int(info.get("def", 0)) + refine
+
+
+## Compare lines for an unworn, single weapon/armor row against `worn` (the row in its equip slot, {} if none).
+static func compare_text(row: Dictionary, worn: Dictionary, items: Array) -> String:
+	if bool(row.get("empty", true)) or bool(row.get("equipped", false)) or int(row.get("count", 1)) > 1:
+		return ""
+	var kind: int = int(row.get("kind", 0))
+	if kind != KIND_WEAPON and kind != KIND_ARMOR:
+		return ""
+	var label: String = "ATK" if kind == KIND_WEAPON else "DEF"
+	var id: int = int(row.get("item", 0))
+	var mine: int = gear_stat(items, id, int(row.get("refine", 0)))
+	var my_slots: int = int(item_info(items, id).get("slots", 0))
+	if worn.is_empty() or int(worn.get("item", 0)) <= 0:
+		var t: String = "%s %d (nothing worn)" % [label, mine]
+		return t + ("\nSlots %d" % my_slots if my_slots > 0 else "")
+	var wid: int = int(worn["item"])
+	var theirs: int = gear_stat(items, wid, int(worn.get("refine", 0)))
+	var t2: String = "%s %d (worn %s %d, %+d)" % [label, mine, String(worn.get("name", "")), theirs, mine - theirs]
+	var worn_slots: int = int(item_info(items, wid).get("slots", 0))
+	if my_slots > 0 or worn_slots > 0:
+		t2 += "\nSlots %d (worn %d)" % [my_slots, worn_slots]
+	return t2
+
+
+## True when any shop tile ({"tile": [x, y]}) is within SHOP_NEAR_TILES (Chebyshev) of `pos`.
+static func near_shop_tile(pos: Vector2i, world_shops: Array) -> bool:
+	for sh: Variant in world_shops:
+		if typeof(sh) != TYPE_DICTIONARY:
+			continue
+		var t: Vector2i = _pos_tile((sh as Dictionary).get("tile"))
+		if maxi(absi(t.x - pos.x), absi(t.y - pos.y)) <= SHOP_NEAR_TILES:
+			return true
+	return false
 
 
 static func tooltip_text(nm: String, refine: int, cards: Array[int], welcome_msg: Dictionary) -> String:
@@ -390,7 +482,7 @@ static func click_action(row: Dictionary) -> String:
 
 
 ## Right click menu entries for a row: the click action, Refine (gear), Drop, Store (when storage is open).
-static func menu_for(row: Dictionary, can_store: bool) -> Array[String]:
+static func menu_for(row: Dictionary, can_store: bool, can_sell: bool = false) -> Array[String]:
 	var out: Array[String] = []
 	if bool(row.get("empty", true)):
 		return out
@@ -400,7 +492,9 @@ static func menu_for(row: Dictionary, can_store: bool) -> Array[String]:
 	var kind: int = int(row.get("kind", 0))
 	if kind == KIND_WEAPON or kind == KIND_ARMOR:
 		out.append(ACT_REFINE)
-	out.append(ACT_DROP)
+	out.append(ACT_DROP_ONE if int(row.get("count", 1)) > 1 else ACT_DROP)
+	if can_sell and not bool(row.get("equipped", false)):
+		out.append(ACT_SELL)
 	if can_store:
 		out.append(ACT_STORE)
 	return out
@@ -415,8 +509,10 @@ static func action_message(action: String, slot: int) -> Dictionary:
 			return {"t": "equip", "slot": slot}
 		ACT_REFINE:
 			return {"t": "refine", "slot": slot}
-		ACT_DROP:
+		ACT_DROP, ACT_DROP_ONE:
 			return {"t": "drop", "slot": slot}
+		ACT_SELL:
+			return {"t": "sell", "slot": slot}
 		ACT_STORE:
 			return {"t": "storage", "op": "in", "slot": slot}
 	return {}

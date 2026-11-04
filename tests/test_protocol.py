@@ -130,6 +130,8 @@ def test_validate_login_password_and_create():
     ({"t": "chat", "kind": "say", "text": "hi"}, {"t": "chat", "kind": "say", "text": "hi", "to": None}),
     ({"t": "storage", "op": "in", "slot": 2}, {"t": "storage", "op": "in", "slot": 2}),
     ({"t": "save"}, {"t": "save"}),
+    ({"t": "sit", "v": 2}, {"t": "sit"}),
+    ({"t": "teleport", "town": 2, "v": 2}, {"t": "teleport", "town": 2}),
 ])
 def test_validate_ro_messages_accept(msg, want):
     assert validate_client(msg) == want
@@ -277,6 +279,29 @@ def test_binary_snap_decodes_to_the_json_snap():
     assert len(data) < len(text) and BIN_ROW.itemsize == 30 and n >= 5
     assert decode_snap_bin(data[:-1]) is None and decode_snap_bin(b"XX" + data[2:]) is None
     assert decode_snap_bin(b"") is None
+
+
+def _hit_pull(hits):
+    """A pull whose monster rows 0..2 (ids N0.. none: use the first monster ids) carry the given hit column values."""
+    pull = _ro_pull(_node_world(), [0, 7])
+    tab = {k: np.array(v) for k, v in pull["tab"].items()}
+    ids = np.flatnonzero((tab["kind"] >= 1) & (tab["kind"] < 100))[:3]
+    tab["hit"][:] = 0
+    tab["hit"][ids] = hits
+    pull["tab"] = tab
+    pull["send"] = np.array(pull["send"]); pull["send"][0][:3] = ids
+    return pull, ids
+
+
+def test_miss_is_h_zero_and_hit_is_damage_json_and_bin():
+    pull, ids = _hit_pull([-1, 5, 0])
+    rows = entity_rows(ids, pull["tab"], {})
+    assert rows[0]["h"] == 0 and rows[1]["h"] == 5 and "h" not in rows[2]
+    views = [(0, you_full(pull, 0, 0), None, True, "bin"), (0, you_full(pull, 0, 0), None, True, "json")]
+    data, text = build_snaps(pull, views, 3, {})
+    got = {e["id"]: e for e in decode_snap_bin(data)["ents"]}
+    assert got[int(ids[0])]["h"] == 0 and got[int(ids[1])]["h"] == 5 and "h" not in got[int(ids[2])]
+    assert decode_snap_bin(data) == decode(text)
 
 
 def test_you_delta_sends_changes_only():

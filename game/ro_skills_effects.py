@@ -7,9 +7,11 @@ with lowest-slot kill credit (mirrors game/combat.py), heals, and buffs. Targets
 """
 import jax.numpy as jnp
 
+from game import ro_mvp
 from game.config import MAP, MAX_MONSTERS, MAX_PLAYERS, MONSTER_RESPAWN_TICKS
 from game.data.elements import MONSTER_ELEMENT, elem_mult
 from game.data.skills import (
+    BUFF_INC_AGI,
     EFFECT_ATK,
     EFFECT_BUFF,
     EFFECT_HEAL,
@@ -19,15 +21,14 @@ from game.data.skills import (
     SKILL_BUFF_TICKS,
     SKILL_EFFECT,
     SKILL_ELEMENT,
-    SKILL_FLAT_HEAL,
     SKILL_HITS,
     SKILL_POWER,
 )
 
-R_MAX = 1
+R_MAX = 2  # 5x5: Magnum Break / Arrow Shower reach two cells (25 offsets)
 _OFFSETS = jnp.array(
     [[dx, dy] for dx in range(-R_MAX, R_MAX + 1) for dy in range(-R_MAX, R_MAX + 1)], jnp.int32
-)  # [9, 2], offset 4 is (0, 0)
+)  # [25, 2], the centre offset is (0, 0)
 N_OFF = _OFFSETS.shape[0]
 _CENTER = N_OFF // 2
 
@@ -45,9 +46,9 @@ def skill_damage(base, power, hits, attack_elem, defend_elem):
     return jnp.maximum(d, 0).astype(jnp.int32)
 
 
-def heal_amount(matk, power, flat):
-    """Heal for one cast: (10 + matk) * power // 1000 + flat."""
-    return ((10 + matk) * power // 1000 + flat).astype(jnp.int32)
+def heal_amount(base_level, int_, lv):
+    """RO Heal: (base_level + INT) // 8 * (4 + 8 * skill level)."""
+    return ((base_level + int_) // 8 * (4 + 8 * lv)).astype(jnp.int32)
 
 
 def monster_tile_map(m):
@@ -153,9 +154,14 @@ def resolve(world, mask, derived):
     )
     dmg = jnp.where(idx < MAX_MONSTERS, dmg, 0)
     monsters, kills = damage_monsters(m, p["kills"], idx, dmg)
+    if "mvp" in world:  # ro3-exp: skill hits feed the cumulative damage credit (exp and zeny to the killer)
+        world = ro_mvp.record_damage(world, jnp.broadcast_to(pidx[:, None], idx.shape), idx, dmg)
 
     # Heals.
-    heal = heal_amount(derived["matk"], SKILL_POWER[s, lvl], SKILL_FLAT_HEAL[s])
+    one = jnp.ones((MAX_PLAYERS,), jnp.int32)
+    st = world.get("stats", {})  # dict-key checks only (static); a partial stats block falls back to 1
+    blv, int_ = st.get("base_level", one), st.get("int", one)
+    heal = heal_amount(blv, int_, lvl)
     hp = heal_players(p, t, mask & (eff == EFFECT_HEAL), heal, derived["max_hp"])
 
     # Buffs.
@@ -170,4 +176,10 @@ def resolve(world, mask, derived):
         "skill_dmg": sk["skill_dmg"] + dmg.sum(axis=1).astype(jnp.int32),
     }
     players = {**p, "hp": hp.astype(p["hp"].dtype), "kills": kills}
-    return {**world, "players": players, "monsters": monsters, "skills": skills}
+    out = {**world, "players": players, "monsters": monsters, "skills": skills}
+    if "move" in world:  # Increase AGI: 150 ms/cell -> 150 * 100 // 125 = 120; player rows only
+        base_ms = 150  # = ro_move.DEFAULT_SPEED_MS (literal: ro_move may import this module)
+        ms = jnp.where(buffs[:, BUFF_INC_AGI] > 0, base_ms * 100 // 125, base_ms)
+        sp = world["move"]["speed_ms"]
+        out["move"] = {**world["move"], "speed_ms": sp.at[:MAX_PLAYERS].set(ms.astype(sp.dtype))}
+    return out

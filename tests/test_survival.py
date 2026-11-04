@@ -2,9 +2,10 @@ import jax
 import jax.numpy as jnp
 
 from game.config import (
-    INV_SLOTS, ITEM_MEAT, ITEM_NONE, MAX_PLAYERS, MEAT_HEAL, PLAYER_MAX_HP, REGEN_HP, REGEN_TICKS,
+    INV_SLOTS, ITEM_MEAT, ITEM_NONE, MAX_PLAYERS, MEAT_HEAL, PLAYER_MAX_HP,
 )
-from game import ro_stats
+from game.data.stats import HP_REGEN_SIT_TICKS, HP_REGEN_TICKS
+from game import ro_anim, ro_stats
 from game.state import empty_inputs, make_empty_world
 from game.survival import survival
 
@@ -21,6 +22,11 @@ def _world(hp=100, inv=None, tick=0, dead=False):
     return {**w, "players": p, "stats": st, "tick": jnp.int32(tick)}
 
 
+def _regen(w, i=0):
+    """RO regen amount of slot i on a regen tick (game/ro_stats.hp_regen)."""
+    return 1 + int(ro_stats.derived(w)["max_hp"][i]) // 200 + int(w["stats"]["vit"][i]) // 5
+
+
 def _inv(*items):
     return list(items) + [ITEM_NONE] * (INV_SLOTS - len(items))
 
@@ -30,26 +36,27 @@ def _eat():
 
 
 def test_regen_on_multiple_of_regen_ticks():
-    out = survival(_world(tick=REGEN_TICKS), empty_inputs())
-    assert int(out["players"]["hp"][0]) == 100 + REGEN_HP
+    w = _world(tick=HP_REGEN_TICKS)
+    out = survival(w, empty_inputs())
+    assert int(out["players"]["hp"][0]) == 100 + _regen(w)
 
 
 def test_no_regen_off_schedule():
-    out = survival(_world(tick=REGEN_TICKS + 1), empty_inputs())
+    out = survival(_world(tick=HP_REGEN_TICKS + 1), empty_inputs())
     assert int(out["players"]["hp"][0]) == 100
 
 
 def test_regen_capped_at_max():
-    w = _world(tick=REGEN_TICKS)
+    w = _world(tick=HP_REGEN_TICKS)
     cap = _cap(w)
     w = _set_hp(w, cap)
     assert int(survival(w, empty_inputs())["players"]["hp"][0]) == cap
 
 
 def test_dead_and_inactive_do_not_regen():
-    out = survival(_world(tick=REGEN_TICKS, dead=True), empty_inputs())
+    out = survival(_world(tick=HP_REGEN_TICKS, dead=True), empty_inputs())
     assert int(out["players"]["hp"][0]) == 100
-    w = _world(tick=REGEN_TICKS)
+    w = _world(tick=HP_REGEN_TICKS)
     hp = w["players"]["hp"].at[1].set(100)
     out = survival({**w, "players": {**w["players"], "hp": hp}}, empty_inputs())
     assert int(out["players"]["hp"][1]) == 100
@@ -79,7 +86,7 @@ def _leveled(w, level=30, vit=20):
 
 
 def test_regen_caps_at_derived_max_hp_for_leveled_player():
-    w = _leveled(_world(hp=1, tick=REGEN_TICKS))
+    w = _leveled(_world(hp=1, tick=HP_REGEN_TICKS))
     cap = int(ro_stats.derived(w)["max_hp"][0])
     assert cap > PLAYER_MAX_HP
     w = {**w, "players": {**w["players"], "hp": w["players"]["hp"].at[0].set(cap - 1)}}
@@ -117,7 +124,7 @@ def test_dead_player_cannot_eat():
 
 
 def test_jit_and_vmap():
-    w = _world(hp=50, inv=_inv(ITEM_MEAT), tick=REGEN_TICKS)
+    w = _world(hp=50, inv=_inv(ITEM_MEAT), tick=HP_REGEN_TICKS)
     eager = survival(w, _eat())
     jitted = jax.jit(survival)(w, _eat())
     assert bool((eager["players"]["hp"] == jitted["players"]["hp"]).all())
@@ -129,6 +136,70 @@ def test_jit_and_vmap():
 
 
 def test_regen_and_eat_sum_before_cap():
-    out = survival(_world(hp=50, inv=_inv(ITEM_MEAT), tick=REGEN_TICKS), _eat())
-    assert int(out["players"]["hp"][0]) == 50 + REGEN_HP + MEAT_HEAL
+    w = _world(hp=50, inv=_inv(ITEM_MEAT), tick=HP_REGEN_TICKS)
+    out = survival(w, _eat())
+    assert int(out["players"]["hp"][0]) == 50 + _regen(w) + MEAT_HEAL
     assert not bool((out["players"]["inv"][0] == ITEM_MEAT).any())
+
+
+def _sit(*idx):
+    s = jnp.zeros((MAX_PLAYERS,), bool)
+    for i in idx:
+        s = s.at[i].set(True)
+    return {**empty_inputs(), "sit": s}
+
+
+def _action(w, i=0):
+    return int(w["anim"]["action"][i])
+
+
+def _no_anim(w):
+    return {k: v for k, v in w.items() if k != "anim"}
+
+
+def test_sit_sets_action_on_alive_only():
+    w = _world(tick=1)
+    p = w["players"]
+    w = {**w, "players": {**p, "active": p["active"].at[2].set(True), "dead": p["dead"].at[2].set(True)}}
+    out = survival(w, _sit(0, 1, 2))
+    assert _action(out, 0) == ro_anim.SIT
+    assert int(out["anim"]["dur_ms"][0]) == 0
+    assert _action(out, 1) == ro_anim.IDLE  # inactive slot
+    assert _action(out, 2) == ro_anim.IDLE  # dead player
+
+
+def test_second_sit_stands():
+    w = _world(tick=1)
+    sat = survival(w, _sit(0))
+    assert _action(sat) == ro_anim.SIT
+    assert _action(survival(sat, empty_inputs())) == ro_anim.SIT  # held
+    assert _action(survival(sat, _sit(0))) == ro_anim.IDLE
+
+
+def test_regen_twice_as_often_while_sitting():
+    # a sit-only regen tick: HP_REGEN_SIT_TICKS is not a multiple of HP_REGEN_TICKS
+    w = _world(tick=HP_REGEN_SIT_TICKS)
+    sat = {**w, "anim": {**w["anim"], "action": w["anim"]["action"].at[0].set(ro_anim.SIT)}}
+    assert int(survival(sat, empty_inputs())["players"]["hp"][0]) == 100 + _regen(w)
+    assert int(survival(w, empty_inputs())["players"]["hp"][0]) == 100
+    # the tick you sit does not regen faster yet; the tick you stand still does
+    assert int(survival(w, _sit(0))["players"]["hp"][0]) == 100
+    assert int(survival(sat, _sit(0))["players"]["hp"][0]) == 100 + _regen(w)
+
+
+def test_no_anim_block_ignores_sit():
+    w = _no_anim(_world(tick=HP_REGEN_TICKS))
+    out = survival(w, _sit(0))
+    assert "anim" not in out
+    assert int(out["players"]["hp"][0]) == 100 + _regen(w)
+
+
+def test_sit_jit_and_vmap():
+    w = _world(tick=HP_REGEN_TICKS)
+    eager = survival(w, _sit(0))
+    jitted = jax.jit(survival)(w, _sit(0))
+    assert bool((eager["anim"]["action"] == jitted["anim"]["action"]).all())
+    batch = jax.tree_util.tree_map(lambda *a: jnp.stack(a), w, w)
+    inputs = jax.tree_util.tree_map(lambda *a: jnp.stack(a), _sit(0), _sit(0))
+    out = jax.vmap(survival)(batch, inputs)
+    assert int(out["anim"]["action"][1, 0]) == ro_anim.SIT

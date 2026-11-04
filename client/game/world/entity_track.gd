@@ -66,8 +66,11 @@ func pos_at(now_ms: float) -> Vector2:
 	return cells.sample(now_ms)
 
 
+var _clip: Dictionary = {"action": 0, "face": 0, "elapsed_ms": 0.0, "dur_ms": 0.0, "speed_ms": 0.0}  ## pooled result of clip_at
+
 ## Clip to draw at server time `now_ms`: {action, face, elapsed_ms, dur_ms, speed_ms}. Without anim fields the
 ## clip follows the motion; with them, a walk whose steps ran out shows idle (the server's idle row is a tick late).
+## The returned Dictionary is pooled and overwritten by the next call: callers must read it at once, never keep it.
 func clip_at(now_ms: float, tick_ms: float, fallback_speed_ms: float) -> Dictionary:
 	var spd: float = speed_ms if speed_ms > 0.0 else fallback_speed_ms
 	var a: int = action
@@ -81,19 +84,27 @@ func clip_at(now_ms: float, tick_ms: float, fallback_speed_ms: float) -> Diction
 		elapsed = now_ms - float(prev_start_tick) * tick_ms
 		dur = prev_dur_ms
 	var f: int = face
+	var mv: bool = false
+	if not has_anim or a == ClipSelect.WALK or a == ClipSelect.IDLE or a == ClipSelect.STANDBY:
+		mv = cells.moving(now_ms)
 	if not has_anim:
-		a = ClipSelect.WALK if cells.moving(now_ms) else ClipSelect.IDLE
+		a = ClipSelect.WALK if mv else ClipSelect.IDLE
 		elapsed = now_ms
-	elif a == ClipSelect.WALK or ((a == ClipSelect.IDLE or a == ClipSelect.STANDBY) and cells.moving(now_ms)):
+	elif a == ClipSelect.WALK or ((a == ClipSelect.IDLE or a == ClipSelect.STANDBY) and mv):
 		# Walk is one continuous cycle across steps, phase-locked to server time; the drawn position lags the
 		# server by the render delay, so legs keep moving while the last step is still being drawn.
 		elapsed = now_ms
-		a = ClipSelect.WALK if cells.moving(now_ms) else ClipSelect.IDLE
+		a = ClipSelect.WALK if mv else ClipSelect.IDLE
 	if a == ClipSelect.WALK:
 		var sd: Vector2 = cells.step_delta(now_ms)
 		if sd != Vector2.ZERO and not has_anim:
 			f = ClipSelect.face_of(sd, face)
-	return {"action": a, "face": f, "elapsed_ms": elapsed, "dur_ms": dur, "speed_ms": spd}
+	_clip["action"] = a
+	_clip["face"] = f
+	_clip["elapsed_ms"] = elapsed
+	_clip["dur_ms"] = dur
+	_clip["speed_ms"] = spd
+	return _clip
 
 
 ## Server ms the current action began.

@@ -26,3 +26,33 @@ func test_smooth_converges() -> void:
 	assert_false(z.update(1.0 / 60.0))
 	z.snap(0.7)
 	assert_eq(z.vec(), Vector2(0.7, 0.7))
+
+
+func test_retarget_eases_and_clamps() -> void:
+	var z := ZoomControl.new(1.0)
+	z.retarget(1.5)
+	assert_eq(z.target, 1.5)
+	assert_eq(z.current, 1.0, "current is left to ease")
+	z.update(1.0 / 60.0)
+	assert_true(z.current > 1.0 and z.current < 1.5)
+	z.retarget(9.0)
+	assert_eq(z.target, ZoomControl.DEFAULT_MAX)
+	z.retarget(0.01)
+	assert_eq(z.target, ZoomControl.DEFAULT_MIN)
+
+
+func test_tuning_slider_moves_player_input_zoom() -> void:
+	var pi := PlayerInput.new()
+	var cam := Camera2D.new()
+	pi.camera = cam
+	pi._ready()
+	pi._ready()  # double _ready must not double-connect
+	Tuning.shared().set_value("camera_zoom", 1.5)
+	for i: int in range(200):
+		pi._process(1.0 / 60.0)
+	assert_near(cam.zoom.x, 1.5)
+	assert_eq(Tuning.shared().changed.get_connections().size(), 1, "single connection")
+	Tuning.shared().reset()
+	Tuning.shared().changed.disconnect(pi._on_tuning_changed)
+	pi.free()
+	cam.free()

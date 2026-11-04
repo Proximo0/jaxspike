@@ -33,3 +33,34 @@ func test_visible_lines_and_unread() -> void:
 	c.select_tab(ChatWindow.TAB_PARTY)
 	assert_eq(c.unread[ChatWindow.TAB_PARTY], 0)
 	c.free()
+
+
+func _snap(notice: Variant) -> String:
+	return Codec.encode({"t": "snap", "tick": 1, "full": true, "gone": [], "notice": notice,
+		"you": {"pos": [1, 2], "hp": 3, "max_hp": 4}, "ents": []})
+
+
+func _system_count(c: ChatWindow) -> int:
+	return c.visible_lines(ChatWindow.TAB_SYSTEM).size()
+
+
+func test_notice_logged_once_per_snap() -> void:
+	var link := FakeLink.new()
+	var s := NetSession.new(link)
+	var c := ChatWindow.new()
+	c.bind(s)
+	link.push_inbound(_snap("Welcome"))
+	s.poll()
+	c.call("_process", 0.016)
+	c.call("_process", 0.016)
+	assert_eq(_system_count(c), 1)
+	link.push_inbound(_snap("Welcome"))
+	s.poll()
+	c.call("_process", 0.016)
+	c.call("_process", 0.016)
+	assert_eq(_system_count(c), 2)
+	link.push_inbound(_snap(null))
+	s.poll()
+	c.call("_process", 0.016)
+	assert_eq(_system_count(c), 2)
+	c.free()

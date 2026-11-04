@@ -63,7 +63,7 @@ def buff_stat_mods(world):
     m["int_flat"] = bless
     m["dex_flat"] = bless + pa(S.SK_OWLS_EYE)
     m["agi_flat"] = jnp.where(agi > 0, 2 + agi, 0).astype(I32)
-    m["aspd_pct"] = agi
+    # E7 (docs/ro_fidelity.md): Increase AGI raises ASPD only through AGI; its +25% move speed is in ro_skills_effects
     m["def_pct"] = 5 * lv(S.BUFF_ANGELUS)
     m["mdef_flat"] = lv(S.BUFF_ENDURE)
     # Hiding / Play Dead: no stat effect in v1. Double Attack: needs a hit-count hook in combat (open defect).
@@ -171,8 +171,9 @@ def phase(world, inputs, derived=None):
     sk = world["skills"]
     amo = ro_anim.amotion_ms(world, derived)  # ro-anim: after-cast delay (SKILL_AFTER_DELAY_MS, else amotion)
     rid = jnp.clip(casting, 0, S.N_SKILLS - 1)
-    delay_ms = (jnp.asarray(S.SKILL_AFTER_DELAY_MS)[rid, jnp.clip(learned[pidx, rid], 0, S.MAX_SKILL_LEVEL)]
-                if hasattr(S, "SKILL_AFTER_DELAY_MS") else amo[:mp])
+    fixed_ms = jnp.asarray(S.SKILL_AFTER_DELAY_MS)[rid, jnp.clip(learned[pidx, rid], 0, S.MAX_SKILL_LEVEL)]
+    # E5 (docs/ro_fidelity.md): Bash-type skills' after-cast delay is the caster's amotion (ASPD), else the table
+    delay_ms = jnp.where(jnp.asarray(S.SKILL_DELAY_ASPD)[rid] == 1, amo[:mp], fixed_ms)
     sk = {**sk, "after_delay": jnp.where(resolve, (delay_ms + TICK_MS - 1) // TICK_MS, after_delay).astype(I32)}
     world = {**world, "skills": sk}
     pad = jnp.zeros((mm,), jnp.bool_)

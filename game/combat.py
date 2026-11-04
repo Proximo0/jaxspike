@@ -5,15 +5,16 @@ RO-flavoured auto-attacks (all integer math, percent-style):
 Player -> monster (one swing per `derived["aspd_ticks"]` ticks, a swing costs the cooldown even when it misses)
   atk      = derived atk + equipped weapon_atk + buff atk_flat, then * (100 + atk_pct) / 100
   roll     = atk * U[90, 110] / 100
-  hit%     = clip(80 + (hit + hit_flat) - (150 + 3 * monster_level), 5, 95)      (a crit always hits)
-  crit     = random per-mille < derived crit (+ crit_flat); a crit doubles the damage and ignores monster DEF
-  damage   = roll * elem_mult(weapon_elem, monster_element) / 100 * (100 - DEF[kind]) / 100, min 1
+  hit%     = clip(80 + (hit + hit_flat) - (monster_level + monster_agi), 5, 95)  (a crit always hits)
+  crit     = random per-mille < derived crit (+ crit_flat); a crit doubles the damage and ignores both DEFs
+  damage   = roll * elem_mult(weapon_elem, monster_element) / 100, then (non-crit)
+             * (100 - clip(DEF[kind], 0, 80)) / 100 (hard DEF, percent) - VIT[kind] (flat soft DEF), min 1
              (0 only when the element table says immune)
   cooldown = aspd_ticks (reduced by the buff aspd_pct), so one attack every aspd_ticks ticks.
 Monster -> player (cooldown MONSTER_ATTACK_COOLDOWN; a swing costs the cooldown even when it misses)
-  hit%     = clip(80 + (100 + 2 * monster_level) - flee, 5, 95), flee = derived flee + flee_bonus
-  damage   = U[ATK_MIN, ATK_MAX] * (100 - def) / 100, min 1, def = (derived def + armor_def) * (100 + def_pct) / 100
-             clipped to [0, 80]
+  hit%     = clip(80 + (monster_level + monster_dex) - flee, 5, 95), flee = derived flee + flee_bonus
+  damage   = U[ATK_MIN, ATK_MAX] * (100 - hard) / 100 - soft, min 1
+             hard = clip(armor_def, 0, 80) percent; soft = derived def (= VIT) * (100 + def_pct) / 100 flat
 Only aggressive kinds (AGGRO) or monsters that were already hit (hp below the kind's max hp) attack: a passive
 monster fights back but never starts a fight.
 Respawn hp is `derived["max_hp"]` (survival / ro_items still cap hp at config.PLAYER_MAX_HP).
@@ -33,14 +34,14 @@ _MON_HP = jnp.asarray(MONSTER_HP, jnp.int32)
 _MAX_DEF = 80  # percent cap on player and monster DEF reduction
 
 
-def hit_percent_player(hit, mon_level):
-    """Chance in percent that a player's swing lands on a monster of this level."""
-    return jnp.clip(80 + hit - (150 + 3 * mon_level), 5, 95)
+def hit_percent_player(hit, mon_level, mon_agi=0):
+    """Chance in percent that a player's swing lands on a monster of this level and AGI (RO: hit - flee)."""
+    return jnp.clip(80 + hit - (mon_level + mon_agi), 5, 95)
 
 
-def hit_percent_monster(mon_level, flee):
-    """Chance in percent that a monster's swing lands on a player with this flee."""
-    return jnp.clip(80 + (100 + 2 * mon_level) - flee, 5, 95)
+def hit_percent_monster(mon_level, flee, mon_dex=0):
+    """Chance in percent that a monster's swing lands on a player with this flee (RO: monster hit - flee)."""
+    return jnp.clip(80 + (mon_level + mon_dex) - flee, 5, 95)
 
 
 def _roll(u, lo, hi):
@@ -94,11 +95,12 @@ def combat(world, inputs):
     atk = atk * (100 + mod["atk_pct"]) // 100
     base = atk * _roll(r[0, :n_p], 90, 110) // 100
     crit = _roll(r[1, :n_p], 0, 999) < (d["crit"] + mod["crit_flat"])
-    hit_roll = _roll(r[2, :n_p], 0, 99) < hit_percent_player(d["hit"] + mod["hit_flat"], mdata.LEVEL[tkind])
+    hit_roll = _roll(r[2, :n_p], 0, 99) < hit_percent_player(d["hit"] + mod["hit_flat"], mdata.LEVEL[tkind], mdata.AGI[tkind])
     mdef = jnp.clip(mdata.DEF[tkind], 0, _MAX_DEF)
     elem = elem_mult(eq["weapon_elem"], MONSTER_ELEMENT[tkind])
     dmg_hit = base * elem // 100
-    dmg_hit = jnp.where(crit, dmg_hit * 2, dmg_hit * (100 - mdef) // 100)
+    soft = dmg_hit * (100 - mdef) // 100 - mdata.VIT[tkind]  # hard DEF percent, then flat VIT DEF
+    dmg_hit = jnp.where(crit, dmg_hit * 2, soft)
     dmg_hit = jnp.where(elem > 0, jnp.maximum(dmg_hit, 1), 0)
     dmg_p_out = jnp.where(swing & (hit_roll | crit), dmg_hit, 0)  # damage each player deals this tick
     landed = dmg_p_out > 0
@@ -121,11 +123,11 @@ def combat(world, inputs):
     mswing = m["active"] & (m["hp"] > 0) & (m["attack_cd"] == 0) & (pdist <= 1) & alive[ptgt] & provoked
     mswing = mswing & ~world["pz"][p["pos"][ptgt, 0], p["pos"][ptgt, 1]]  # protection zone
     flee = d["flee"][ptgt] + mod["flee_flat"][ptgt]
-    pdef = (d["def"] + eq["armor_def"]) * (100 + mod["def_pct"]) // 100
-    pdef = jnp.clip(pdef[ptgt], 0, _MAX_DEF)
-    m_hit = _roll(r[3, :n_m], 0, 99) < hit_percent_monster(mdata.LEVEL[kind], flee)
+    hard = jnp.clip(eq["armor_def"][ptgt], 0, _MAX_DEF)  # armor DEF is a percent
+    soft = (d["def"] * (100 + mod["def_pct"]) // 100)[ptgt]  # derived def (VIT) is flat
+    m_hit = _roll(r[3, :n_m], 0, 99) < hit_percent_monster(mdata.LEVEL[kind], flee, mdata.DEX[kind])
     raw = _roll(r[4, :n_m], mdata.ATK_MIN[kind], mdata.ATK_MAX[kind])
-    mdmg = jnp.maximum(raw * (100 - pdef) // 100, 1)
+    mdmg = jnp.maximum(raw * (100 - hard) // 100 - soft, 1)
     ptgt_w = jnp.where(mswing & m_hit, ptgt, MAX_PLAYERS)
     dmg_p = jnp.zeros_like(p["hp"]).at[ptgt_w].add(mdmg, mode="drop")
     new_p_hp = jnp.maximum(p["hp"] - dmg_p, 0)

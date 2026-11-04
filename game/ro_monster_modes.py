@@ -24,10 +24,10 @@ steps at the same average rate, looting and per-kind respawn are off (combat's M
 import jax
 import jax.numpy as jnp
 
-from game.config import CELL, DROP_TTL, ITEM_NONE, MAP, MAX_DROPS, MAX_MONSTERS, MAX_PLAYERS, TICK_MS
+from game.config import CELL, DROP_TTL, G, ITEM_NONE, K_CELL, MAP, MAX_DROPS, MAX_MONSTERS, MAX_PLAYERS, NCELLS, TICK_MS
 from game.data import monsters as mdata
 from game.ro_move import DIR_DELTAS9, dir_toward
-from game.spatial import block_candidates, build_grid, nearest_in_block
+from game.spatial import BIG, block_candidates
 from game.state import next_key
 
 IDLE, CHASE, RETURN = 0, 1, 2
@@ -39,6 +39,66 @@ RESPAWN_TICKS = jnp.maximum(1, mdata.RESPAWN_MS // TICK_MS)
 
 _STEPS8 = jnp.asarray(DIR_DELTAS9[1:], jnp.int32)  # path_dir 0..7 -> (dx, dy)
 _IDX = jnp.arange(MAX_MONSTERS, dtype=jnp.int32)
+_MM = MAP * MAP  # packed tile keys x * MAP + y live below this
+_WANDER_LEN_N = mdata.WANDER_MAX_CELLS - mdata.WANDER_MIN_CELLS + 1
+_WANDER_TICK_N = WANDER_MAX_TICKS - WANDER_MIN_TICKS + 1
+
+
+# ---- spatial lookups (ro3-perf) ----------------------------------------------------------------------------------
+# The same CELL grid as game/spatial.py, but the tables hold packed payloads (tile key, index, kind) instead of only
+# indices, so a query gathers 9 contiguous rows of K_CELL per table and never a random [Q, 9 * K_CELL, 2] slice of
+# the positions. One single-operand sort of cell * n + index replaces argsort + searchsorted; cell order, index
+# order within a cell and the K_CELL overflow rule stay those of spatial.build_grid, so nearest ties break the same.
+
+def _grid_tables(pos, active, payloads):
+    """Bucket entities into [NCELLS, K_CELL] tables, one per payload (int32 [n] each; -1 marks an empty entry)."""
+    n = pos.shape[0]
+    cxy = pos // CELL
+    cell = jnp.where(active, cxy[:, 0] * G + cxy[:, 1], NCELLS)
+    key = jnp.sort(cell * n + jnp.arange(n, dtype=jnp.int32))
+    order = key % n
+    sc = key // n
+    ar = jnp.arange(n, dtype=jnp.int32)
+    is_first = jnp.concatenate([jnp.array([True]), sc[1:] != sc[:-1]])
+    rank = ar - jax.lax.cummax(jnp.where(is_first, ar, 0), axis=0)
+    keep = (sc < NCELLS) & (rank < K_CELL)
+    row = jnp.where(keep, sc, NCELLS)  # dropped entries write out of bounds
+    col = jnp.where(keep, rank, 0)
+    return [jnp.full((NCELLS, K_CELL), -1, jnp.int32).at[row, col].set(p[order], mode="drop") for p in payloads]
+
+
+def _packed(pos):
+    return pos[:, 0] * MAP + pos[:, 1]
+
+
+def _manhattan(packed, qpos):
+    """|dx| + |dy| from packed tile keys [Q, C] to query positions [Q, 2] (packed must be >= 0)."""
+    return jnp.abs(packed // MAP - qpos[:, 0:1]) + jnp.abs(packed % MAP - qpos[:, 1:2])
+
+
+def _nearest(pos, active, qpos):
+    """Nearest manhattan entity of (pos, active) in each query's 3x3 block: (idx int32 [Q], dist int32 [Q]).
+
+    Like spatial.nearest_in_block: idx is a valid index even when dist == BIG (no entity in range)."""
+    n = pos.shape[0]
+    tidx, tpos = _grid_tables(pos, active, (jnp.arange(n, dtype=jnp.int32), _packed(pos)))
+    cidx, cpos = block_candidates(tidx, qpos), block_candidates(tpos, qpos)
+    d = jnp.where(cidx >= 0, _manhattan(jnp.maximum(cpos, 0), qpos), BIG)
+    col = jnp.argmin(d, axis=1)
+    idx = jnp.take_along_axis(jnp.maximum(cidx, 0), col[:, None], axis=1)[:, 0]
+    return idx, jnp.min(d, axis=1)
+
+
+def _fighting_mate_near(pos, kind, fighting, sight):
+    """bool [MAX_MONSTERS]: a fighting monster of the same kind, other than itself, within `sight` (manhattan)."""
+    (table,) = _grid_tables(pos, fighting, (kind * _MM + _packed(pos),))
+    cand = block_candidates(table, pos)
+    valid = cand >= 0
+    safe = jnp.maximum(cand, 0)
+    cpos = safe % _MM
+    mate = (valid & (safe // _MM == kind[:, None]) & (cpos != _packed(pos)[:, None])  # no two monsters share a tile
+            & (_manhattan(cpos, pos) <= sight[:, None]))
+    return mate.any(axis=1)
 
 TABLES = {
     "aggro": mdata.AGGRO, "assist": mdata.ASSIST, "looter": mdata.LOOTER, "immovable": mdata.IMMOVABLE,
@@ -79,6 +139,9 @@ def _place(drops, want, pos, item):
     }
     if "count" in drops:
         new["count"] = drops["count"].at[slot].set(1, mode="drop")
+    for k in ("refine", "cards"):  # ro3-items3: a spilled item must not inherit a decayed drop's refine/cards
+        if k in drops:
+            new[k] = drops[k].at[slot].set(0, mode="drop")
     return new
 
 
@@ -99,11 +162,13 @@ def on_deaths(world, tables=TABLES):
             "monai": {**ai, "held_item": held}}
 
 
-def _wander_goal(key, pos, spawn, walls, pz):
-    """A goal 1..WANDER_MAX_CELLS cells away in one of 8 directions, clipped to the wander box; pos if it is blocked."""
-    k_dir, k_len = jax.random.split(key)
-    d = jax.random.randint(k_dir, (MAX_MONSTERS,), 0, 8)
-    n = jax.random.randint(k_len, (MAX_MONSTERS,), mdata.WANDER_MIN_CELLS, mdata.WANDER_MAX_CELLS + 1)
+def _wander_goal(bits, pos, spawn, walls, pz):
+    """A goal 1..WANDER_MAX_CELLS cells away in one of 8 directions, clipped to the wander box; pos if it is blocked.
+
+    `bits` uint32 [MAX_MONSTERS]: bits 0-2 pick the direction, bits 3-15 the length (one random draw per tick
+    serves the goal and the timer; the modulo bias on 13 bits is below 1e-3)."""
+    d = (bits & 7).astype(jnp.int32)
+    n = mdata.WANDER_MIN_CELLS + ((bits >> 3) & 0x1FFF).astype(jnp.int32) % _WANDER_LEN_N
     goal = pos + _STEPS8[d] * n[:, None]
     goal = jnp.clip(goal, spawn - mdata.WANDER_BOX, spawn + mdata.WANDER_BOX)
     goal = jnp.clip(goal, 0, MAP - 1)
@@ -138,32 +203,27 @@ def decide(world, movers, occ, tables=TABLES):
     occ: bool [MAP, MAP] blocked tiles (walls, pz, living entities) for the fallback step choice."""
     has_block = "monai" in world
     key, world = next_key(world)
-    k_goal, k_timer, k_fallback = jax.random.split(key, 3)
+    # One draw of random bits per monster covers the wander goal (bits 0-15) and the timer (bits 16-31).
+    bits = jax.random.bits(key, (MAX_MONSTERS,), jnp.uint32)
     p, m, dr = world["players"], world["monsters"], world["drops"]
     if has_block:
         ai = world["monai"]
     else:  # stateless fallback: each tick a monster starts a wander with probability ~1 / WANDER_MAX_TICKS
         ai = {**make_state(), "goal": m["pos"],
-              "wander_in": jax.random.randint(k_fallback, (MAX_MONSTERS,), 1, WANDER_MAX_TICKS + 1)}
+              "wander_in": 1 + ((bits >> 16) & 0xFF).astype(jnp.int32) % WANDER_MAX_TICKS}
     pos, spawn, kind = m["pos"], m["spawn"], m["kind"]
     sight = tables["sight"][kind]
     prev = ai["state"].astype(jnp.int32)
 
     # Nearest targetable player (living, outside the protection zone).
     targetable = p["active"] & ~p["dead"] & ~world["pz"][p["pos"][:, 0], p["pos"][:, 1]]
-    ptable, _ = build_grid(p["pos"], targetable)
-    tidx, pdist = nearest_in_block(ptable, pos, p["pos"])
+    tidx, pdist = _nearest(p["pos"], targetable, pos)
     tpos = p["pos"][tidx]
 
     # Assist: a kind-mate within sight that is chasing or hurt pulls this monster into the fight.
     hurt = m["active"] & (m["hp"] < tables["hp"][kind])
     fighting = m["active"] & ((prev == CHASE) | hurt)
-    mtable, _ = build_grid(pos, m["active"])
-    cand = block_candidates(mtable, pos)
-    cs = jnp.maximum(cand, 0)
-    mate = ((cand >= 0) & (cs != _IDX[:, None]) & (kind[cs] == kind[:, None]) & fighting[cs]
-            & (jnp.abs(pos[cs] - pos[:, None]).sum(-1) <= sight[:, None]))
-    pulled = tables["assist"][kind] & mate.any(axis=1)
+    pulled = tables["assist"][kind] & _fighting_mate_near(pos, kind, fighting, sight)
     hostile = tables["aggro"][kind] | hurt | pulled
 
     home_d = _cheb(pos, spawn)
@@ -180,8 +240,7 @@ def decide(world, movers, occ, tables=TABLES):
 
     # Looters walk to the nearest drop within sight and pick it up from one cell away.
     if has_block:
-        dtable, _ = build_grid(dr["pos"], dr["active"])
-        didx, ddist = nearest_in_block(dtable, pos, dr["pos"])
+        didx, ddist = _nearest(dr["pos"], dr["active"], pos)
         looting = idle & movers & tables["looter"][kind] & (ai["held_item"] == ITEM_NONE) & (ddist <= sight)
         reach = looting & (_cheb(dr["pos"][didx], pos) <= 1) & dr["active"][didx]
         claim = jnp.full((MAX_DROPS,), MAX_MONSTERS, jnp.int32).at[jnp.where(reach, didx, MAX_DROPS)].min(
@@ -198,11 +257,11 @@ def decide(world, movers, occ, tables=TABLES):
 
     # Idle random walk: count down, then roll a new goal and timer.
     strolling = idle & ~looting
-    new_timer = jax.random.randint(k_timer, (MAX_MONSTERS,), WANDER_MIN_TICKS, WANDER_MAX_TICKS + 1)
+    new_timer = WANDER_MIN_TICKS + (bits >> 16).astype(jnp.int32) % _WANDER_TICK_N
     timer = jnp.where(strolling, ai["wander_in"] - 1, new_timer)  # a busy monster waits a full period after
     due = strolling & (timer <= 0)
     keep_goal = strolling & (prev == IDLE) & (ai["goal"][:, 0] >= 0)  # turning idle: start from where it stands
-    goal = jnp.where(due[:, None], _wander_goal(k_goal, pos, spawn, world["walls"], world["pz"]),
+    goal = jnp.where(due[:, None], _wander_goal(bits, pos, spawn, world["walls"], world["pz"]),
                      jnp.where(keep_goal[:, None], ai["goal"], pos))
     timer = jnp.where(due, new_timer, timer)
     goal = jnp.where(movers[:, None], goal, spawn)

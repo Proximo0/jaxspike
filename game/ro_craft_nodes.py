@@ -10,6 +10,7 @@ from game.config import DIR_DELTAS, MAP, T_GRASS, T_ROCK, T_TREE, T_WATER
 from game.data.craft import (MAX_NODES, N_GATHER_KINDS, N_NODE_KINDS, NODE_COAL, NODE_COPPER, NODE_COUNT, NODE_FIRE, NODE_FISH,
                              NODE_FURNACE, NODE_HERB, NODE_IRON, NODE_SLOT_START, NODE_TREE)
 from game.map_gen import DIST_UNREACHABLE
+from game import world_layout as wl
 from game.world_layout import TEMPLE_TILES, town_centers
 from game.data.craft import STATION_GAP
 
@@ -64,9 +65,37 @@ def _near(mask):
     return _shift_min((~mask).astype(jnp.int8)) == 0
 
 
+RESERVED_LINE_BAND = 1  # tiles either side of a zone split line that never get a node
+
+
+def reserved_tiles():
+    """bool [MAP, MAP] (numpy): tiles no resource node may take.
+
+    The zone split lines are T_ROCK, so without this every tile beside them counted as an ore deposit and ore nodes
+    lined the whole grid (round-2 defect 9). Reserved: the split lines with RESERVED_LINE_BAND tiles either side
+    (outside town and dungeon boxes, where no line is drawn) and every portal lane (the road across a line from a
+    portal's warp to its station, ROAD_HALF_WIDTH wide), so the lanes stay clear for walkers. Static per layout.
+    """
+    xs, ys = np.meshgrid(np.arange(MAP), np.arange(MAP), indexing="ij")
+    band = np.zeros((MAP, MAP), bool)
+    for v in wl.zone_line_tiles():
+        band |= (np.abs(xs - v) <= RESERVED_LINE_BAND) | (np.abs(ys - v) <= RESERVED_LINE_BAND)
+    keep = np.zeros((MAP, MAP), bool)
+    for x0, y0, x1, y1 in wl.zone_boxes()[[z[1] != wl.ZONE_FIELD for z in wl.ZONES]].tolist():
+        keep |= (xs >= x0) & (xs <= x1) & (ys >= y0) & (ys <= y1)
+    out = band & ~keep
+    hw = wl.ROAD_HALF_WIDTH
+    for legs in wl.zone_portals().tolist():        # [2 legs, (warp, station), (x, y)]
+        pts = np.array(legs).reshape(-1, 2)
+        x0, y0 = pts.min(0) - hw
+        x1, y1 = pts.max(0) + hw
+        out |= (xs >= x0) & (xs <= x1) & (ys >= y0) & (ys <= y1)
+    return out
+
+
 def place_nodes(world, key):
-    """Fill world["craft"]["nodes"] from terrain, walls and pz. Other craft keys are left untouched."""
-    terrain, walk = world["terrain"], (world["walls"] == 0) & ~world["pz"]
+    """Fill world["craft"]["nodes"] from terrain, walls and pz (minus reserved_tiles). Other craft keys are untouched."""
+    terrain, walk = world["terrain"], (world["walls"] == 0) & ~world["pz"] & ~jnp.asarray(reserved_tiles())
     ore = walk & _near(terrain == T_ROCK)
     fish = walk & _near(terrain == T_WATER) & ~ore
     tree = walk & _near(terrain == T_TREE) & ~ore & ~fish
@@ -120,14 +149,22 @@ def node_fields(world):
     src = jnp.zeros((N_NODE_KINDS * _NT_TILES,), jnp.bool_).at[tile].set(True, mode="drop")
     d0 = jnp.where(src.reshape(N_NODE_KINDS, MAP, MAP), 0, DIST_UNREACHABLE).astype(jnp.int16)
 
-    def relax(d):
-        return jnp.where(free, jnp.minimum(d, jnp.minimum(_shift_min(d), DIST_UNREACHABLE - 1) + 1),
+    # One kind at a time (lax.map over the kind axis, as map_gen.distance_fields_ro does over towns): the loop's
+    # temporaries are [MAP, MAP] instead of [N_NODE_KINDS, MAP, MAP] and the result is identical (kinds are
+    # independent). At MAP 2048 this is the bigger half of a world build (docs/world_scale.md).
+    def relax(d, free_k):
+        return jnp.where(free_k, jnp.minimum(d, jnp.minimum(_shift_min(d), DIST_UNREACHABLE - 1) + 1),
                          jnp.int16(DIST_UNREACHABLE))
 
-    def body(carry):
-        d, _ = carry
-        nd = relax(d)
-        return nd, jnp.any(nd != d)
+    def one_kind(args):
+        d, free_k = args
 
-    d, _ = jax.lax.while_loop(lambda c: c[1], body, (d0, jnp.bool_(True)))
-    return d
+        def body(carry):
+            d, _ = carry
+            nd = relax(d, free_k)
+            return nd, jnp.any(nd != d)
+
+        d, _ = jax.lax.while_loop(lambda c: c[1], body, (d, jnp.bool_(True)))
+        return d
+
+    return jax.lax.map(one_kind, (d0, free))

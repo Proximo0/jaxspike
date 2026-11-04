@@ -158,38 +158,38 @@ Rows below use items we have, in rAthena per-10000; `(+)` = item to add as an et
 | Eddga | Honey(+) 10000, Elunium 2300, Katar of Raging Blaze(+) 500, Smoking Pipe(+) 250, Tiger Footskin(+) 250, Fire Brand(+) 150, Krieg(+) 100, Eddga Card 1; MVP: Tiger's Skin 5000, Flame Heart(+) 3000, Tiger Footskin(+) 1000 |
 
 ## 3. Engine lines for the owners (not ours; exact replacements)
-- **E1 ASPD and attack delay** (`game/ro_stats.py:118-120`, lead): RO pre-re is
+- **E1 ASPD and attack delay** [LANDED round 3, ro3-engine: `ro_stats.derived` reads the worn weapon class, exports `aspd`; fresh Novice fist 151 = 10 ticks, Thief knife 151 = 10, Thief fist 161 = 8] (`game/ro_stats.py:118-120`, lead): RO pre-re is
   `aspd = 200 - (200 - base) * (1000 - (4*agi + dex)) / 1000` with base = `JOB_WEAPON_ASPD_J[job, weapon_class]`
   (needs the equipped weapon class from ro_items), cap 190, **no 150 floor**; attack delay = 2 x amotion =
   `20 * (200 - aspd)` ms, so `aspd_ticks = max(1, (20 * (200 - aspd) + TICK_MS // 2) // TICK_MS)`.
   Today: `aspd = clip(JOB_ASPD_BASE_J[job] + (ag*4 + dx)//10, 150, 190)` (stat bonus 2x RO, floor 150) and
   `aps = 1500 + (aspd - 150) * 45` (1.5 swings/s at ASPD 150 instead of 1.0; 3.3/s at 190 instead of 5.0).
-- **E2 max HP / SP** (`game/ro_stats.py:108-109`): `max_hp = JOB_BASE_HP_TABLE_J[job, lvl] * (100 + vi) // 100`,
+- **E2 max HP / SP** [LANDED round 3: per-job tables; Novice L1 40 HP / 11 SP] (`game/ro_stats.py:108-109`): `max_hp = JOB_BASE_HP_TABLE_J[job, lvl] * (100 + vi) // 100`,
   `max_sp = JOB_BASE_SP_TABLE_J[job, lvl] * (100 + it) // 100` (and `_fresh_max_sp` at line 64 the same way).
-- **E3 HIT / FLEE / MATK / MDEF** (`game/ro_stats.py:111-115`): `hit = lvl + dx`, `flee = lvl + ag`,
+- **E3 HIT / FLEE / MATK / MDEF** [LANDED round 3: hit = lvl + DEX, flee = lvl + AGI, matk = mean(min, max), mdef = INT + VIT // 2; combat uses monster AGI/DEX columns appended to `game/data/monsters.py`; ranged status ATK still open] (`game/ro_stats.py:111-115`): `hit = lvl + dx`, `flee = lvl + ag`,
   `matk_min = it + (it // 7) ** 2`, `matk_max = it + (it // 5) ** 2`, soft `mdef = it + vi // 2`. Then
   `game/combat.py:36-43`: player hit% = `clip(80 + hit - (mon_level + mon_agi), 5, 95)` and monster hit% =
   `clip(80 + (mon_level + mon_dex) - flee, 5, 95)` (needs monster AGI/DEX columns, values in 1.4). Ranged weapons
   (bows) use `dex + (dex // 10) ** 2 + str // 5 + luk // 5` for status ATK.
-- **E4 DEF** (`game/combat.py:124-128` and `:98-101`): RO applies hard DEF (armor, percent) then subtracts soft
+- **E4 DEF** [LANDED round 3: hard DEF percent then flat VIT (player `def` = VIT, monster `VIT` column); crits ignore both] (`game/combat.py:124-128` and `:98-101`): RO applies hard DEF (armor, percent) then subtracts soft
   (VIT) DEF flat: `dmg = raw * (100 - armor_def) // 100 - vit_def`; today VIT DEF is added into the percent.
   Monster DEF in our table is hard DEF (percent) and is right as used; monster VIT DEF = mob VIT (1.4).
-- **E5 after-cast delay for ASPD-based skills** (`game/ro_skills.py:174-176`, ro-anim): use
+- **E5 after-cast delay for ASPD-based skills** [OPEN: `game/ro_skills.py` is not owned this round; line reported to the lead] (`game/ro_skills.py:174-176`, ro-anim): use
   `where(S.SKILL_DELAY_ASPD[rid] == 1, amo[:mp], S.SKILL_AFTER_DELAY_MS[rid, lvl])`; the table holds 500 ms for those
   rows until then.
-- **E6 AoE radius** (`game/ro_skills_effects.py:27` `R_MAX = 1`): Magnum Break and Arrow Shower are 5x5 in RO
+- **E6 AoE radius** [LANDED round 3: `R_MAX = 2`] (`game/ro_skills_effects.py:27` `R_MAX = 1`): Magnum Break and Arrow Shower are 5x5 in RO
   (`SKILL_AOE = 2`); R_MAX 2 (25 offsets) makes them hit 5x5.
-- **E7 buff and passive effects** (`game/ro_skills.py:61-72`): Increase AGI gives AGI +2+lv and **+25 % move speed,
+- **E7 buff and passive effects** [PART round 3: Increase AGI sets `move.speed_ms` 120 in `ro_skills_effects.resolve`; the `aspd_pct` removal and the passives need `game/ro_skills.py`, lines reported to the lead] (`game/ro_skills.py:61-72`): Increase AGI gives AGI +2+lv and **+25 % move speed,
   not ASPD %** (`aspd_pct = agi` is not RO; ASPD rises through AGI only); Increase HP Recovery is
   `5*lv + max_hp*lv/500` HP every 10 s (not +10 %/lv regen); add Improve Dodge `flee_flat = 3*lv`, Double Attack
   `5*lv %` chance of 2 hits with daggers, Vulture's Eye bow range `+lv`, Sword Mastery only with daggers/1h swords,
   Owl's Eye right. Improve Concentration: AGI/DEX +(2+lv) %.
-- **E8 Heal** (`game/ro_skills_effects.py:48-50`): RO heal = `(base_level + INT) // 8 * (4 + 8*lv)`; today
+- **E8 Heal** [LANDED round 3: `heal_amount(base_level, int, lv)`; Heal on Undead still open] (`game/ro_skills_effects.py:48-50`): RO heal = `(base_level + INT) // 8 * (4 + 8*lv)`; today
   `(10 + matk) * power // 1000`. Heal on Undead deals holy damage of half the heal.
-- **E9 death penalty** (`game/ro_stats.py:209-211`): RO loses 1 % of base **and job** exp to next level, Novices
+- **E9 death penalty** [LANDED round 3: base and job exp, Novices exempt, no level floor] (`game/ro_stats.py:209-211`): RO loses 1 % of base **and job** exp to next level, Novices
   exempt (not base level < 10).
-- **E10 HP regen** (survival): RO every 6 s standing (3 s sitting): `1 + max_hp // 200 + vit // 5`.
-- **E11 persistence** (`net/char_fields.py:170`): `skills_learned` is now length 42 (was 33): pad an older,
+- **E10 HP regen** [LANDED round 3 as `ro_stats.hp_regen(world, sitting)` (60 ticks standing / 30 sitting); `game/survival.py` (ro3-wire) wires it] (survival): RO every 6 s standing (3 s sitting): `1 + max_hp // 200 + vit // 5`.
+- **E11 persistence** [LANDED round 3: `_skills` zero-pads short arrays] (`net/char_fields.py:170`): `skills_learned` is now length 42 (was 33): pad an older,
   shorter saved array with zeros instead of rejecting it, or old characters lose their skill levels at login.
 
 - **E12 spawn HP (blocks bench/soak_check today)** (`game/config.py:19`, lead): `PLAYER_MAX_HP = 150` is above

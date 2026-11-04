@@ -203,3 +203,16 @@ static func buff_rows(welcome: Dictionary, you: Dictionary, tick_ms: int) -> Arr
 		out.append({"id": id, "name": nm, "seconds": float(ticks * tick_ms) / 1000.0,
 				"level": int(row[2]) if row.size() > 2 else 1})
 	return out
+
+
+## True when a skill may start: no after-cast delay left (the server refuses a skill while `after_delay` > 0; a
+## cast in flight is shown by the cast bar and is not a bar grey-out, so sim_ui_stats can press while casting).
+static func can_act(you: Dictionary) -> bool:
+	return int(you.get("after_delay", 0)) <= 0
+
+
+## Share of the after-cast delay still to run (1 at its start, 0 when over), `peak` = the largest value seen.
+static func after_delay_fraction(you: Dictionary, peak: int) -> float:
+	if peak <= 0:
+		return 0.0
+	return clampf(float(int(you.get("after_delay", 0))) / float(peak), 0.0, 1.0)

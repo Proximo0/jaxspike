@@ -19,6 +19,7 @@ def world_with(seed=0):
 def set_drop(w, i, pos, item, ttl=DROP_TTL):
     d = w["drops"]
     d = {
+        **d,  # round 3: keep count/refine/cards so vmap sees one pytree shape
         "pos": d["pos"].at[i].set(jnp.array(pos, jnp.int32)),
         "item": d["item"].at[i].set(item),
         "active": d["active"].at[i].set(True),
@@ -61,7 +62,7 @@ def credit(w, m, player):
     return {**w, "mvp": {**mvp, "top_damager": mvp["top_damager"].at[m].set(player)}}
 
 
-def test_drop_table_covers_every_monster_kind_with_a_card_at_one_per_mille():
+def test_drop_table_covers_every_monster_kind_with_a_card_at_one_per_10000():
     assert drop_data.N_DROP_KINDS == monster_data.N_KINDS == 20
     assert DROP_ITEM.shape == (20, drop_data.DROPS_PER_KIND)
     for k in range(20):
@@ -70,7 +71,7 @@ def test_drop_table_covers_every_monster_kind_with_a_card_at_one_per_mille():
         cards = [i for i in row if int(item_data.KIND[i]) == item_data.KIND_CARD]
         assert len(cards) == 1 and int(DROP_CHANCE[k][row.index(cards[0])]) == 1, k
         assert 0 < int(drop_data.ZENY_MIN[k]) <= int(drop_data.ZENY_MAX[k])
-    assert ((DROP_CHANCE >= 0) & (DROP_CHANCE <= 1000)).all()
+    assert ((DROP_CHANCE >= 0) & (DROP_CHANCE <= 10000)).all()
     assert len(drop_data.table_for_client()) == 20
 
 
@@ -242,3 +243,27 @@ def test_jit_and_vmap():
                         jax.tree_util.tree_leaves(jax.tree_util.tree_map(lambda x: x[b], out))):
             assert (a == c).all()
     assert int(out["players"]["inv"][1, 0, 0]) == ITEM_SWORD
+
+
+def test_pickup_plays_the_pickup_clip():
+    from game import ro_anim
+    from game.loot import PICKUP_MS
+    w = set_drop(world_with(), 3, [7, 8], ITEM_MEAT)
+    w = set_player(w, 2, [7, 8])
+    w = set_player(w, 4, [20, 20])
+    w = {**w, "tick": jnp.int32(37)}
+    out = loot(w)
+    a = out["anim"]
+    assert int(a["action"][2]) == ro_anim.PICKUP
+    assert int(a["dur_ms"][2]) == PICKUP_MS
+    assert int(a["start_tick"][2]) == 37
+    assert int(a["action"][4]) == ro_anim.IDLE
+
+
+def test_pickup_without_anim_block_still_works():
+    w = set_drop(world_with(), 3, [7, 8], ITEM_MEAT)
+    w = set_player(w, 2, [7, 8])
+    w = {k: v for k, v in w.items() if k != "anim"}
+    out = loot(w)
+    assert int(out["players"]["inv"][2, 0]) == ITEM_MEAT
+    assert "anim" not in out

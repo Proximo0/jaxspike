@@ -57,7 +57,7 @@
     <div class="ob-tile"><div class="lab">Branches green</div><div class="num" data-draw="kpi-green" data-source="kpi" data-field="green" data-row="0">—</div><div class="sub">latest checks run passed</div></div>
     <div class="ob-tile"><div class="lab">Branches red</div><div class="num" data-draw="kpi-red" data-source="kpi" data-field="red" data-row="0">—</div><div class="sub">latest checks run failed</div></div>
     <div class="ob-tile"><div class="lab">Branches stale</div><div class="num" data-draw="kpi-stale" data-source="kpi" data-field="stale" data-row="0">—</div><div class="sub">no commit for 2 h</div></div>
-    <div class="ob-tile"><div class="lab">Teams active</div><div class="num" data-draw="kpi-tactive" data-source="kpi" data-field="teams_active" data-row="0">—</div><div class="sub">teams with files changed since the round-2 contract</div></div>
+    <div class="ob-tile"><div class="lab">Teams active</div><div class="num" data-draw="kpi-tactive" data-source="kpi" data-field="teams_active" data-row="0">—</div><div class="sub">teams with files changed since the round-3 contract</div></div>
     <div class="ob-tile"><div class="lab">Teams stale</div><div class="num" data-draw="kpi-tstale" data-source="kpi" data-field="teams_stale" data-row="0">—</div><div class="sub">no file touched for 2 h</div></div>
     <div class="ob-tile"><div class="lab">Main CI</div><div class="num" data-draw="kpi-main" data-source="kpi" data-field="main_ci" data-row="0">—</div><div class="sub">latest checks run on main</div></div>
     <div class="ob-tile"><div class="lab">Engine tests</div><div class="num" data-draw="kpi-engine" data-source="kpi" data-field="engine_tests" data-row="0">—</div><div class="sub">pytest passed, engine-pytest job on main</div></div>
@@ -65,8 +65,8 @@
   </section>
 
   <section id="teams">
-    <h2 class="ob-sec">Teams (round 2)</h2>
-    <p class="empty-note">One card per team in the round-2 contract. Round 2 has no branches: each team edits its owned paths in the shared checkout, so progress is the files changed under those paths since the contract commit, the newest file time, and the team's new or changed tests collected by pytest.</p>
+    <h2 class="ob-sec">Teams (round 3)</h2>
+    <p class="empty-note">One card per team in the round-3 contract. Rounds 2 and 3 have no branches: each team edits its owned paths in the shared checkout, so progress is the files changed under those paths since the contract commit, the newest file time, and the team's new or changed tests collected by pytest.</p>
     <div class="ob-grid" data-draw="team-cards" data-source="teams"></div>
   </section>
 

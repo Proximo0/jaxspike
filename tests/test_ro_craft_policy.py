@@ -5,6 +5,7 @@ import jax.numpy as jnp
 from bots import policies
 from bots.ro_craft_policy import GATHER_EVERY, craft_bot_inputs
 from game import ro_craft as rc
+from game import ro_stats
 from game.config import INV_SLOTS, MAP, MAX_PLAYERS
 from game.data import craft as C
 from game.map_gen import DIST_UNREACHABLE
@@ -137,6 +138,7 @@ def test_shapes_dtypes_jit_and_vmap():
     out = run(w1)
     assert out["gather"].shape == (MAX_PLAYERS,) and out["gather"].dtype == jnp.bool_
     assert out["craft"].shape == (MAX_PLAYERS,) and out["craft"].dtype == jnp.int32
+    assert out["craft_busy"].shape == (MAX_PLAYERS,) and out["craft_busy"].dtype == jnp.bool_
     assert out["move"].shape == (MAX_PLAYERS,) and out["move"].dtype == jnp.int32
     assert out["attack"].dtype == jnp.bool_ and out["eat"].dtype == jnp.bool_
     ws = jax.tree.map(lambda a, b: jnp.stack([a, b]), w1, w2)
@@ -162,3 +164,36 @@ def test_crafts_any_held_recipe_not_only_its_own_chain():
     w = make_world((C0, C0), inv=[C.ITEM_HERB, C.ITEM_HERB], fields={0: (C0 + 20, C0)})
     out = run(w)
     assert int(out["craft"][G]) == C.RECIPE_HERB_POTION and int(out["move"][G]) == 0
+
+
+def test_craft_busy_when_gathering_or_walking_not_otherwise():
+    w = make_world((C0, C0), nodes=[(0, C.NODE_COPPER, C0 + 1, C0)], fields={0: (C0 + 1, C0)})
+    assert bool(run(w)["craft_busy"][G])  # gathering
+    w = make_world((C0 - 10, C0), nodes=[(0, C.NODE_COPPER, C0, C0)], fields={0: (C0, C0)})
+    assert bool(run(w)["craft_busy"][G])  # walking down the node field
+    out = run(w)  # only the gatherer slot is ever busy
+    for i in range(MAX_PLAYERS):
+        if i % GATHER_EVERY != 1:
+            assert not bool(out["craft_busy"][i])
+    w = make_world((C0, C0), nodes=[(0, C.NODE_COPPER, C0 + 5, C0)])
+    w["craft"]["dist_node"] = jnp.full_like(w["craft"]["dist_node"], DIST_UNREACHABLE)
+    assert not bool(run(w)["craft_busy"][G])  # unreachable field, empty bag
+
+
+def test_non_gatherer_slot_is_never_craft_busy():
+    w = make_world((C0, C0), nodes=[(0, C.NODE_COPPER, C0 + 1, C0)], fields={0: (C0 + 1, C0)})
+    pl = w["players"]
+    w = {**w, "players": {**pl, "pos": pl["pos"].at[2].set(jnp.array([C0, C0 + 1])), "active": pl["active"].at[2].set(True)}}
+    assert not bool(run(w)["craft_busy"][2])
+
+
+def test_hurt_gatherer_uses_percent_of_derived_max_hp():
+    w = make_world((C0, C0), nodes=[(0, C.NODE_COPPER, C0 + 1, C0)], fields={0: (C0 + 1, C0)})
+    mx = int(ro_stats.derived(w)["max_hp"][G])
+    pl = w["players"]
+    low = {**w, "players": {**pl, "hp": pl["hp"].at[G].set(mx * 40 // 100)}}
+    out = run(low)
+    assert not bool(out["gather"][G]) and not bool(out["craft_busy"][G])
+    full = {**w, "players": {**pl, "hp": pl["hp"].at[G].set(mx)}}
+    out = run(full)
+    assert bool(out["gather"][G]) and bool(out["craft_busy"][G])

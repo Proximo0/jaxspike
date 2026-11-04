@@ -3,8 +3,8 @@ extends RefCounted
 ## Camera zoom with bounds and smooth wheel steps: each wheel notch multiplies the target by STEP (clamped to
 ## [min_zoom, max_zoom]) and `update(delta)` eases the current zoom toward it exponentially. Pure: takes delta.
 
-const DEFAULT_MIN: float = 0.6
-const DEFAULT_MAX: float = 2.0
+const DEFAULT_MIN: float = 0.5  ## Matches the Tuning camera_zoom range.
+const DEFAULT_MAX: float = 3.0
 const STEP: float = 1.12  ## Target factor per wheel notch.
 const RATE: float = 12.0  ## Ease rate per second (about 90 % of the way in 0.2 s).
 const SNAP_EPS: float = 0.001
@@ -38,6 +38,11 @@ func update(delta: float) -> bool:
 	if absf(current - target) < SNAP_EPS:
 		current = target
 	return current != target
+
+
+## Sets a new target (clamped) and leaves `current` so it eases there (F2 Tuning slider).
+func retarget(z: float) -> void:
+	target = clampf(z, min_zoom, max_zoom)
 
 
 func snap(z: float) -> void:

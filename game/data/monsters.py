@@ -12,33 +12,34 @@ import jax.numpy as jnp
 ELEMENTS = ("Neutral", "Water", "Earth", "Fire", "Wind", "Poison", "Holy", "Shadow", "Ghost", "Undead")
 _E = {n: i for i, n in enumerate(ELEMENTS)}
 
-Monster = namedtuple("Monster", "name hp atk_min atk_max def_ element level base_exp job_exp aggro move_ticks size mvp")
+Monster = namedtuple("Monster", "name hp atk_min atk_max def_ element level base_exp job_exp aggro move_ticks size mvp agi vit dex")
 
-# name, hp, atk_min, atk_max, def, element, level, base_exp, job_exp, aggro, move_ticks, size, mvp
+# name, hp, atk_min, atk_max, def, element, level, base_exp, job_exp, aggro, move_ticks, size, mvp, agi, vit, dex
+# (agi, vit, dex: rAthena pre-re monster stats; AGI dodges player hits, VIT is flat soft DEF, DEX raises monster hit)
 # Classic pre-renewal numbers from rAthena db/pre-re/mob_db.yml (ro-fidelity, 2026-11-02): HP, Attack/Attack2,
 # Defense (hard DEF, percent), Level, BaseExp/JobExp, Element (level 1 table; Lunatic/Thief Bug are Neutral 3,
 # Hode Earth 2, Mummy Undead 2, GTB Fire 2), Size (0 small, 1 medium, 2 large), aggro = rAthena Ai 04/07/21.
 _ROWS = (
-    ("Poring", 50, 7, 10, 0, "Water", 1, 2, 1, False, 2, 1, False),
-    ("Orc Warrior", 1400, 104, 126, 10, "Earth", 24, 408, 160, True, 1, 1, False),
-    ("Fabre", 63, 8, 11, 0, "Earth", 2, 3, 2, False, 2, 0, False),
-    ("Lunatic", 60, 9, 12, 0, "Neutral", 3, 6, 2, False, 1, 0, False),
-    ("Drops", 55, 10, 13, 0, "Fire", 3, 4, 3, False, 2, 1, False),
-    ("Poporing", 344, 59, 72, 0, "Poison", 14, 81, 44, False, 2, 1, False),
-    ("Willow", 95, 9, 12, 5, "Earth", 4, 5, 4, False, 2, 1, False),
-    ("Rocker", 198, 24, 29, 5, "Earth", 9, 20, 16, False, 2, 1, False),
-    ("Spore", 510, 24, 48, 0, "Water", 16, 66, 108, False, 2, 1, False),
-    ("Thief Bug", 126, 18, 24, 5, "Neutral", 6, 17, 5, True, 1, 0, False),
-    ("Zombie", 534, 67, 79, 0, "Undead", 15, 50, 33, True, 3, 1, False),
-    ("Wolf", 919, 37, 46, 0, "Earth", 25, 329, 199, False, 1, 1, False),
-    ("Skeleton", 234, 39, 47, 10, "Undead", 10, 18, 14, False, 2, 1, False),
-    ("Peco Peco", 531, 50, 64, 0, "Fire", 19, 159, 72, False, 1, 2, False),
-    ("Hode", 2282, 146, 177, 0, "Earth", 26, 550, 300, False, 2, 1, False),
-    ("Soldier Skeleton", 2334, 221, 245, 10, "Undead", 29, 372, 226, True, 2, 1, False),
-    ("Bigfoot", 1619, 198, 220, 10, "Earth", 25, 310, 188, False, 2, 2, False),
-    ("Mummy", 5176, 305, 360, 0, "Undead", 37, 800, 602, True, 3, 1, False),
-    ("Golden Thief Bug", 126000, 870, 1145, 60, "Fire", 64, 14300, 7150, True, 1, 2, True),
-    ("Eddga", 152000, 1215, 1565, 15, "Fire", 65, 25025, 12870, True, 1, 2, True),
+    ("Poring", 50, 7, 10, 0, "Water", 1, 2, 1, False, 2, 1, False, 1, 1, 6),
+    ("Orc Warrior", 1400, 104, 126, 10, "Earth", 24, 408, 160, True, 1, 1, False, 24, 48, 34),
+    ("Fabre", 63, 8, 11, 0, "Earth", 2, 3, 2, False, 2, 0, False, 2, 4, 7),
+    ("Lunatic", 60, 9, 12, 0, "Neutral", 3, 6, 2, False, 1, 0, False, 3, 3, 8),
+    ("Drops", 55, 10, 13, 0, "Fire", 3, 4, 3, False, 2, 1, False, 3, 3, 12),
+    ("Poporing", 344, 59, 72, 0, "Poison", 14, 81, 44, False, 2, 1, False, 14, 14, 19),
+    ("Willow", 95, 9, 12, 5, "Earth", 4, 5, 4, False, 2, 1, False, 4, 8, 9),
+    ("Rocker", 198, 24, 29, 5, "Earth", 9, 20, 16, False, 2, 1, False, 9, 18, 14),
+    ("Spore", 510, 24, 48, 0, "Water", 16, 66, 108, False, 2, 1, False, 12, 12, 19),
+    ("Thief Bug", 126, 18, 24, 5, "Neutral", 6, 17, 5, True, 1, 0, False, 6, 6, 11),
+    ("Zombie", 534, 67, 79, 0, "Undead", 15, 50, 33, True, 3, 1, False, 8, 7, 15),
+    ("Wolf", 919, 37, 46, 0, "Earth", 25, 329, 199, False, 1, 1, False, 20, 28, 32),
+    ("Skeleton", 234, 39, 47, 10, "Undead", 10, 18, 14, False, 2, 1, False, 5, 10, 12),
+    ("Peco Peco", 531, 50, 64, 0, "Fire", 19, 159, 72, False, 1, 2, False, 13, 13, 27),
+    ("Hode", 2282, 146, 177, 0, "Earth", 26, 550, 300, False, 2, 1, False, 26, 42, 49),
+    ("Soldier Skeleton", 2334, 221, 245, 10, "Undead", 29, 372, 226, True, 2, 1, False, 15, 22, 40),
+    ("Bigfoot", 1619, 198, 220, 10, "Earth", 25, 310, 188, False, 2, 2, False, 25, 55, 20),
+    ("Mummy", 5176, 305, 360, 0, "Undead", 37, 800, 602, True, 3, 1, False, 19, 32, 63),
+    ("Golden Thief Bug", 126000, 870, 1145, 60, "Fire", 64, 14300, 7150, True, 1, 2, True, 75, 35, 85),
+    ("Eddga", 152000, 1215, 1565, 15, "Fire", 65, 25025, 12870, True, 1, 2, True, 70, 85, 90),
 )
 
 MONSTERS = tuple(Monster(r[0], r[1], r[2], r[3], r[4], _E[r[5]], *r[6:]) for r in _ROWS)
@@ -68,6 +69,9 @@ AGGRO = _arr("aggro", jnp.bool_)
 MOVE_TICKS = _arr("move_ticks")
 SIZE = _arr("size")
 MVP = _arr("mvp", jnp.bool_)
+AGI = _arr("agi")
+VIT = _arr("vit")
+DEX = _arr("dex")
 
 # RO monster modes and movement per kind (team ro-monsters, docs/round2_contract.md section 0 "Monster modes").
 # Kept apart from _ROWS so number fixes there and mode fixes here do not collide. Values follow pre-renewal

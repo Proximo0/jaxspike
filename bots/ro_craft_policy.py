@@ -2,15 +2,21 @@
 
 Every GATHER_EVERY-th slot (i % GATHER_EVERY == 1) is a gatherer of node kind (i // GATHER_EVERY) % N_GATHER_KINDS.
 Other slots keep the hunting behaviour of bots.policies.bot_inputs. See docs/craft_brief.md (Worker C).
+
+Health uses the same percent-of-derived-max-hp thresholds as bots.ro_nav_policy (RETREAT_PCT, REST_PCT): a hurt or
+resting gatherer is not eligible. The policy no longer yields to a fight itself. It returns "craft_busy" (bool
+[MAX_PLAYERS]): True exactly when an eligible gatherer is doing craft work this tick (walking to a node, walking
+to a station, crafting or gathering). The composition layer takes the craft move/gather/craft only where craft_busy
+is set and lets the gatherer hunt (base/nav policy) otherwise, so gatherers fight and level when idle.
 """
 import jax
 import jax.numpy as jnp
 
 from bots import policies
 from bots.ro_nav_policy import blocked as _wall_blocked
-from bots.ro_nav_policy import neighbours
+from bots.ro_nav_policy import RETREAT_PCT, REST_PCT, _max_hp, neighbours
 from game import ro_craft
-from game.config import HUNT_RETREAT_HP, MAP, MAX_PLAYERS, PLAYER_MAX_HP
+from game.config import MAP, MAX_PLAYERS
 from game.data.craft import N_GATHER_KINDS, N_RECIPES, NODE_COPPER, NODE_LEVEL_REQ_A, NODE_SKILL_A, RECIPE_STATION
 from game.map_gen import DIST_UNREACHABLE
 
@@ -48,16 +54,17 @@ def _descend(world, kind, field, enter_pz):
 
 
 def craft_bot_inputs(world, key):
-    """Return the base bot inputs plus "gather" (bool) and "craft" (int32 recipe id), each [MAX_PLAYERS]."""
+    """Return the base bot inputs plus "gather" (bool), "craft" (int32 recipe id) and "craft_busy" (bool), each [MAX_PLAYERS]."""
     base = policies.bot_inputs(world, key)
     pl, cr = world["players"], world["craft"]
     field = cr["dist_node"]
 
     live = pl["active"] & ~pl["dead"]
     on_pz = world["pz"][pl["pos"][:, 0], pl["pos"][:, 1]]
-    hurt = pl["hp"] < HUNT_RETREAT_HP
-    resting = on_pz & (pl["hp"] < PLAYER_MAX_HP)
-    eligible = _IS_GATHERER & live & ~hurt & ~resting & ~base["attack"]
+    hp, mx = pl["hp"].astype(jnp.int32), _max_hp(world)
+    hurt = hp * 100 < RETREAT_PCT * mx
+    resting = on_pz & (hp * 100 < REST_PCT * mx)
+    eligible = _IS_GATHERER & live & ~hurt & ~resting
 
     # A gatherer whose skill is below its node kind's requirement works copper until it levels up.
     own_ok = cr["level"][_IDX, NODE_SKILL_A[_OWN_KIND]] >= NODE_LEVEL_REQ_A[_OWN_KIND]
@@ -94,4 +101,5 @@ def craft_bot_inputs(world, key):
         "move": move.astype(jnp.int32),
         "gather": eligible & do_gather,
         "craft": jnp.where(eligible & do_craft, rid, 0).astype(jnp.int32),
+        "craft_busy": eligible & (walk_node | walk_station | do_craft | do_gather),
     }

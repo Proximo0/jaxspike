@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from game import ro_mvp
-from game.config import MAX_MONSTERS
+from game.config import MAX_MONSTERS, MAX_PLAYERS
 from game.data import monsters as mon
 from game.data.items import ITEM_NONE
 from game.state import make_empty_world
@@ -11,6 +11,7 @@ from game.state import make_empty_world
 KIND = mon.KIND_BY_NAME["Eddga"]
 assert bool(mon.MVP[KIND])
 SLOT = MAX_MONSTERS - 3
+N_P = MAX_PLAYERS
 TILE = (40, 41)
 DROP = [int(x) for x in ro_mvp.MVP_DROP[KIND]]
 
@@ -49,6 +50,65 @@ def test_record_damage_ledger_and_tie():
     w = ro_mvp.record_damage(w, i32(8), i32(SLOT), i32(11))
     assert int(w["mvp"]["top_damager"][SLOT]) == 8
     assert int(w["mvp"]["damage_ledger"][SLOT]) == 55
+
+
+def test_cumulative_damage_beats_a_bigger_single_hit():
+    w = mk()
+    w = ro_mvp.record_damage(w, i32(2), i32(SLOT), i32(10))  # one hit of 10
+    w = ro_mvp.record_damage(w, i32(1), i32(SLOT), i32(6))
+    assert int(w["mvp"]["top_damager"][SLOT]) == 2
+    w = ro_mvp.record_damage(w, i32(1), i32(SLOT), i32(6))  # 12 cumulative > 10
+    v = w["mvp"]
+    assert int(v["top_damager"][SLOT]) == 1 and int(v["top_damage"][SLOT]) == 12
+    assert int(v["damage_ledger"][SLOT]) == 22
+    assert int(v["credit_dmg"][1].max()) == 12 and int(v["credit_mon"][1][v["credit_dmg"][1].argmax()]) == SLOT
+
+
+def test_credit_rows_evict_the_smallest_and_restart():
+    w = mk()
+    for mon_idx, d in ((1, 5), (2, 9), (3, 7), (4, 8)):  # four monsters fill the ledger
+        w = ro_mvp.record_damage(w, i32(0), i32(mon_idx), i32(d))
+    w = ro_mvp.record_damage(w, i32(0), i32(6), i32(1))  # the fifth evicts monster 1 (least damage)
+    rows = {int(a): int(b) for a, b in zip(w["mvp"]["credit_mon"][0], w["mvp"]["credit_dmg"][0])}
+    assert rows == {2: 9, 3: 7, 4: 8, 6: 1}
+    w = ro_mvp.record_damage(w, i32(0), i32(2), i32(1))  # the kept row accumulates
+    assert int(w["mvp"]["credit_dmg"][0][list(map(int, w["mvp"]["credit_mon"][0])).index(2)]) == 10
+    assert int(w["mvp"]["top_damage"][2]) == 10
+
+
+def test_aoe_columns_accumulate_per_player_in_one_call():
+    w = mk()
+    att = jnp.broadcast_to(jnp.arange(N_P, dtype=jnp.int32)[:, None], (N_P, 9))
+    mon = jnp.full((N_P, 9), MAX_MONSTERS, jnp.int32).at[0, 0].set(5).at[0, 1].set(6).at[1, 0].set(5)
+    dmg = jnp.zeros((N_P, 9), jnp.int32).at[0, 0].set(3).at[0, 1].set(4).at[1, 0].set(2)
+    w = ro_mvp.record_damage(w, att, mon, dmg)
+    v = w["mvp"]
+    assert int(v["damage_ledger"][5]) == 5 and int(v["damage_ledger"][6]) == 4
+    assert int(v["top_damager"][5]) == 0 and int(v["top_damager"][6]) == 0
+    w = ro_mvp.record_damage(w, i32(1), i32(5), i32(2))  # 4 cumulative for slot 1 beats 3
+    assert int(w["mvp"]["top_damager"][5]) == 1
+
+
+def test_death_clears_ledger_rows_for_that_monster_only():
+    w = mk()
+    m = w["monsters"]
+    w = {**w, "monsters": {**m, "active": m["active"].at[5].set(True)}}
+    w = ro_mvp.record_damage(w, i32(0, 1), i32(5, SLOT), i32(9, 4))
+    w = ro_mvp.record_damage(w, i32(0), i32(SLOT), i32(2))
+    w = ro_mvp.phase(kill(w, 5))
+    v = w["mvp"]
+    rows0 = {int(a): int(b) for a, b in zip(v["credit_mon"][0], v["credit_dmg"][0]) if int(a) >= 0}
+    assert rows0 == {SLOT: 2}
+    assert int(v["top_damager"][5]) == -1 and int(v["top_damage"][5]) == 0
+    assert int(v["top_damager"][SLOT]) == 1 and int(v["top_damage"][SLOT]) == 4
+
+
+def test_credit_of_drops_logged_out_players():
+    w = mk()
+    w = ro_mvp.record_damage(w, i32(7), i32(SLOT), i32(5))  # slot 7 is not active in mk()
+    assert int(ro_mvp.credit_of(w)[SLOT]) == -1
+    w = ro_mvp.record_damage(w, i32(1), i32(5), i32(5))
+    assert int(ro_mvp.credit_of(w)[5]) == 1
 
 
 def test_event_drops_and_reset():

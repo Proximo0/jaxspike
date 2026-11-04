@@ -13,6 +13,14 @@ func poll() -> Array[String]:
 	return []
 
 
+## Inbound packets since the last poll, oldest first: a String (text frame) or a PackedByteArray (binary frame).
+func poll_packets() -> Array:
+	var out: Array = []
+	for t: String in poll():
+		out.append(t)
+	return out
+
+
 func send(_text: String) -> void:
 	pass
 

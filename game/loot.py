@@ -1,24 +1,25 @@
 """Loot phase: RO drop tables for kills, zeny to the killer, player pickup, ground item decay."""
 import jax.numpy as jnp
 
-from game import ro_drops
-from game.config import ITEM_NONE, MAP, MAX_DROPS, MAX_MONSTERS, MAX_PLAYERS
+from game import ro_anim, ro_drops, ro_mvp
+from game.config import ITEM_NONE, MAX_MONSTERS, MAX_PLAYERS
 from game.data import items as item_data
 from game.state import next_key
+
+PICKUP_MS = 300  # pickup clip length (docs/anim_wire.md)
 
 
 def killer_of(world):
     """int32 [MAX_MONSTERS]: the player slot credited with each monster (-1 = nobody).
 
-    The credit is ro_mvp's `top_damager` (combat reports every landed hit through ro_mvp.record_damage; the mvp
-    phase clears it after loot), kept only when that player is still logged in. Worlds without the mvp block
-    credit nobody.
+    The credit is ro_mvp's cumulative-damage `top_damager` (combat reports auto-attacks and ro_skills_effects
+    reports skill hits through ro_mvp.record_damage, so melee, ranged and skill kills all pay; the mvp phase
+    clears it after loot and stats), kept only when that player is still logged in. Worlds without the mvp block
+    credit nobody. ro_stats pays exp from the same credit.
     """
     if "mvp" not in world:
         return jnp.full((MAX_MONSTERS,), -1, jnp.int32)
-    who = world["mvp"]["top_damager"]
-    safe = jnp.clip(who, 0, MAX_PLAYERS - 1)
-    return jnp.where((who >= 0) & world["players"]["active"][safe], who, -1).astype(jnp.int32)
+    return ro_mvp.credit_of(world)
 
 
 def _spawn_drops(world):
@@ -43,43 +44,12 @@ def _spawn_drops(world):
 
 
 def _pickup(world):
-    """Living active players on a drop tile take it into their first empty inventory slot."""
-    players, drops = world["players"], world["drops"]
-    inv = players["inv"]
-    didx = jnp.arange(MAX_DROPS, dtype=jnp.int32)
-    pidx = jnp.arange(MAX_PLAYERS, dtype=jnp.int32)
-
-    # Lowest active drop index on each tile.
-    dtile = drops["pos"][:, 0] * MAP + drops["pos"][:, 1]
-    tile_min = jnp.full((MAP * MAP,), MAX_DROPS, jnp.int32).at[
-        jnp.where(drops["active"], dtile, MAP * MAP)
-    ].min(didx, mode="drop")
-    ptile = jnp.clip(players["pos"][:, 0], 0, MAP - 1) * MAP + jnp.clip(
-        players["pos"][:, 1], 0, MAP - 1
+    """Living active players on a drop tile take it (count, refine, cards) into their first empty slot; the taker
+    plays the pickup clip. Rules live in ro_drops.pickup (lowest player wins; a full inventory takes nothing)."""
+    world, got = ro_drops.pickup(world)
+    return ro_anim.set_action(
+        world, jnp.concatenate([got, jnp.zeros((MAX_MONSTERS,), jnp.bool_)]), ro_anim.PICKUP, PICKUP_MS
     )
-    cand = tile_min[ptile]
-
-    empty = inv == ITEM_NONE
-    has_empty = empty.any(axis=1)
-    first_empty = jnp.argmax(empty, axis=1)
-    claim = players["active"] & ~players["dead"] & has_empty & (cand < MAX_DROPS)
-
-    # Lowest player index wins each drop.
-    winner = jnp.full((MAX_DROPS,), MAX_PLAYERS, jnp.int32).at[
-        jnp.where(claim, cand, MAX_DROPS)
-    ].min(pidx, mode="drop")
-    got = claim & (winner[jnp.where(claim, cand, 0)] == pidx)
-
-    new_inv = inv.at[jnp.where(got, pidx, MAX_PLAYERS), first_empty].set(
-        drops["item"][jnp.where(got, cand, 0)], mode="drop"
-    )
-    taken = winner < MAX_PLAYERS
-    new_drops = {
-        **drops,
-        "active": drops["active"] & ~taken,
-        "item": jnp.where(taken, ITEM_NONE, drops["item"]),
-    }
-    return {**world, "players": {**players, "inv": new_inv}, "drops": new_drops}
 
 
 def _decay(world):

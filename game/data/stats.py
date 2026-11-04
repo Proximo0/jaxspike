@@ -20,7 +20,10 @@ SKILL_POINTS_PER_JOB_LEVEL = 1
 # SP regen cadence in ticks: RO pre-re regenerates SP every 8 s standing (4 s sitting; iRO wiki "SP Recovery").
 SP_REGEN_TICKS = (8000 + TICK_MS // 2) // TICK_MS
 DEATH_PENALTY_PERMILLE = 10       # 1% of the level's exp requirement
-DEATH_PENALTY_MIN_LEVEL = 10
+DEATH_PENALTY_MIN_LEVEL = 10      # unused since round 3 (no level floor; Novices are exempt); kept for old imports
+# HP regen cadence in ticks: RO pre-re regenerates HP every 6 s standing, twice as often sitting.
+HP_REGEN_TICKS = max(1, (6000 + TICK_MS // 2) // TICK_MS)
+HP_REGEN_SIT_TICKS = max(1, HP_REGEN_TICKS // 2)
 TICK_HZ_X1000 = 1000 * 1000 // TICK_MS   # ticks per second x1000 (8333 at 120 ms)
 
 STAT_NAMES = ("str", "agi", "vit", "int", "dex", "luk")

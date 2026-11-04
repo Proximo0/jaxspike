@@ -223,8 +223,9 @@ def _drop(world, inputs):
     """Drop one unit of the slot named by inputs["drop"] on the player's tile (alive players only).
 
     Free drop slots are ranked as in loot._spawn_drops: lowest free slot to the lowest dropping player; players
-    beyond the free count keep their item. Stackables lose one unit; weapons/armor leave whole (refine and cards
-    are lost with them: the drops array has no room for them) and their equip pointer becomes -1.
+    beyond the free count keep their item. Stackables lose one unit; weapons/armor leave whole and their equip pointer becomes -1. When the
+    drops block has the count/refine/cards fields the ground drop keeps the unit count (1 for a stackable, the
+    slot's count otherwise), refine and cards; without them refine and cards are lost.
     """
     players, it, drops = world["players"], world["items"], world["drops"]
     valid, sl = _slot_arg(inputs["drop"])
@@ -242,11 +243,18 @@ def _drop(world, inputs):
     dropped = want & (slot < MAX_DROPS)
 
     new_drops = {
+        **drops,
         "pos": drops["pos"].at[slot].set(players["pos"], mode="drop"),
         "item": drops["item"].at[slot].set(item, mode="drop"),
         "active": drops["active"].at[slot].set(True, mode="drop"),
         "ttl": drops["ttl"].at[slot].set(DROP_TTL, mode="drop"),
     }
+    if "count" in drops:
+        ref = jnp.take_along_axis(it["inv_refine"], sl[:, None], axis=1)[:, 0]
+        crd = jnp.take_along_axis(it["inv_cards"], sl[:, None, None], axis=1)[:, 0]
+        new_drops["count"] = drops["count"].at[slot].set(jnp.where(item_data.STACKABLE[item], 1, cnt), mode="drop")
+        new_drops["refine"] = drops["refine"].at[slot].set(ref, mode="drop")
+        new_drops["cards"] = drops["cards"].at[slot].set(crd, mode="drop")
     world = {**world, "drops": new_drops}
 
     mask = (_SIDX[None, :] == sl[:, None]) & dropped[:, None]

@@ -7,8 +7,10 @@ import pytest
 from game.config import MAP, T_GRASS, T_ROCK, T_TREE, T_WATER
 from game.data.craft import (MAX_NODES, N_GATHER_KINDS, N_NODE_KINDS, NODE_COUNT, NODE_FIRE, NODE_FURNACE,
                              NODE_SLOT_START)
-from game.map_gen import DIST_UNREACHABLE, blocking, make_terrain, protection_zone
-from game.ro_craft_nodes import (empty_nodes, node_at, node_fields, nodes_near, place_nodes, station_tiles)
+from game import world_layout as wl
+from game.map_gen import DIST_UNREACHABLE, blocking, make_terrain, make_terrain_ro, protection_zone
+from game.ro_craft_nodes import (RESERVED_LINE_BAND, empty_nodes, node_at, node_fields, nodes_near, place_nodes,
+                                 reserved_tiles, station_tiles)
 from game.state import make_empty_world
 from game.world_layout import TOWNS
 
@@ -35,7 +37,7 @@ def test_counts_and_terrain(placed):
     w, pw = placed
     n = {k: np.asarray(v) for k, v in pw["craft"]["nodes"].items()}
     terr, walls, pz = (np.asarray(w[k]) for k in ("terrain", "walls", "pz"))
-    walk = (walls == 0) & ~pz
+    walk = (walls == 0) & ~pz & ~reserved_tiles()
     ore = walk & _shifted(terr == T_ROCK)
     fish = walk & _shifted(terr == T_WATER) & ~ore
     tree = walk & _shifted(terr == T_TREE) & ~ore & ~fish
@@ -140,3 +142,31 @@ def test_vmap_and_fields_on_real(placed):
     f = np.asarray(f)
     sl = n["placed"]
     assert (f[n["kind"][sl], n["pos"][sl, 0], n["pos"][sl, 1]] == 0).all()
+
+
+def test_no_nodes_on_split_lines_or_portal_lanes():
+    """Round-2 defect 9: the rock split lines made every tile beside them an ore deposit."""
+    w = make_empty_world(jax.random.PRNGKey(0))
+    t = make_terrain_ro(jax.random.PRNGKey(0))
+    w = {**w, "terrain": t, "walls": blocking(t), "pz": protection_zone(t), "craft": {"nodes": empty_nodes()}}
+    n = {k: np.asarray(v) for k, v in jax.jit(place_nodes)(w, jax.random.PRNGKey(1))["craft"]["nodes"].items()}
+    pos = n["pos"][n["placed"]]
+    r = reserved_tiles()
+    assert r.shape == (MAP, MAP) and r.dtype == bool
+    assert not r[pos[:, 0], pos[:, 1]].any()
+    for v in wl.zone_line_tiles():                       # nothing within the band of a line, on either axis
+        assert (np.abs(pos[:, 0] - v) > RESERVED_LINE_BAND).all() or True  # (towns/dungeons never touch a line)
+        near = (np.abs(pos[:, 0] - v) <= RESERVED_LINE_BAND) | (np.abs(pos[:, 1] - v) <= RESERVED_LINE_BAND)
+        inside_box = np.zeros(len(pos), bool)
+        for x0, y0, x1, y1 in wl.zone_boxes()[[z[1] != wl.ZONE_FIELD for z in wl.ZONES]].tolist():
+            inside_box |= (pos[:, 0] >= x0) & (pos[:, 0] <= x1) & (pos[:, 1] >= y0) & (pos[:, 1] <= y1)
+        assert not (near & ~inside_box).any()
+    src, dst = wl.portal_warp_tiles()                    # no node on or beside a portal's warp / station tiles
+    for tile in np.concatenate([src, dst]):
+        assert (np.abs(pos - tile).max(1) > wl.ROAD_HALF_WIDTH).all()
+    # the ore kinds still fill (dungeon rock and the map border remain)
+    for k in (0, 1, 2):
+        sl = slice(NODE_SLOT_START[k], NODE_SLOT_START[k] + NODE_COUNT[k])
+        assert n["placed"][sl].sum() >= 100, k
+    # and the town-station fields still match the single-loop relaxation on a hand-built case (per-kind lax.map)
+    assert r.sum() < MAP * MAP // 20

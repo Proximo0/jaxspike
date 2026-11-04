@@ -34,6 +34,8 @@ func apply_snap(snap: Dictionary) -> void:
 		var merged: Dictionary = you.duplicate(true)
 		merged.merge(_entity_store_norm_you(you_in), true)
 		you = merged
+		# `warped` is a one-tick flag: the server sends it only on the tick a warp moved the player.
+		you["warped"] = bool((you_in as Dictionary).get("warped", false))
 	var n: Variant = snap.get("notice")
 	notice = String(n) if typeof(n) == TYPE_STRING else ""
 	var gone: Variant = snap.get("gone")
@@ -132,7 +134,8 @@ func _upsert(src: Dictionary) -> void:
 		e["item"] = int(src["item"])
 	if src.has("mkind"):
 		e["mkind"] = int(src["mkind"])
-	# Anim fields (docs/anim_wire.md): a missing one keeps its old value, except `h` (damage on this tick only).
+	# Anim fields (docs/anim_wire.md): a missing one keeps its old value, except `h` (damage on this tick only;
+	# a miss arrives as h = 0 and is kept as 0).
 	var prev: Dictionary = _ents.get(id, {})
 	for k: String in ["a", "d", "t", "m", "s", "h", "job"]:
 		if src.has(k):

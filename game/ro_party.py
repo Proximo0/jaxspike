@@ -4,19 +4,21 @@ State block `world["party"]` (see make_state). No [N, N] or [PARTIES, N] tables 
 cumsum/scatter-min/segment_sum, per-party accept ranks use a stable argsort over party ids.
 
 Decisions: a killer's exp is pooled with every other killer's in the same party; the killer with the lowest
-slot is the reference for the level gap and radius (it is always eligible and keeps the remainder). Other
-killers that are out of range of the reference lose their own gain to the pool (sum is conserved).
+slot is the reference for the level gap and the zone (it is always eligible and keeps the remainder). Other
+killers out of range of the reference lose their own gain to the pool (the pool is conserved, then raised by
+the classic +10% per extra eligible member before the even split).
 A declined or failed accept (party full, inviter gone) clears the pending invite.
 """
 import jax
 import jax.numpy as jnp
 
+from game import world_layout
 from game.config import MAX_PLAYERS
 
 MAX_PARTIES = 128
 PARTY_MAX_MEMBERS = 12
 SHARE_LEVEL_RANGE = 15
-SHARE_RADIUS = 64
+PARTY_BONUS_PCT = 10  # classic even-share bonus per eligible member beyond the first
 INVITE_TTL = 100
 
 _PIDX = jnp.arange(MAX_PLAYERS, dtype=jnp.int32)
@@ -134,7 +136,13 @@ def phase(world, inputs):
 
 
 def share_exp(world, exp_gain):
-    """Split each party's pooled kill exp among eligible members; solo players keep their gain."""
+    """Split each party's pooled kill exp among eligible members, with the classic party bonus.
+
+    Eligible: living active members in the same zone (`world_layout.zone_of`) as the reference killer and within
+    SHARE_LEVEL_RANGE base levels of them. The pool is raised by PARTY_BONUS_PCT per eligible member beyond the
+    first (RO's even-share bonus, +10% per extra member), then split evenly; the reference killer keeps the
+    remainder. Solo players keep their own gain. int32 [MAX_PLAYERS].
+    """
     pl = world["players"]
     pid = world["party"]["party_id"]
     gain = exp_gain.astype(jnp.int32)
@@ -152,12 +160,13 @@ def share_exp(world, exp_gain):
     has_ref = in_party & (ref_m < MAX_PLAYERS)
     rc = jnp.clip(ref_m, 0, MAX_PLAYERS - 1)
     lv = _base_level(world)
-    dist = jnp.abs(pl["pos"][:, 0] - pl["pos"][rc, 0]) + jnp.abs(pl["pos"][:, 1] - pl["pos"][rc, 1])
+    zone = world_layout.zone_of(pl["pos"])
     is_ref = has_ref & (_PIDX == ref_m)
-    near = pl["active"] & ~pl["dead"] & (jnp.abs(lv - lv[rc]) <= SHARE_LEVEL_RANGE) & (dist <= SHARE_RADIUS)
+    near = pl["active"] & ~pl["dead"] & (jnp.abs(lv - lv[rc]) <= SHARE_LEVEL_RANGE) & (zone == zone[rc])
     eligible = has_ref & (is_ref | near)
     n_elig = jax.ops.segment_sum(eligible.astype(jnp.int32), seg, num_segments=MAX_PARTIES)
     n_safe = jnp.maximum(n_elig, 1)
+    pool = pool * (100 + PARTY_BONUS_PCT * (n_safe - 1)) // 100
     share = pool // n_safe
     rem = pool - share * n_safe
     out = jnp.where(eligible, share[pc], 0) + jnp.where(is_ref, rem[pc], 0)

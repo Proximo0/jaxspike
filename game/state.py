@@ -37,6 +37,9 @@ world = {
       "item":   int32 [MAX_DROPS]               ITEM_NONE if slot unused
       "active": bool  [MAX_DROPS]
       "ttl":    int32 [MAX_DROPS]
+      "count":  int32 [MAX_DROPS]               units in the pile (a coin pile's count is its zeny)
+      "refine": int32 [MAX_DROPS]
+      "cards":  int32 [MAX_DROPS, 4]
   }
 }
 
@@ -91,13 +94,15 @@ def empty_inputs():
         "save": jnp.zeros((MAX_PLAYERS,), jnp.bool_),       # kafra save point
         "buy": jnp.zeros((MAX_PLAYERS,), jnp.int32),        # shop: item id (0 = none)
         "sell": jnp.full((MAX_PLAYERS,), -1, jnp.int32),    # shop: inventory slot
+        "sit": jnp.zeros((MAX_PLAYERS,), jnp.bool_),        # survival: toggle sitting (anim SIT; HP regen twice as often)
+        "teleport": jnp.full((MAX_PLAYERS,), -1, jnp.int32),  # kafra teleport: destination town index (ro_kafra)
     }
 
 
 def make_empty_world(key):
     """Blank world with no walls, no players, no monsters. Used by tests and as a base."""
-    from game import (ro_anim, ro_craft, ro_items, ro_monster_modes, ro_move, ro_mvp, ro_party,  # lazy: next_key
-                      ro_skills, ro_stats)
+    from game import (ro_anim, ro_craft, ro_drops, ro_items, ro_monster_modes, ro_move, ro_mvp,  # lazy: next_key
+                      ro_party, ro_skills, ro_stats)
     return {
         "walls": jnp.zeros((MAP, MAP), jnp.int8),
         "terrain": jnp.full((MAP, MAP), T_GRASS, jnp.int8),
@@ -131,6 +136,7 @@ def make_empty_world(key):
             "item": jnp.zeros((MAX_DROPS,), jnp.int32),
             "active": jnp.zeros((MAX_DROPS,), jnp.bool_),
             "ttl": jnp.zeros((MAX_DROPS,), jnp.int32),
+            **ro_drops.drop_fields(),  # round 3: count (a coin pile's count is its zeny), refine, cards [MAX_DROPS, 4]
         },
         # RO system blocks (docs/ro_contract.md). Nodes and MVPs are placed by bots.runner.make_world_batch.
         "stats": ro_stats.make_state(),

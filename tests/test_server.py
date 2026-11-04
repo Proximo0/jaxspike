@@ -441,6 +441,41 @@ def test_ro_messages_fill_pending_and_clear_after_one_tick(tmp_path):
         assert _pend_is_none(s)
     run(body())
 
+def test_sit_message_sets_pending_and_toggles_the_sit_action(tmp_path):
+    from game import ro_anim
+    async def body():
+        s = _ro_server(tmp_path)
+        a, _ = _human(s, "sitter")
+        s._on_ro_message(a, {"t": "sit"})
+        assert bool(s.pend["sit"][a])
+        await tk(s)
+        assert not s.pend["sit"].any()  # one-shot
+        act = lambda: int(s.world["anim"]["action"][a])
+        assert act() == ro_anim.SIT
+        s._on_ro_message(a, {"t": "sit"})
+        await tk(s)
+        assert act() == ro_anim.IDLE
+    run(body())
+
+def test_snapshot_you_carries_warped_only_on_that_tick(tmp_path):
+    async def body():
+        s = _ro_server(tmp_path)
+        a, _ = _human(s, "warper")
+        seen = []
+        orig = s._snapshot_view
+        s._snapshot_view = lambda slot, pull, *r: (seen.append(pull), orig(slot, pull, *r))[1]
+        await tk(s); await tk(s)
+        pull = seen[-1]
+        names = {a: "warper"}
+        dirty = np.zeros(len(pull["warped"]), bool)
+        pull["warped"] = np.asarray(pull["warped"]).copy()
+        pull["warped"][a] = True
+        you = s._snapshot_view(a, pull, names, True, dirty)[1]
+        assert you["warped"] is True and "warped" not in s.conn[a].last_you
+        pull["warped"][a] = False
+        assert "warped" not in s._snapshot_view(a, pull, names, True, dirty)[1]
+    run(body())
+
 def test_party_message_maps_target_slot_and_notice(tmp_path):
     async def body():
         s = _ro_server(tmp_path)

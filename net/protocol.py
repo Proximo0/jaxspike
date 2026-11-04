@@ -88,7 +88,10 @@ def _validate_ro(t, msg: dict) -> dict | None:
         return {"t": t, "slot": msg["slot"]} if _is_int(msg.get("slot")) else None
     if t == "buy":  # docs/items_wire.md: item id; the engine ignores ids the town does not stock
         return {"t": t, "item": msg["item"]} if _is_int(msg.get("item")) else None
-    if t == "gather":
+    if t == "teleport":  # docs/world_wire.md: kafra teleport destination town
+        ok = _is_int(msg.get("town")) and 0 <= msg["town"] < len(world_layout.TOWNS)
+        return {"t": t, "town": msg["town"]} if ok else None
+    if t in ("gather", "sit"):
         return {"t": t}
     if t == "craft":
         ok = _is_int(msg.get("recipe")) and 1 <= msg["recipe"] < craft_data.N_RECIPES
@@ -226,8 +229,8 @@ def entity_rows(ids: np.ndarray, tab: dict, names: dict) -> list[dict]:
         ent = {"id": e, "kind": k, "pos": pos[i], "hp": hp[i], "max_hp": max_hp[i]}
         if anim is not None and k < 100:  # docs/anim_wire.md: a, d, t, m, s and h only on a hit this tick
             ent.update(zip(_ANIM_KEYS, (col[i] for col in anim[:5])))
-            if anim[5][i]:
-                ent["h"] = anim[5][i]
+            if anim[5][i]:  # ro3-wire: hit column -1 = a swing missed this tick, sent as h: 0
+                ent["h"] = max(anim[5][i], 0)
         if k == 0:
             ent["name"] = names.get(e, "bot")
         elif k >= 100:
@@ -358,7 +361,7 @@ def you_delta(you: dict, last: dict, full: bool) -> dict:
 # then json_len bytes of UTF-8 JSON {"you": {...}, "notice": str or null, "names": {"<id>": name}} (names: the
 # human players among the ents; any other player is "bot"), then n_ents BIN_ROW records, then n_gone u16 ids.
 # Decoded like JSON: name for kind 0, mkind = kind - 1 for 1..99, item = kind - 100 for 100..NODE_KIND_BASE-1,
-# a/d/t/m/s for kind < 100 when flag bit1 is set, h only when != 0.
+# a/d/t/m/s for kind < 100 when flag bit1 is set, h only when a hit or a miss happened this tick (miss = 0).
 BIN_MAGIC = b"JS"
 BIN_LAYOUT = 1
 BIN_HEADER = np.dtype([("magic", "S2"), ("layout", "u1"), ("flags", "u1"), ("tick", "<u4"), ("n_ents", "<u2"),
@@ -449,7 +452,7 @@ def decode_snap_bin(data: bytes) -> dict | None:
         if anim and k < 100:
             ent.update(a=a, d=d, t=t, m=m, s=s)
             if hit:
-                ent["h"] = hit
+                ent["h"] = max(hit, 0)  # -1 (a miss) decodes as h: 0
         if k == 0:
             ent["name"] = names.get(str(e_id), "bot")
         elif k < 100:

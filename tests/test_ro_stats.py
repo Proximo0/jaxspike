@@ -68,9 +68,9 @@ def _veteran(w, slot, level=20, job=S.JOB_SWORDSMAN, job_level=20):
 def test_fresh_novice_derived():
     d = ro_stats.derived(_world())
     assert int(d["max_hp"][0]) == 40  # RO pre-re Novice level 1 = 40 HP
-    assert int(d["hit"][0]) == 177
-    assert int(d["flee"][0]) == 102
-    assert 4 <= int(d["aspd_ticks"][0]) <= 7
+    assert int(d["hit"][0]) == 2  # RO: level 1 + dex 1
+    assert int(d["flee"][0]) == 2  # RO: level 1 + agi 1
+    assert int(d["aspd"][0]) == 151 and int(d["aspd_ticks"][0]) == 10  # Novice fist 150, delay 980 ms
     assert 990 <= int(d["cast_mult"][0]) <= 1000
     assert int(d["max_sp"][0]) >= 10
     assert d["max_hp"].dtype == jnp.int32 and d["max_hp"].shape == (MAX_PLAYERS,)
@@ -85,33 +85,58 @@ def test_fresh_state_values():
     assert not bool(st["was_dead"].any())
 
 
-def test_kill_pays_lowest_slot_adjacent_killer_only():
+def _credit(w, k, player):
+    mvp = w["mvp"]
+    return {**w, "mvp": {**mvp, "top_damager": mvp["top_damager"].at[k].set(player),
+                         "top_damage": mvp["top_damage"].at[k].set(1)}}
+
+
+def test_kill_pays_the_damage_credit_holder_only():
     w = _veteran(_veteran(_world(active=(0, 1)), 0), 1)
-    w = _die_monster(w, kind=0)
-    w = _setp(w, 1, kills=1)  # only slot 1 killed; slot 0 stands adjacent but is not paid
+    w = _credit(_die_monster(w, kind=0), 0, 1)  # slot 1 holds the cumulative-damage credit; slot 0 stands adjacent
+    w = _setp(w, 0, kills=1)  # players.kills no longer decides the payout
     out = _run(w)
     assert _st(out, "base_exp", 1) == S.MONSTER_BASE_EXP[0]
     assert _st(out, "job_exp", 1) == S.MONSTER_JOB_EXP[0]
     assert _st(out, "base_exp", 0) == 0 and _st(out, "job_exp", 0) == 0
-    assert _st(out, "kills_seen", 1) == 1
+    assert _st(out, "kills_seen", 0) == 1
 
 
-def test_two_adjacent_players_only_lower_slot_paid():
-    w = _veteran(_veteran(_world(active=(2, 7)), 2), 7)
-    w = _die_monster(w)
-    w = _setp(_setp(w, 2, kills=1), 7, kills=1)
+def test_ranged_kill_pays_from_far_away():
+    w = _veteran(_world(active=(3,)), 3)
+    w = _credit(_die_monster(w, pos=(200, 200), kind=0), 0, 3)  # corpse 190 cells away: a bolt or an arrow
     out = _run(w)
-    assert _st(out, "base_exp", 2) == S.MONSTER_BASE_EXP[0]
-    assert _st(out, "job_exp", 2) == S.MONSTER_JOB_EXP[0]
-    assert _st(out, "base_exp", 7) == 0 and _st(out, "job_exp", 7) == 0
+    assert _st(out, "base_exp", 3) == S.MONSTER_BASE_EXP[0]
+    assert _st(out, "job_exp", 3) == S.MONSTER_JOB_EXP[0]
+
+
+def test_credit_to_logged_out_player_pays_nobody():
+    w = _veteran(_world(active=(0,)), 0)
+    w = _credit(_die_monster(w, kind=0), 0, 5)  # slot 5 is not active
+    out = _run(w)
+    assert int(out["stats"]["base_exp"].sum()) == 0
 
 
 def test_orc_pays_orc_exp():
     w = _veteran(_world(), 0)
-    w = _setp(_die_monster(w, kind=1), 0, kills=1)
+    w = _credit(_die_monster(w, kind=1), 0, 0)
     out = _run(w)
     assert _st(out, "base_exp") == S.MONSTER_BASE_EXP[1]
     assert _st(out, "job_exp") == S.MONSTER_JOB_EXP[1]
+
+
+def test_party_members_in_the_same_zone_share_with_bonus():
+    from game import ro_party
+    w = _veteran(_veteran(_world(active=(0, 1)), 0), 1)
+    w = _credit(_die_monster(w, kind=1), 0, 0)  # orc: 408 base / 160 job
+    pt = ro_party.make_state()
+    pt = {**pt, "party_id": pt["party_id"].at[0].set(0).at[1].set(0), "member_count": pt["member_count"].at[0].set(2)}
+    w = {**w, "party": pt}
+    out = _run(w)
+    base = S.MONSTER_BASE_EXP[1] * 110 // 100
+    job = S.MONSTER_JOB_EXP[1] * 110 // 100
+    assert _st(out, "base_exp", 0) == base // 2 + base % 2 and _st(out, "base_exp", 1) == base // 2
+    assert _st(out, "job_exp", 0) == job // 2 + job % 2 and _st(out, "job_exp", 1) == job // 2
 
 
 def test_no_died_monster_no_exp():
@@ -220,7 +245,7 @@ def test_death_penalty_at_level_10():
     lvl = S.DEATH_PENALTY_MIN_LEVEL
     loss = S.BASE_EXP_TABLE[lvl] * S.DEATH_PENALTY_PERMILLE // 1000
     start = S.BASE_EXP_TABLE[lvl] // 2
-    w = _setp(_set(_world(), 0, base_level=lvl, base_exp=start), 0, deaths=1, dead=True)
+    w = _setp(_set(_world(), 0, base_level=lvl, base_exp=start, job=S.JOB_SWORDSMAN), 0, deaths=1, dead=True)
     out = _run(w)
     assert loss > 0
     assert _st(out, "base_exp") == start - loss
@@ -233,18 +258,53 @@ def test_death_penalty_at_level_10():
 
 def test_death_penalty_floors_at_zero():
     lvl = S.DEATH_PENALTY_MIN_LEVEL
-    w = _setp(_set(_world(), 0, base_level=lvl, base_exp=0), 0, deaths=1, dead=True)
+    w = _setp(_set(_world(), 0, base_level=lvl, base_exp=0, job=S.JOB_SWORDSMAN), 0, deaths=1, dead=True)
     assert _st(_run(w), "base_exp") == 0
-    w = _setp(_set(_world(), 0, base_level=lvl, base_exp=1), 0, deaths=1, dead=True)
+    w = _setp(_set(_world(), 0, base_level=lvl, base_exp=1, job=S.JOB_SWORDSMAN), 0, deaths=1, dead=True)
     out = _run(w)
     assert _st(out, "base_exp") == 0 and _st(out, "base_level") == lvl
 
 
-def test_no_death_penalty_below_level_10():
-    lvl = S.DEATH_PENALTY_MIN_LEVEL - 1
-    start = S.BASE_EXP_TABLE[lvl] // 2
-    w = _setp(_set(_world(), 0, base_level=lvl, base_exp=start), 0, deaths=1, dead=True)
-    assert _st(_run(w), "base_exp") == start
+def test_no_death_penalty_for_novice():
+    start = S.BASE_EXP_TABLE[20] // 2
+    w = _setp(_set(_world(), 0, base_level=20, base_exp=start, job_exp=5), 0, deaths=1, dead=True)
+    out = _run(w)
+    assert _st(out, "base_exp") == start and _st(out, "job_exp") == 5
+
+
+def test_death_penalty_costs_job_exp_for_swordsman():
+    w = _set(_world(), 0, base_level=20, base_exp=1000, job=S.JOB_SWORDSMAN, job_level=20, job_exp=1000)
+    out = _run(_setp(w, 0, deaths=1, dead=True))
+    assert _st(out, "base_exp") == 1000 - S.BASE_EXP_TABLE[20] * 10 // 1000
+    assert _st(out, "job_exp") == 1000 - S.JOB_EXP_TABLE[S.JOB_SWORDSMAN][20] * 10 // 1000
+    assert _st(out, "job_exp") < 1000
+
+
+def test_swordsman_sword_aspd_from_weapon_column():
+    from game.data import items as I
+    from game.ro_items import make_state as make_items
+    w = _set(_world(), 0, job=S.JOB_SWORDSMAN)
+    bare = ro_stats.derived(w)
+    it = make_items()
+    it["equip"] = it["equip"].at[0, I.EQ_WEAPON].set(0)
+    it["inv_count"] = it["inv_count"].at[0, 0].set(1)
+    w = {**w, "items": it, "players": {**w["players"], "inv": w["players"]["inv"].at[0, 0].set(I.ITEM_SWORD)}}
+    d = ro_stats.derived(w)
+    assert int(bare["aspd"][0]) == 200 - 40 * 995 // 1000  # fist 160
+    assert int(d["aspd"][0]) == 200 - 55 * 995 // 1000  # sword column 145
+
+
+def test_hp_regen_cadence():
+    w = _set(_world(tick=S.HP_REGEN_TICKS), 0, base_level=1)
+    mh = int(ro_stats.derived(w)["max_hp"][0])
+    want = 1 + mh // 200 + 1 // 5
+    nosit = jnp.zeros((MAX_PLAYERS,), bool)
+    assert int(ro_stats.hp_regen(w, nosit)[0]) == want
+    assert int(ro_stats.hp_regen({**w, "tick": jnp.int32(S.HP_REGEN_TICKS + 1)}, nosit)[0]) == 0
+    half = {**w, "tick": jnp.int32(S.HP_REGEN_TICKS // 2)}
+    assert int(ro_stats.hp_regen(half, nosit)[0]) == 0
+    sit = jnp.zeros((MAX_PLAYERS,), bool).at[0].set(True)
+    assert int(ro_stats.hp_regen(half, sit)[0]) == want
 
 
 def test_sp_regen_on_regen_tick_only():

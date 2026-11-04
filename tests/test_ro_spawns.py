@@ -90,3 +90,60 @@ def test_choose_kinds():
     out = ro_spawns.choose_kinds(w, jax.random.PRNGKey(0), 64)
     assert out.shape == (64,)
     assert (np.asarray(out) == np.asarray(ro_spawns.kinds_for(w, pos, jax.random.PRNGKey(0)))).all()
+
+
+# ---- spawn density and kind mix (ro3-balance) -------------------------------------------------------------------
+_WALLS_WORLD = {**WORLD, "walls": map_gen.blocking(_terrain), "pz": map_gen.protection_zone(_terrain)}
+
+
+def test_tile_weights_follow_bands_and_exclusions():
+    tw = np.asarray(jax.jit(ro_spawns.tile_weights)(_WALLS_WORLD))
+    assert tw.shape == (MAP, MAP) and tw.dtype == np.float32
+    assert (tw[~WALK] == 0).all()
+    assert (tw[GATE <= 4] == 0).all()                       # GATE_APRON_TILES
+    plan = np.asarray(ro_spawns.spawn_plan(_terrain, _fields))
+    for b, w in enumerate(ro_spawns.BAND_DENSITY):
+        sel = (plan == b) & (tw > 0)
+        assert sel.any() and np.allclose(tw[sel], w)
+    dun = (plan >= len(FIELD_BANDS)) & (tw > 0)
+    assert dun.any() and np.allclose(tw[dun], ro_spawns.DUNGEON_DENSITY)
+
+
+def test_spawn_tiles_distinct_weighted_and_jittable():
+    n = 1024
+    pos = np.asarray(jax.jit(ro_spawns.spawn_tiles, static_argnums=2)(_WALLS_WORLD, jax.random.PRNGKey(7), n))
+    eager = np.asarray(ro_spawns.spawn_tiles(_WALLS_WORLD, jax.random.PRNGKey(7), n))
+    np.testing.assert_array_equal(pos, eager)
+    assert pos.shape == (n, 2) and pos.dtype == np.int32
+    assert len({tuple(t) for t in pos.tolist()}) == n
+    tw = np.asarray(ro_spawns.tile_weights(_WALLS_WORLD))
+    assert (tw[pos[:, 0], pos[:, 1]] > 0).all()
+    band = np.asarray(ro_spawns.band_of(_WALLS_WORLD, jnp.asarray(pos)))
+    share = np.bincount(band, minlength=len(FIELD_BANDS)) / n
+    tiles = np.array([((tw > 0) & (np.asarray(ro_spawns.spawn_plan(_terrain, _fields)) == b)).sum()
+                      for b in range(len(FIELD_BANDS))], float)
+    uniform = tiles / tiles.sum()
+    # band 0 is the densest band: its share of the population beats its share of the tiles by a wide margin
+    assert share[0] > 3 * uniform[0] and share[0] > 0.25
+
+
+def test_kind_mix_weights():
+    plan = np.asarray(ro_spawns.spawn_plan(_terrain, _fields))
+    pos = _tiles(WALK & (plan == 1), 4000, 11)
+    kinds = np.asarray(ro_spawns.kinds_for(WORLD, pos, jax.random.PRNGKey(2)))
+    count = np.bincount(kinds, minlength=len(K))
+    mix = ro_spawns.SPAWN_MIX[1]
+    total = sum(mix.values())
+    for name, w in mix.items():
+        assert abs(count[K[name]] / len(pos) - w / total) < 0.04, (name, count[K[name]] / len(pos), w / total)
+    assert count[K["Willow"]] > 2 * count[K["Poporing"]]
+
+
+def test_repopulate_sets_the_first_n_slots():
+    n = 256
+    w = ro_spawns.repopulate(_WALLS_WORLD, jax.random.PRNGKey(3), n)
+    m = w["monsters"]
+    assert int(m["active"][:n].sum()) == n and not bool(m["active"][n:].any())
+    from game.data.monsters import HP
+    np.testing.assert_array_equal(np.asarray(m["hp"][:n]), np.asarray(HP)[np.asarray(m["kind"][:n])])
+    np.testing.assert_array_equal(np.asarray(m["spawn"][:n]), np.asarray(m["pos"][:n]))

@@ -24,6 +24,11 @@ from game.data import items as I
 from game.data.skills import JOB_ACOLYTE, JOB_MAGE, N_JOBS
 from game.ro_refine import REFINE_CHANCE
 
+try:  # imported here, never inside a traced function: a module's import-time int() calls must not run under jit
+    from game import ro_shop
+except ImportError:  # pragma: no cover
+    ro_shop = None
+
 POTION_PCT = 45
 POTION_STOCK = 10
 ZENY_RESERVE = 200
@@ -93,9 +98,7 @@ def wants_potions(world):
 
 
 def _at_shop(world):
-    try:
-        from game import ro_shop
-    except ImportError:  # pragma: no cover - before ro-items2's shop module
+    if ro_shop is None:  # pragma: no cover - before ro-items2's shop module
         return world["pz"][world["players"]["pos"][:, 0], world["players"]["pos"][:, 1]]
     return ro_shop.at_shop(world)
 

@@ -9,7 +9,7 @@ const COLOR_OTHER: Color = Color(1.0, 1.0, 1.0)
 const COLOR_OWN: Color = Color(1.0, 0.35, 0.30)  ## damage taken by the own character
 const COLOR_OUTLINE: Color = Color(0.08, 0.04, 0.06)
 
-var items: Array[Dictionary] = []  ## {pos (px), dmg, alpha, own}
+var items: Array[Dictionary] = []  ## {pos (px), dmg, alpha, own, crit, seq, text (optional override)}
 var scale_px: float = 1.0
 
 
@@ -23,12 +23,14 @@ func show_items(new_items: Array[Dictionary], new_scale: float) -> void:
 
 func _draw() -> void:
 	var font: Font = ThemeDB.fallback_font
-	var size: int = roundi(FONT_PX * scale_px)
 	for it: Dictionary in items:
-		var text: String = str(int(it["dmg"]))
+		var dmg: int = int(it["dmg"])
+		var kind: int = DamageStyle.kind_of(dmg, bool(it.get("own", false)), bool(it.get("crit", false)))
+		var size: int = roundi(DamageStyle.font_px(kind) * scale_px)
+		var text: String = String(it.get("text", DamageStyle.text_of(dmg, kind)))
 		var w: float = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
-		var p: Vector2 = (it["pos"] as Vector2) - Vector2(w * 0.5, 0.0)
+		var p: Vector2 = (it["pos"] as Vector2) - Vector2(w * 0.5 - DamageStyle.drift_px(int(it.get("seq", 0)), kind) * scale_px, 0.0)
 		var a: float = float(it["alpha"])
-		var col: Color = COLOR_OWN if bool(it.get("own", false)) else COLOR_OTHER
-		draw_string_outline(font, p, text, HORIZONTAL_ALIGNMENT_LEFT, -1, size, OUTLINE_PX, Color(COLOR_OUTLINE, a))
+		var col: Color = DamageStyle.color_of(kind)
+		draw_string_outline(font, p, text, HORIZONTAL_ALIGNMENT_LEFT, -1, size, DamageStyle.outline_px(), Color(COLOR_OUTLINE, a))
 		draw_string(font, p, text, HORIZONTAL_ALIGNMENT_LEFT, -1, size, Color(col, a))

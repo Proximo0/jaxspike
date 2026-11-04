@@ -149,3 +149,18 @@ and `nvidia-smi` peak. Do **not** run `--census` at 2048 until the int32 claim-k
 2. Same per-kind split in `ro_craft.with_craft` (ro-craft): it is now the bigger half of a 2048 build.
 3. Fix the int32 claim keys in `movement.py` / `ro_warps.py` (below) before any 2048 tick or soak.
 4. Cache fields per seed on disk (item 3 below): turns 216 s per world into a file read for repeated seeds.
+
+## Round 3 (ro3-world3, 2026-11-02): the 2048 tick unblocked
+- **Claim keys.** The overflow was `tile * MAX_PLAYERS + slot` in `ro_warps.apply_warps` (2048^2 x 512 = 2^31). It is
+  gone: `ro_warps.claim_moves` (shared by the warps and the new kafra teleport) sorts plain tile keys
+  (`x * MAP + y < MAP^2`) with `ro_move._occupied` / `ro_move._first_claims`; the stable sort gives the lowest slot
+  the win, so no second-level key is needed. `ro_move`'s own keys never overflowed: it sorts `2 * tile + 1`, which
+  fits int32 up to MAP 32767 (a static assert in `ro_move.py` says so). No int64 anywhere: nothing to measure there.
+  `movement.py` (lead) only wraps `ro_move` now, so it is clean too. Remaining MAP x MAP tables per world (not
+  overflows, memory only): `loot.py` tile_min, `bots/ro_craft_policy.py` and `bots/ro_nav_policy.py` occupancy
+  bools, `ro_craft_nodes.node_at`; 4-16 MB each at 2048, fine on CPU, worth a sort-based pass before 2048 GPU soaks.
+- **Node fields per kind.** `ro_craft_nodes.node_fields` relaxes one kind at a time (`lax.map` over the kind axis,
+  identical result), the same cut as plan item 1 for the town fields: temporaries `[MAP, MAP]` instead of
+  `[8, MAP, MAP]`.
+- **Bench.** `bench/world_scale.py --ticks N` times `run_games` twice (compile + run, then run only) and prints
+  ms per tick and per world-tick; `--census` as before.

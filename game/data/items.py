@@ -29,7 +29,7 @@ N_BONUS = 14
 MAX_CARDS = 4
 MAX_STACK = 9999
 MAX_REFINE = 10
-ZENY_PER_COIN = 10
+ZENY_PER_COIN = 1  # a gold coin stack's count IS its zeny (a 73-zeny kill is one coin drop of count 73)
 MAX_ZENY = 2_000_000_000
 
 # Id space (round 2): ids 0..N_BASE_ITEMS-1 are RO items (append rows below and bump N_BASE_ITEMS; keep it at most

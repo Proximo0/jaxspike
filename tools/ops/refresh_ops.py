@@ -3,14 +3,14 @@
 
 Usage:
   python tools/ops/refresh_ops.py [--repo .] [--out tools/ops] [--pytest-log tools/ops/logs/pytest_latest.log]
-                                  [--no-fetch] [--stale-hours 2] [--baseline 6451f3e] [--no-collect]
+                                  [--no-fetch] [--stale-hours 2] [--baseline dbe5049] [--no-collect]
 
 Sources (nothing is self-reported by a session):
   git         fetch origin, branches main + ro/* + claude/ro-*, ahead/behind origin/main, worktree list
   gh          latest `checks` workflow run per branch and its jobs; recent failed runs and their jobs
   gh logs     test counts from the engine-pytest and client-unit job logs of the latest finished main run
   local log   test counts from the latest local pytest log, when the file exists
-  contract    round-2 team rows (docs/round2_contract.md section 2): owned paths per team
+  contract    team rows (docs/round3_contract.md section 2): owned paths per team
   git diff    files changed (tracked diff against --baseline plus untracked), line counts; file mtimes for last activity
   pytest      `--collect-only -q` of each team's new or changed Python test files (shared checkout, no branches)
 
@@ -193,6 +193,11 @@ def c_tests(runs_rows, jobs_rows, pytest_log, now, stale_after):
 			rows.append({"suite": suite + " (CI main)", "passed": got[0], "failed": got[1],
 				"source": "gh run view %s --log --job %s" % (main_run["run_id"], job["job_id"]),
 				"measured": iso(t), "updated": iso(now), "stale": (now - t) > stale_after})
+	manual = os.path.join(os.path.dirname(os.path.abspath(__file__)), "manual_tests.json")
+	if os.path.exists(manual):  # facts the lead measured elsewhere (GPU runs in WSL); shown with their source, never refreshed
+		for m in json.load(open(manual, encoding="utf-8")):
+			m.update({"updated": iso(now), "stale": False})
+			rows.append(m)
 	if pytest_log and os.path.exists(pytest_log):
 		text = open(pytest_log, encoding="utf-8", errors="replace").read()
 		got = parse_test_summary(text)
@@ -232,11 +237,17 @@ def c_worktrees(repo, now, stale_after):
 
 # ---------- round 2: per-team view (shared checkout, no branches) ----------
 
-CONTRACT = "docs/round2_contract.md"
+CONTRACT = "docs/round3_contract.md"
 IGNORED = ("tools/ops/out/", "tools/ops/logs/", "tools/ops/ops_data.json", "__pycache__/", ".pytest_cache/")
+EXTRA_TEAMS = {"ro3-names": ["tools/rename_world.py", "docs/names.md", "game/data/names.py", "game/data/towns.py"]}
 TEAM_ROW_RE = re.compile(r"^\|\s*\*\*([\w-]+)\*\*\s*\|(.*?)\|(.*)\|\s*$")
 # Tests the contract names only as "tests" are attributed to a team by file-name keyword.
-TEAM_TEST_KEYS = {"ro-move": ("move", "pathing", "direction"), "ro-anim": ("anim",), "client-anim": ("anim",),
+TEAM_TEST_KEYS = {"ro3-engine": ("stats", "combat", "skills"), "ro3-balance": ("spawn", "soak", "balance"),
+	"ro3-perf": ("anim", "view", "shop", "monster"), "ro3-wire": ("protocol", "server", "client"),
+	"ro3-exp": ("exp", "mvp", "party"), "ro3-items3": ("item", "drop", "shop"),
+	"ro3-world3": ("world", "warp", "map_gen", "craft"), "ro3-client": ("hud", "input", "ui"),
+	"ro3-anim3": ("anim",), "ro3-bots3": ("bot", "policy"), "ro3-names": ("name",), "ro3-netperf": ("protocol", "server", "net_"),
+	"ro-move": ("move", "pathing", "direction"), "ro-anim": ("anim",), "client-anim": ("anim",),
 	"ro-fidelity": ("fidelity",), "ro-monsters": ("monster",), "ro-world2": ("world", "warp", "map_gen", "terrain"),
 	"ro-items2": ("item", "drop", "shop", "kafra"), "netperf2": ("protocol", "server", "net_", "view"),
 	"bots2": ("bot", "policy", "soak"), "art-anim": ("asset", "slot"), "client-feel": ("hud", "minimap", "input", "audio")}
@@ -256,6 +267,10 @@ def parse_teams(repo):
 		if m:
 			pats = [t for t in re.findall(r"`([^`]+)`", m.group(2)) if "/" in t and " " not in t]
 			rows.append((m.group(1), pats))
+	# Teams started after the contract was written (not in its table); their paths are what the lead briefed, so shared.
+	for name, pats in EXTRA_TEAMS.items():
+		if name not in [r[0] for r in rows]:
+			rows.append((name, pats))
 	return rows
 
 
@@ -348,7 +363,7 @@ def main():
 	ap.add_argument("--pytest-log", default=None, help="latest local pytest log (default: <out>/logs/pytest_latest.log)")
 	ap.add_argument("--no-fetch", action="store_true")
 	ap.add_argument("--stale-hours", type=float, default=2.0)
-	ap.add_argument("--baseline", default="6451f3e", help="round-2 contract commit the team view diffs against")
+	ap.add_argument("--baseline", default="dbe5049", help="round-3 contract commit the team view diffs against")
 	ap.add_argument("--no-collect", action="store_true", help="skip the per-team pytest --collect-only")
 	args = ap.parse_args()
 	repo = os.path.abspath(args.repo)

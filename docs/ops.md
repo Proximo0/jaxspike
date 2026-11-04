@@ -87,3 +87,17 @@ passed, failed, when it was measured and the exact command or file it was parsed
 - Check values against the primary source before trusting a card: `git log -1 <branch>`,
   `gh run list --workflow checks --branch <branch> --limit 1`, `gh run view <id> --json jobs`,
   `gh run view <id> --log --job <job id>`.
+
+## Round 3 changes
+
+- The team view reads `docs/round3_contract.md` (default `--baseline dbe5049`, the round-3 contract commit). A team added
+  after the contract was written goes in `EXTRA_TEAMS` in `tools/ops/refresh_ops.py` (`ro3-names` today; its paths are a
+  guess until its brief names them).
+- `tools/ops/manual_tests.json` holds facts measured outside the collector (the lead's GPU soak: 64 worlds x 1000 ticks
+  in 377 s, kills 2.2 and deaths 1.1 per bot per 1000 ticks). They show in the test-count table with their source and are
+  never re-measured.
+- Windows export: the lead dispatches `gh workflow run export-windows.yml --repo Proximo0/jaxspike --ref main` after
+  pushing, finds the run with `gh run list --repo Proximo0/jaxspike --workflow export-windows.yml --limit 1`, watches it
+  with `gh run watch <id> --repo Proximo0/jaxspike`, and downloads the zip with
+  `gh run download <id> --repo Proximo0/jaxspike -n Jaxspike-windows`. Read: the `Import project` step log (no import
+  errors) and the `Export Windows build` step (it downloads templates; a missing-template error is the usual failure).

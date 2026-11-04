@@ -167,7 +167,10 @@ def _stats(raw):
 def _skills(raw):
     if not all(k in raw for k in SKILLS_KEYS):
         return None
-    lv = _array(raw["skills_learned"], (N_SKILLS,), 0, I32_MAX)
+    arr = np.asarray(raw["skills_learned"])
+    if arr.ndim == 1 and arr.dtype.kind in "iub" and arr.size < N_SKILLS:  # older save: new skills start at 0
+        arr = np.concatenate([arr, np.zeros(N_SKILLS - arr.size, arr.dtype)])
+    lv = _array(arr, (N_SKILLS,), 0, I32_MAX)
     sp = _scalar(raw["skills_sp"], 0, I32_MAX)
     if lv is None or sp is None:
         return None

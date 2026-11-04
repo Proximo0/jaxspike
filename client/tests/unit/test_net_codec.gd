@@ -62,6 +62,15 @@ func test_decode_snap_bin_matches_the_json_shape() -> void:
 	assert_eq(ents[4], {"id": 4, "kind": 404, "pos": [9, 10], "hp": 1})
 
 
+func test_decode_snap_bin_miss_marker_is_zero() -> void:
+	var raw: PackedByteArray = Marshalls.base64_to_raw(SNAP_BIN)
+	var row2: int = 16 + raw.decode_u32(12) + 60
+	assert_eq(raw.decode_s32(row2 + 20), 12)
+	raw.encode_s32(row2 + 20, -1)
+	var s: Dictionary = Codec.decode_snap_bin(raw)
+	assert_eq(int(s["ents"][2]["h"]), 0)
+
+
 func test_decode_snap_bin_rejects_bad_frames() -> void:
 	var raw: PackedByteArray = Marshalls.base64_to_raw(SNAP_BIN)
 	assert_true(Codec.decode_snap_bin(PackedByteArray()).is_empty())

@@ -16,11 +16,25 @@ func push_inbound(text: String, lag_ticks: int = 0) -> void:
 	_queue.append({"due": _now + maxi(lag_ticks, 0), "seq": _seq, "text": text})
 
 
+## Queue one inbound binary frame, ordered with the texts.
+func push_inbound_bytes(data: PackedByteArray, lag_ticks: int = 0) -> void:
+	_seq += 1
+	_queue.append({"due": _now + maxi(lag_ticks, 0), "seq": _seq, "bytes": data})
+
+
 func tick() -> void:
 	_now += 1
 
 
 func poll() -> Array[String]:
+	var out: Array[String] = []
+	for p: Variant in poll_packets():
+		if typeof(p) == TYPE_STRING:
+			out.append(String(p))
+	return out
+
+
+func poll_packets() -> Array:
 	var ready: Array[Dictionary] = []
 	var rest: Array[Dictionary] = []
 	for e: Dictionary in _queue:
@@ -30,9 +44,12 @@ func poll() -> Array[String]:
 			rest.append(e)
 	_queue = rest
 	ready.sort_custom(_fake_link_before)
-	var out: Array[String] = []
+	var out: Array = []
 	for e: Dictionary in ready:
-		out.append(String(e["text"]))
+		if e.has("bytes"):
+			out.append(e["bytes"])
+		else:
+			out.append(String(e["text"]))
 	return out
 
 

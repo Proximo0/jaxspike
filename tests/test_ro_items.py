@@ -457,7 +457,7 @@ def test_roll_drops_chances_within_three_sigma():
             if want == 0:
                 assert (items[:, j] == 0).all()
                 continue
-            p = int(D.DROP_CHANCE[kind, j]) / 1000.0
+            p = int(D.DROP_CHANCE[kind, j]) / 10000.0
             hits = int((items[:, j] == want).sum())
             assert abs(hits - p * n) <= 3 * np.sqrt(n * p * (1 - p)) + 1, (kind, j, hits, p * n)
             assert (counts[:, j][items[:, j] == want] == int(D.DROP_COUNT[kind, j])).all()

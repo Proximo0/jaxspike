@@ -36,7 +36,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import jax  # noqa: E402
 import jax.numpy as jnp  # noqa: E402
 import numpy as np  # noqa: E402
-import websockets  # noqa: E402
+try:
+    import websockets  # noqa: E402
+except ImportError:  # --bench-ticks opens no socket: it runs in a venv without websockets (the WSL GPU venv)
+    websockets = None
 
 from bots.ro_policies import ro_bot_inputs as bot_inputs  # noqa: E402
 from bots.runner import make_world_batch  # noqa: E402
@@ -105,6 +108,11 @@ def _tick_fn(world, hmask, hmove, hattack, heat, hro, prev_tab, known, viewer_sl
     inputs = {k: jnp.where(hmask, hro.get(k, none[k]), bots[k]) for k in bots}
     inputs.update({"move": jnp.where(hmask, hmove, bots["move"]), "attack": jnp.where(hmask, hattack, bots["attack"]),
                    "eat": jnp.where(hmask, heat, bots["eat"])})
+    z = jnp.zeros((MAX_PLAYERS,), jnp.bool_)
+    inputs["sit"] = jnp.where(hmask, hro.get("sit", z), bots.get("sit", z))
+    m1 = jnp.full((MAX_PLAYERS,), -1, jnp.int32)  # ro3-world3: kafra teleport destination town (-1 = none)
+    inputs["teleport"] = jnp.where(hmask, hro.get("teleport", m1), bots.get("teleport", m1))
+    pos_before = world["players"]["pos"]
     world = step(world, inputs)
     tab = entity_table(world)
     send, gone, known_next = view_update(tab, changed_mask(prev_tab, tab), viewer_slot, known)
@@ -112,6 +120,7 @@ def _tick_fn(world, hmask, hmove, hattack, heat, hro, prev_tab, known, viewer_sl
     d = ro_stats.derived(world)
     pull = {"send": send, "gone": gone, "tab": tab, "players": {k: p[k] for k in _PLAYER_PULL},
             "safe": world["pz"][p["pos"][:, 0], p["pos"][:, 1]],
+            "warped": jnp.max(jnp.abs(p["pos"] - pos_before), axis=1) > 1,  # ro3-wire: a warp/teleport/respawn moved the player this tick (snap.you.warped)
             "ro": {**_ro_blocks(world), "derived": {"max_hp": d["max_hp"], "max_sp": d["max_sp"]}},
             "anim": {"amotion_ms": ro_anim.amotion_ms(world, d)[:MAX_PLAYERS]},  # snap.you (docs/anim_wire.md)
             "mvp": {"event": world["mvp"]["event"], "event_head": world["mvp"]["event_head"]}}
@@ -162,9 +171,14 @@ def _login_rows_fn(world, fresh, slot, f):
 
 _login_rows = jax.jit(_login_rows_fn) if RO_KEYS is not None else None
 _NONE_INPUTS = {k: np.asarray(v) for k, v in empty_inputs().items()}
+if "sit" not in _NONE_INPUTS:  # ro3-wire: until game/state.py carries the key
+    _NONE_INPUTS["sit"] = np.zeros(MAX_PLAYERS, bool)
+if "teleport" not in _NONE_INPUTS:  # ro3-world3's kafra teleport input, same deal
+    _NONE_INPUTS["teleport"] = np.full(MAX_PLAYERS, -1, np.int32)
+_RO_INPUT_KEYS = tuple(_RO_INPUT_KEYS) + tuple(k for k in ("sit", "teleport") if k not in _RO_INPUT_KEYS)
 _TOWN_BOXES = np.asarray(town_boxes())
 _RO_MESSAGES = frozenset(("allot", "job", "skill", "learn", "use_item", "equip", "refine", "drop", "gather", "craft",
-                          "party", "chat", "storage", "save", "buy", "sell"))
+                          "party", "chat", "storage", "save", "buy", "sell", "sit", "teleport"))
 PARTY_OP = {"create": 1, "leave": 2, "invite": 3, "accept": 4}
 
 
@@ -279,6 +293,8 @@ class GameServer:
         gc.freeze()  # the world, tables and jit caches are long-lived: keep them out of every gc pass
 
     async def start(self, host: str, port: int) -> None:
+        if websockets is None:
+            raise RuntimeError("the websockets package is missing: pip install websockets (requirements.txt)")
         self.prepare()
         # compression=None: permessage-deflate cost 27% of the loop at 480 clients (zlib per message per client), and
         # the Godot WebSocketPeer does not negotiate it, so every client now gets what Godot clients already got
@@ -728,6 +744,8 @@ class GameServer:
         else:
             p = pull["players"]
             you = {"pos": p["pos"][slot].tolist(), "hp": int(p["hp"][slot])}
+        if bool(pull["warped"][slot]):  # ro3-wire: sent on that tick only, never stored in c.last_you
+            you["warped"] = True
         members = self._members(pull, slot, names)  # change-detected: sent on full snaps and when they differ
         if full or members != self.last_members.get(slot):
             you["members"] = self.last_members[slot] = members
@@ -979,6 +997,10 @@ class GameServer:
                 self.storage_ops.append((slot, msg["op"], msg["slot"]))
         elif t == "save":
             pend["save"][slot] = True
+        elif t == "sit":
+            pend["sit"][slot] = True
+        elif t == "teleport":  # docs/world_wire.md: kafra teleport to a town index
+            pend["teleport"][slot] = msg["town"]
 
 
 def bench_ticks(seed: int, n: int) -> None:

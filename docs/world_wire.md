@@ -180,6 +180,29 @@ station (`T_STATION`, never a warp). Save points: `save_point_tiles() -> int32 [
 | Alberta | 1800 | - | 1200 | - | - |
 | Morroc | 1200 | 1600 | - | - | - |
 
+### Kafra teleport service (ro3-world3: in the JAX tick, `game/ro_kafra.py`)
+Client message `{"t": "teleport", "town": <TOWNS index 0..4>}`, sent while the player stands within
+`KAFRA_TALK_RANGE = 2` tiles (Chebyshev) of the kafra tile (id 9) of the town they are in. Engine input
+`inputs["teleport"]` int32 `[MAX_PLAYERS]`, -1 = none. Rule (`ro_kafra.teleport`): living, at the kafra, a route
+in `KAFRA_TELEPORT` from this town, `items.zeny >= fare`, and the destination's town station (`kafra_teleport_dest`,
+id 10) free of living players and active monsters at the start of the kafra phase (lowest slot wins a shared
+station). Then `players.pos` jumps to the station and the fare leaves `items.zeny`; otherwise nothing happens and
+nothing is charged (the client may retry). The client already has everything it needs from `welcome.world`:
+`towns[i].kafra` (where to stand), `kafra_teleport[].from/to/zeny/arrive` (the menu and the price), and sees the jump
+as a position change of more than 2 tiles in one tick (camera snap, `you.warped` once ro3-wire lands it).
+Lead lines: `state.empty_inputs`: `"teleport": jnp.full((MAX_PLAYERS,), -1, jnp.int32),  # kafra: destination town`;
+`net/protocol._validate_ro`: `if t == "teleport": return {"t": t, "town": msg["town"]} if _is_int(msg.get("town"))
+and 0 <= msg["town"] < len(world_layout.TOWNS) else None`; `net/server.py`: add `"teleport"` to `_RO_MESSAGES` and
+`elif t == "teleport": pend["teleport"][slot] = msg["town"]` in `_on_message`. Until the input exists the phase is
+save-only (`inputs.get("teleport")`).
+
+### Minimap data (confirmed 2026-11-02, round 3)
+`welcome.world.portals` (28 one-way legs `{from, to, zones}`), `welcome.world.warps` (the 4 dungeon legs then the
+same 28 portal legs), `welcome.world.towns[i].kafra` / `.station`, `welcome.world.kafra_teleport[].arrive` and
+`welcome.world.save_points` are all in `net/protocol.build_welcome_static` and round-trip through JSON
+(`tests/test_protocol.py::test_welcome_static_tables`). The minimap draws portal `from` tiles as warp dots (id 8),
+`arrive` tiles as station dots (id 10) and `towns[i].kafra` with the kafra sprite; nothing else is needed.
+
 ## `welcome.world` additions for zones (`net/protocol.py` is netperf2 / lead: lines to add)
 ```json
 "zones": [{"id": 0, "name": "prontera", "kind": "town", "box": [225, 225, 287, 287], "levels": [0, 0],

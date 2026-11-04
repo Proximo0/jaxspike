@@ -3,6 +3,7 @@ extends PanelContainer
 ## Nine hotkey slots (keys 1..9) for learned castable skills: cooldown sweep from `you.cooldowns`, greyed when SP is
 ## short. A press sends {"t":"skill","id","target"}; the target comes from TargetSelect (left click selects).
 
+const GREY: Color = Color(0.55, 0.55, 0.55)  ## Slot tint while no skill can start.
 const PICK_TILES: float = 0.75  ## Click pick radius, in tiles.
 
 ## Pie-shaped cooldown overlay: `fraction` of the circle (from 12 o'clock, clockwise) stays dark.
@@ -28,6 +29,7 @@ var layer: EntityLayer = null  ## For click-to-select; optional.
 var targeting: TargetSelect = TargetSelect.new()
 var entries: Array[Dictionary] = []
 var buttons: Array[Button] = []
+var greyed: bool = false  ## True while in after-cast delay (read by the sims).
 var dials: Array[Dial] = []
 
 
@@ -99,8 +101,10 @@ func refresh() -> void:
 	var you: Dictionary = session.store.you
 	targeting.prune(session.store.has_ent)
 	entries = UiStatsCalc.bar_skills(defs, you)
+	greyed = not UiStatsCalc.can_act(you)
 	for i: int in range(buttons.size()):
 		var b: Button = buttons[i]
+		b.modulate = GREY if greyed else Color.WHITE
 		if i >= entries.size():
 			b.text = "%d" % (i + 1)
 			b.disabled = true
@@ -111,7 +115,7 @@ func refresh() -> void:
 		var e: Dictionary = entries[i]
 		b.text = "%d %s" % [i + 1, e["name"]]
 		b.tooltip_text = "%s Lv%d  SP %d" % [e["name"], e["level"], e["sp"]]
-		b.disabled = not UiStatsCalc.can_afford(you, int(e["sp"]))
+		b.disabled = greyed or not UiStatsCalc.can_afford(you, int(e["sp"]))
 		dials[i].fraction = UiStatsCalc.cooldown_fraction(UiStatsCalc.cooldown_left(you, int(e["id"])), int(e["cooldown"]))
 		dials[i].queue_redraw()
 
@@ -122,7 +126,7 @@ func press_slot(i: int) -> bool:
 		return false
 	var e: Dictionary = entries[i]
 	var you: Dictionary = session.store.you
-	if not UiStatsCalc.can_afford(you, int(e["sp"])) or UiStatsCalc.cooldown_left(you, int(e["id"])) > 0:
+	if not UiStatsCalc.can_act(you) or not UiStatsCalc.can_afford(you, int(e["sp"])) or UiStatsCalc.cooldown_left(you, int(e["id"])) > 0:
 		return false
 	var target: int = targeting.resolve(int(e["target"]), session.slot)
 	if target == TargetSelect.NEEDS_TARGET:

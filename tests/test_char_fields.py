@@ -1,8 +1,9 @@
 import jax
 import numpy as np
 
-from game.config import ITEM_MEAT
+from game.config import INV_SLOTS, ITEM_MEAT
 from game.data import items as item_data
+from game.data.skills import N_SKILLS
 from game.state import make_empty_world
 from net import characters, char_fields
 
@@ -75,3 +76,31 @@ def test_corrupt_equip_and_cards_are_repaired():
     raw["items_inv_cards"][0, 0] = 40
     out = char_fields.validate_ro(raw, inv)
     assert (out["items_equip"] == -1).all() and not out["items_inv_cards"].any()
+
+
+def test_short_skills_array_is_zero_padded():
+    inv = np.zeros(INV_SLOTS, np.int32)
+    raw = char_fields.fresh_ro_fields(inv)
+    old = np.zeros(33, np.int32)
+    old[4] = 2
+    raw["skills_learned"] = old
+    out = char_fields.validate_ro(raw, inv)
+    assert out["skills_learned"].shape == (N_SKILLS,)
+    assert out["skills_learned"][4] == 2
+    assert not out["skills_learned"][33:].any()
+    fresh = char_fields.fresh_ro_fields(inv)
+    for k in char_fields.RO_KEYS:
+        if k != "skills_learned":
+            np.testing.assert_array_equal(out[k], fresh[k], err_msg=k)
+
+
+def test_long_or_2d_skills_array_still_falls_back():
+    raw = {"skills_learned": np.zeros(50, np.int32), "skills_sp": 0}
+    assert char_fields._skills(raw) is None
+    raw2d = {"skills_learned": np.zeros((2, 21), np.int32), "skills_sp": 0}
+    assert char_fields._skills(raw2d) is None
+    inv = np.zeros(INV_SLOTS, np.int32)
+    full = char_fields.fresh_ro_fields(inv)
+    full["skills_learned"] = np.zeros(50, np.int32)
+    out = char_fields.validate_ro(full, inv)
+    np.testing.assert_array_equal(out["skills_learned"], char_fields.fresh_group("skills")["skills_learned"])

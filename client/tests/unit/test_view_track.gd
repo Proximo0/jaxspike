@@ -218,3 +218,41 @@ func test_store_keeps_anim_fields_and_drops_stale_h() -> void:
 	assert_eq(int(e["s"]), 150)
 	assert_eq(int(e["job"]), 3)
 	assert_false(e.has("h"), "h is for its own tick only")
+
+
+func test_layer_shows_miss_text_once_per_tick() -> void:
+	var ents: Dictionary = {
+		600: {"id": 600, "kind": 1, "pos": Vector2i(6, 5), "hp": 5, "max_hp": 10, "mkind": 0, "h": 0},
+	}
+	var layer := EntityLayer.new()
+	layer.tick_ms = 100.0
+	layer.store = _anim_store(ents, 10)
+	layer.refresh(1000.0)
+	assert_eq(layer.shown_pops.size(), 1)
+	assert_eq(int(layer.shown_pops[0]["dmg"]), 0)
+	assert_eq(layer.pops.pending(), 1)
+	var dl: DamageLayer = null
+	for c: Node in layer.get_children():
+		if c is DamageLayer:
+			dl = c
+	assert_true(dl != null and dl.items.size() == 1)
+	assert_eq(String(dl.items[0]["text"]), "Miss")
+	layer.store.restore({"tick": 10, "snaps": 2, "ents": ents})  # the same row again in the same tick
+	layer.refresh(1010.0)
+	assert_eq(layer.pops.pending(), 1, "no second miss for the same tick")
+	layer.free()
+
+
+func test_layer_drops_a_monster_that_showed_dead_at_once() -> void:
+	var s := EntityStore.new()
+	s.restore({"tick": 10, "snaps": 1, "ents": {600: {"id": 600, "kind": 1, "pos": Vector2i(3, 3), "hp": 0,
+			"max_hp": 10, "mkind": 0, "a": 7, "d": 0, "t": 9, "m": 300, "s": 150}}})
+	var layer := EntityLayer.new()
+	layer.tick_ms = 100.0
+	layer.store = s
+	layer.refresh(1000.0)
+	assert_true(layer.has_sprite(600))
+	s.apply_snap({"tick": 11, "ents": [], "gone": [600]})
+	layer.refresh(1100.0)
+	assert_false(layer.has_sprite(600), "the server's corpse already played: no CORPSE_MS wait")
+	layer.free()

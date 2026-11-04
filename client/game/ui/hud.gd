@@ -4,6 +4,7 @@ extends CanvasLayer
 ## percent, zeny, weight), the zone name banner, the minimap (top right) and the notice line, read from the
 ## session's store. Feed set_welcome(msg) / on_message(msg) like the panels (the lead adds the Hud to the list).
 
+const TOGGLE_KEY: Key = KEY_C
 const INFO_POS: Vector2 = Vector2(8, 8)
 const INFO_W: float = 260.0
 const MINIMAP_MARGIN: float = 8.0
@@ -27,6 +28,9 @@ var job_exp_label: Label
 var zeny_label: Label
 var weight_label: Label
 var safe_badge: Label
+var stats: StatSection
+var stats_hint: Label
+var _notice := NoticeFeed.new()
 var banner: ZoneBanner
 var minimap: Minimap
 var _map_built_for: MapData = null
@@ -80,6 +84,16 @@ func _ready() -> void:
 	zeny_label = Label.new()
 	zeny_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	foot.add_child(zeny_label)
+	stats = StatSection.new()
+	stats.name = "StatSection"
+	stats.visible = false
+	stats.bind(session)
+	stats.set_welcome(welcome)
+	box.add_child(stats)
+	stats_hint = Label.new()
+	stats_hint.text = "(C) Stats"
+	stats_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	foot.add_child(stats_hint)
 	banner = ZoneBanner.new()
 	banner.name = "ZoneBanner"
 	banner.set_anchors_preset(Control.PRESET_CENTER_TOP)
@@ -126,12 +140,16 @@ func _hud_bar(parent: Control, caption: String, variation: StringName) -> Array:
 func bind(s: NetSession) -> void:
 	session = s
 	_map_built_for = null
+	if stats != null:
+		stats.bind(s)
 	if minimap != null:
 		minimap.bind(s)
 
 
 func set_welcome(msg: Dictionary) -> void:
 	welcome = msg
+	if stats != null:
+		stats.set_welcome(msg)
 	if minimap != null:
 		minimap.set_welcome(msg)
 		_map_built_for = null
@@ -142,11 +160,22 @@ func on_message(msg: Dictionary) -> void:
 		set_welcome(msg)
 
 
-func _process(_delta: float) -> void:
-	refresh()
+func _unhandled_key_input(event: InputEvent) -> void:
+	var k: InputEventKey = event as InputEventKey
+	if k != null and k.pressed and not k.echo and k.physical_keycode == TOGGLE_KEY:
+		stats.visible = not stats.visible
+		stats_hint.visible = not stats.visible
+		info.reset_size()
+		if stats.visible:
+			stats.refresh()
+		get_viewport().set_input_as_handled()
 
 
-func refresh() -> void:
+func _process(delta: float) -> void:
+	refresh(delta)
+
+
+func refresh(delta: float = 0.0) -> void:
 	if session == null or name_label == null:
 		return
 	var you: Dictionary = session.store.you
@@ -162,7 +191,10 @@ func refresh() -> void:
 	zeny_label.text = r["zeny"]
 	weight_label.text = r["weight"]
 	safe_badge.visible = bool(you.get("safe", false))
-	notice_label.text = session.store.notice
+	_notice.observe(session.store.snaps, session.store.notice)
+	notice_label.text = _notice.hud_line(delta)
+	if stats.visible:
+		stats.refresh()
 	if session.map.is_loaded() and _map_built_for != session.map:
 		minimap.build(session.map)
 		_map_built_for = session.map

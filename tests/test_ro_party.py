@@ -140,21 +140,40 @@ def gain(**kw):
     return jnp.asarray(g)
 
 
-def test_share_equal_split_remainder():
+def test_share_equal_split_with_party_bonus_and_remainder():
     w = _party_world([1, 2, 3])
-    out = np.asarray(share(w, gain(s1=100)))
-    assert out[1] == 34 and out[2] == 33 and out[3] == 33 and out.sum() == 100
+    out = np.asarray(share(w, gain(s1=100)))  # 100 * 120% = 120, 40 each
+    assert out[1] == 40 and out[2] == 40 and out[3] == 40 and out.sum() == 120
+    out = np.asarray(share(w, gain(s1=101)))  # 101 * 120% = 121: 41 to the reference killer, 40, 40
+    assert out[1] == 41 and out[2] == 40 and out[3] == 40 and out.sum() == 121
 
 
-def test_share_excludes_level_and_radius_and_dead():
+def test_share_excludes_level_other_zone_and_dead():
     lv = np.ones(N, np.int32)
     lv[2] = 40
     pos = np.zeros((N, 2), np.int32)
-    pos[3] = [200, 0]
+    pos[3] = [200, 0]  # across the first zone split line (192): another field zone
     w = _party_world([1, 2, 3, 4, 5], levels=lv, pos=pos, dead=[5])
-    out = np.asarray(share(w, gain(s1=90)))
+    out = np.asarray(share(w, gain(s1=90)))  # 2 eligible: 90 * 110% = 99 -> 50 (ref) + 49
     assert out[2] == 0 and out[3] == 0 and out[5] == 0
-    assert out[1] == 45 and out[4] == 45
+    assert out[1] == 50 and out[4] == 49
+
+
+def test_share_same_zone_ignores_distance():
+    pos = np.zeros((N, 2), np.int32)
+    pos[1] = [10, 10]
+    pos[2] = [180, 180]  # 340 cells away, same field zone
+    w = _party_world([1, 2], pos=pos)
+    out = np.asarray(share(w, gain(s1=100)))
+    assert out[1] == 55 and out[2] == 55
+
+
+def test_share_single_eligible_member_gets_no_bonus():
+    pos = np.zeros((N, 2), np.int32)
+    pos[2] = [200, 0]
+    w = _party_world([1, 2], pos=pos)
+    out = np.asarray(share(w, gain(s1=100)))
+    assert out[1] == 100 and out[2] == 0
 
 
 def test_share_solo_and_conservation():
@@ -163,8 +182,8 @@ def test_share_solo_and_conservation():
     assert out[1] == 50 and out[2] == 7
     w = _party_world([1, 2, 3, 4])
     g = gain(s1=101, s3=10, s4=5)
-    out = np.asarray(share(w, g))
-    assert out.sum() <= int(g.sum()) and out.dtype == np.int32 and out.sum() == 116
+    out = np.asarray(share(w, g))  # pooled 116 * 130% = 150, split 37 x 4 + 2 to the reference
+    assert out.dtype == np.int32 and out.sum() == 150 and out[1] == 39 and out[2] == 37
 
 
 def test_jit_vmap():
@@ -176,7 +195,8 @@ def test_jit_vmap():
     assert (np.asarray(out["party"]["party_id"])[:, 3] == 0).all()
 
 
-def test_bot_policy_one_party_per_town():
+def test_bot_policy_parties_of_up_to_four_gatherers_solo():
+    from bots.ro_party_policy import PARTY_SIZE, _IS_GATHERER
     nt = len(TOWNS)
     members = list(range(20))
     w = world(members)
@@ -184,9 +204,11 @@ def test_bot_policy_one_party_per_town():
     key = jax.random.PRNGKey(1)
     for _ in range(30):
         w = stepf(w, key)
-    p = pid(w)
-    for t in range(nt):
-        ids = set(p[[s for s in members if s % nt == t]])
-        assert len(ids) == 1 and -1 not in ids
-    assert int(w["party"]["member_count"].sum()) == 20
-    assert int(np.asarray(w["party"]["leader"]).sum()) == nt
+    p = np.asarray(pid(w))
+    g = np.asarray(_IS_GATHERER)[:20]
+    assert (p[:20][g] == -1).all()                     # gatherers stay solo
+    assert (p[:20][~g] >= 0).all()                     # every hunter is in a party
+    mc = np.asarray(w["party"]["member_count"])
+    assert mc.max() <= PARTY_SIZE and mc.sum() == int((~g).sum())
+    for i in set(p[:20][~g].tolist()):                 # a party never mixes towns
+        assert len(set((np.nonzero(p == i)[0] % nt).tolist())) == 1
