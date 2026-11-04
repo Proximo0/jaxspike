@@ -5,9 +5,11 @@ fell to ~100 MB and the Claude app crashed three times, leaving orphaned process
 Bash call in this project (lead, teams and their workers) and blocks a heavy command before it starts.
 
 Heavy = pytest, soak/bench scripts, net.server, Godot, Blender, check_all/run_sims/run_tests, exports.
-Limits (override with env JAXSPIKE_GUARD_MIN_FREE_MB / _MAX_PYTHON / _MAX_GODOT):
-  free RAM >= 2500 MB for any heavy command, >= 4000 MB for a full pytest suite or a soak;
-  python.exe processes < 10 (full suite or soak: < 4); Godot processes < 3; Blender < 2.
+Limits (the user's rule, 2026-11-03: "keep your caps at 60 percent so i can safely run a few things as well", so
+Claude's work may use at most 60% of the 16 GB PC; override with env JAXSPIKE_GUARD_MIN_FREE_MB / _MAX_PYTHON /
+_MAX_GODOT):
+  free RAM >= 40% of total (6.4 GB of 16 GB) for any heavy command, >= 45% for a full pytest suite or a soak;
+  python.exe processes < 6 (full suite or soak: < 3); Godot processes < 2; Blender < 2.
 Exit 2 blocks the call and the message below tells the model what to do instead. Standard library only.
 """
 import ctypes
@@ -24,7 +26,7 @@ FULL_SUITE = re.compile(r"pytest\s+(tests\s*(?:-|$|\n|;|\|)|-q\s*$)|pytest\s*$|p
 SOAK = re.compile(r"soak_check|soak_levels|server_load|bench_tick|bench_view|--batch\s+(\d+)", re.I)
 
 
-def free_mb() -> int:
+def _stat():
     class Stat(ctypes.Structure):
         _fields_ = [("dwLength", ctypes.c_ulong), ("dwMemoryLoad", ctypes.c_ulong),
                     ("ullTotalPhys", ctypes.c_ulonglong), ("ullAvailPhys", ctypes.c_ulonglong),
@@ -34,7 +36,15 @@ def free_mb() -> int:
     st = Stat()
     st.dwLength = ctypes.sizeof(Stat)
     ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(st))
-    return int(st.ullAvailPhys // (1024 * 1024))
+    return st
+
+
+def free_mb() -> int:
+    return int(_stat().ullAvailPhys // (1024 * 1024))
+
+
+def total_mb() -> int:
+    return int(_stat().ullTotalPhys // (1024 * 1024))
 
 
 def counts() -> dict:
@@ -51,18 +61,24 @@ def main() -> int:
     except Exception:
         return 0
     cmd = str(data.get("tool_input", {}).get("command", ""))
+    # git, echo and other read-only commands are never heavy, whatever words their arguments or messages contain
+    first = re.match(r"\s*(?:cd\s+\S+\s*&&\s*)?(\S+)", cmd)
+    light = ("git", "echo", "grep", "cat", "ls", "head", "tail", "sed", "rg", "wc", "find", "printf")
+    if first and first.group(1) in light and not re.search(r"(&&|;|\|)\s*(?!" + "|".join(light) + r")\S", cmd):
+        return 0
     if not HEAVY.search(cmd):
         return 0
-    min_free = int(os.environ.get("JAXSPIKE_GUARD_MIN_FREE_MB", 2500))
-    max_py = int(os.environ.get("JAXSPIKE_GUARD_MAX_PYTHON", 10))
-    max_godot = int(os.environ.get("JAXSPIKE_GUARD_MAX_GODOT", 3))
+    total = total_mb()
+    min_free = int(os.environ.get("JAXSPIKE_GUARD_MIN_FREE_MB", total * 40 // 100))  # Claude uses <= 60%
+    max_py = int(os.environ.get("JAXSPIKE_GUARD_MAX_PYTHON", 6))
+    max_godot = int(os.environ.get("JAXSPIKE_GUARD_MAX_GODOT", 2))
     big = bool(FULL_SUITE.search(cmd) or SOAK.search(cmd))
     if big:
-        min_free = max(min_free, 4000)
-        max_py = min(max_py, 4)
+        min_free = max(min_free, total * 45 // 100)
+        max_py = min(max_py, 3)
     b = re.search(r"--batch\s+(\d+)", cmd)
-    if b and int(b.group(1)) > 8 and "wsl" not in cmd.lower():
-        print(f"guard_heavy: --batch {b.group(1)} is over the 8-world cap on this 16 GB PC; the lead runs bigger "
+    if b and int(b.group(1)) > 4 and "wsl" not in cmd.lower():
+        print(f"guard_heavy: --batch {b.group(1)} is over the 4-world cap on this 16 GB PC; the lead runs bigger "
               f"soaks on the GPU in WSL. Use --batch 4 or less.", file=sys.stderr)
         return 2
     try:
@@ -73,7 +89,7 @@ def main() -> int:
         return 0
     problems = []
     if free < min_free:
-        problems.append(f"free RAM {free} MB < {min_free} MB")
+        problems.append(f"free RAM {free} MB < {min_free} MB (Claude's work may use at most 60% of the PC)")
     if c["python"] >= max_py:
         problems.append(f"{c['python']} python.exe processes running (limit {max_py} for this command)")
     if c["godot"] >= max_godot:
