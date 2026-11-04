@@ -64,7 +64,8 @@ func test_detail_text() -> void:
 	assert_true(t.contains("Owned: 3"), t)
 	assert_true(CardAlbum.detail_text(rows[1]).contains("No monster in Aurelune drops it yet."))
 	assert_true(CardAlbum.detail_text(rows[1]).contains("Not found yet"))
-	assert_true(CardAlbum.detail_text(rows[2]).begins_with("Gildscarab Card  (MVP)"))
+	assert_true(CardAlbum.detail_text(rows[2]).begins_with("Gildscarab Card\nCard\n"), CardAlbum.detail_text(rows[2]))
+	assert_true(CardAlbum.detail_text(rows[2]).contains("Drops from Gildscarab (MVP)"))
 
 
 func test_chance_text() -> void:

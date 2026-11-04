@@ -39,6 +39,7 @@ const ANIM_MONSTER_KINDS: Array[String] = [
 ## Player-only actions a monster sheet lacks, and the monster action drawn instead.
 const ANIM_MONSTER_FALLBACK: Dictionary = {"sit": "idle", "pickup": "idle", "standby": "idle", "cast": "attack"}
 const FALLBACK_PX: int = 16
+const ITEM_ETC_KEY: String = "item.etc"
 const TILE_FALLBACK_COLORS: Array[Color] = [
 	Color(0.30, 0.55, 0.25),
 	Color(0.62, 0.52, 0.36),
@@ -55,6 +56,10 @@ const TILE_FALLBACK_COLORS: Array[Color] = [
 const FALLBACK_SATURATION: float = 0.6
 const FALLBACK_VALUE: float = 0.85
 const HUE_STEPS: int = 360
+
+## ro5-items: item id -> slots.json icon key from welcome.items (empty before a welcome). Static so the drop
+## layer and every panel share it.
+static var item_icons: PackedStringArray = []
 
 var errors: PackedStringArray = []
 ## key -> {"path": String, "region": Rect2i, "has_region": bool, "sheet": bool, "anim": String, "png": String}
@@ -76,10 +81,19 @@ static func monster_key(mkind: int) -> String:
 	return "monster.%s" % MONSTER_NAMES[mkind]
 
 
+## Item icon key of an engine item id: the welcome table (`item_icons`, set by set_item_icons) when it names one,
+## else the legacy ITEM_NAMES table, else "item.unknown".
 static func item_key(item_id: int) -> String:
+	if item_id > 0 and item_id < AssetSlots.item_icons.size() and AssetSlots.item_icons[item_id] != "":
+		return AssetSlots.item_icons[item_id]
 	if item_id < 0 or item_id >= ITEM_NAMES.size():
 		return "item.unknown"
 	return "item.%s" % ITEM_NAMES[item_id]
+
+
+## ro5-items: the per-id icon keys of the last welcome (ItemText.icon_table); [] clears them.
+static func set_item_icons(keys: PackedStringArray) -> void:
+	AssetSlots.item_icons = keys
 
 
 ## SpriteFrames animation name: `<anim>_<dir>`; `dead` only exists facing down. Unknown dirs fall back to down.
@@ -311,6 +325,13 @@ func _build_texture(key: String) -> Texture2D:
 		atlas.region = Rect2(rect)
 		return atlas
 	return loaded
+
+
+## ro5-items: an item icon texture; a key without a slot draws the generic "item.etc" icon, not a flat square.
+func item_texture(key: String) -> Texture2D:
+	if key != "" and _slots.has(key):
+		return texture(key)
+	return texture(ITEM_ETC_KEY)
 
 
 func fallback_texture(key: String) -> ImageTexture:

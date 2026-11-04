@@ -35,6 +35,12 @@ const PANEL_SCENES: Array[String] = [
 ]
 
 
+func _ready() -> void:
+	# Characters walk behind trees and the fountain: the view y-sorts its children (MapRenderer's Props cells join
+	# through nested y-sort with per-prop y_sort_origin; EntityLayer sprites sit at their feet). Art team, round 5.
+	y_sort_enabled = true
+
+
 func start(s: NetSession) -> void:
 	session = s
 	map_drawn = false

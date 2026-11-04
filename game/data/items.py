@@ -337,7 +337,7 @@ _WC_ICON = {WC_DAGGER: "dagger", WC_SWORD: "sword", WC_BOW: "bow", WC_STAFF: "st
 _SLOT_ICON = {SLOT_HEAD: "hat", SLOT_BODY: "armor", SLOT_SHIELD: "shield", SLOT_GARMENT: "garment",
               SLOT_SHOES: "boots", SLOT_ACCESSORY: "ring"}
 _NAME_ICON = {"gold coin": "gold_coin", "meat": "meat", "blue potion": "potion_blue", "herb": "herb",
-              "clover": "herb", "raw fish": "fish", "cooked fish": "fish", "fish stew": "fish"}
+              "clover": "herb", "raw fish": "fish", "cooked fish": "fish", "fish stew": "fish", "apple": "meat"}
 _ORE_WORDS = ("ore", "coal", "bar", "tin lode", "bronze lode", "starsteel", "moonstone")
 
 
@@ -355,12 +355,25 @@ def _icon(r):
         return "item.card"
     if kind == KIND_CONSUMABLE:
         return "item.potion_red"
-    if any(w in name for w in _ORE_WORDS):
+    words = set(name.replace("-", " ").split())
+    if any(w in words or (" " in w and w in name) for w in _ORE_WORDS):  # whole words: "spore" is not "ore"
         return "item.ore"
     return "item.etc"
 
 
 ICONS = tuple(_icon(r) for r in ROWS)
+
+# --- display names (ro5-items): what every panel shows; the engine keeps the lowercase NAMES ---------------------
+_LOWER_WORDS = ("of", "the", "and")
+
+
+def display_name(name: str) -> str:
+    """'gildscarab card' -> 'Gildscarab Card', 'bill of birds' -> 'Bill of Birds'; '' stays ''."""
+    words = name.split()
+    return " ".join(w if (j > 0 and w in _LOWER_WORDS) else w[:1].upper() + w[1:] for j, w in enumerate(words))
+
+
+DISPLAY_NAMES = tuple(display_name(n) if r[1] != KIND_NONE else "" for n, r in zip(NAMES, ROWS))
 
 
 def table_for_client() -> list:
@@ -375,6 +388,7 @@ def table_for_client() -> list:
         d = dict(zip(keys, (i,) + tuple(r)))
         d["stackable"] = bool(d["stackable"])
         d["icon"] = ICONS[i]
+        d["display"] = DISPLAY_NAMES[i]  # ro5-items: capitalised name ("Gildscarab Card"); client adds +refine, [slots]
         d["jobs"] = [j for j in range(N_JOBS) if _EQUIP_JOBS_NP[i, j]]
         out.append(d)
     return out

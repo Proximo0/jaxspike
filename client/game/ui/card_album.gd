@@ -17,6 +17,9 @@ const ANNOUNCE_COLOR: Color = Color(1.0, 0.82, 0.25)
 const MVP_ANNOUNCE_COLOR: Color = Color(1.0, 0.5, 0.95)
 const BANNER_MS: float = 5000.0
 const BANNER_FADE_MS: float = 800.0
+const BUTTON_TEXT: String = "Cards (Alt+A)"
+const BUTTON_MARGIN: float = 8.0
+const BUTTON_SIZE: Vector2 = Vector2(150, 36)
 
 ## item id -> true for every card id of the last welcome (EntityLayer reads it for the drop sparkle).
 static var card_ids: Dictionary = {}
@@ -35,6 +38,7 @@ var banner: PanelContainer = null
 var banner_art: TextureRect = null
 var banner_label: Label = null
 var banner_left_ms: float = 0.0
+var hud_button: Button = null  ## ro5-items: the HUD button that toggles the album (bottom right)
 var last_announce: Dictionary = {}  ## the last `card` message seen (tests, sims)
 var _art_cache: Dictionary = {}  ## path -> Texture2D or null
 var _synced_version: int = -1
@@ -69,6 +73,7 @@ func _ready() -> void:
 	side.add_child(detail_label)
 	visible = false
 	call_deferred("_make_banner")
+	call_deferred("_make_hud_button")
 	refresh()
 
 
@@ -107,8 +112,37 @@ func _process(delta: float) -> void:
 func _unhandled_key_input(event: InputEvent) -> void:
 	var k := event as InputEventKey
 	if k != null and k.pressed and not k.echo and k.keycode == TOGGLE_KEY and k.alt_pressed:
-		visible = not visible
+		toggle()
 		get_viewport().set_input_as_handled()
+
+
+## Shows or hides the album (Alt+A and the HUD button).
+func toggle() -> void:
+	visible = not visible
+	if visible:
+		refresh()
+
+
+## ro5-items: a "Cards" button in the bottom right corner of the panel layer, so the album needs no key.
+func _make_hud_button() -> void:
+	var parent: Node = get_parent()
+	if parent == null or hud_button != null:
+		return
+	hud_button = Button.new()
+	hud_button.name = "CardAlbumButton"
+	hud_button.theme = theme
+	hud_button.text = BUTTON_TEXT
+	hud_button.focus_mode = Control.FOCUS_NONE
+	hud_button.icon = card_texture("card.gildscarab")
+	hud_button.expand_icon = true
+	hud_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	hud_button.offset_left = -BUTTON_SIZE.x - BUTTON_MARGIN
+	hud_button.offset_top = -BUTTON_SIZE.y - BUTTON_MARGIN
+	hud_button.offset_right = -BUTTON_MARGIN
+	hud_button.offset_bottom = -BUTTON_MARGIN
+	hud_button.tooltip_text = "Card album: every card in Aurelune and the ones you own"
+	hud_button.pressed.connect(toggle)
+	parent.add_child(hud_button)
 
 
 ## Recomputes owned counts from the session's `you` and relights the grid.
@@ -125,7 +159,7 @@ func refresh() -> void:
 		var lit: bool = int(rows[i]["owned"]) > 0
 		n_owned += 1 if lit else 0
 		thumbs[i].modulate = Color.WHITE if lit else UNOWNED_TINT
-		thumbs[i].tooltip_text = detail_text(rows[i])
+		thumbs[i].tooltip_text = detail_text(rows[i], welcome)
 	title_label.text = album_title(n_owned, rows.size())
 	if selected < 0 and not rows.is_empty():
 		selected = 0
@@ -223,7 +257,7 @@ func _show_detail() -> void:
 	var r: Dictionary = rows[selected]
 	detail_art.texture = card_texture(String(r["icon"]))
 	detail_art.modulate = Color.WHITE if int(r["owned"]) > 0 else UNOWNED_TINT
-	detail_label.text = detail_text(r)
+	detail_label.text = detail_text(r, welcome)
 
 
 ## Texture of a card icon key (`card.<snake>`), cached; null when the art file is missing.
@@ -324,31 +358,21 @@ static func album_title(n_owned: int, n_all: int) -> String:
 
 ## '1 in 10,000' for a per-10000 chance ("" for 0).
 static func chance_text(per_10000: int) -> String:
-	if per_10000 <= 0:
-		return ""
-	var n: int = roundi(10000.0 / float(per_10000))
-	var s: String = str(n)
-	var grouped: String = ""
-	while s.length() > 3:
-		grouped = "," + s.substr(s.length() - 3) + grouped
-		s = s.substr(0, s.length() - 3)
-	return "1 in %s%s" % [s, grouped]
+	return ItemText.chance_text(per_10000)
 
 
-## The hover / detail text of a card row.
-static func detail_text(row: Dictionary) -> String:
-	var lines: PackedStringArray = []
-	lines.append(String(row.get("name", "")) + ("  (MVP)" if bool(row.get("mvp", false)) else ""))
-	lines.append("%s card: %s" % [String(row.get("slot_name", "")), String(row.get("text", ""))])
-	var mon: String = String(row.get("monster", ""))
-	if mon == "":
-		lines.append("No monster in Aurelune drops it yet.")
-	else:
-		var where: String = String(row.get("where", ""))
-		var t: String = "Drops from %s, %s" % [mon, chance_text(int(row.get("chance", 0)))]
-		lines.append(t + (" (%s)" % where if where != "" else ""))
+## The hover / detail text of a card row: the shared item tooltip (ItemText) plus the owned line.
+static func detail_text(row: Dictionary, welcome_msg: Dictionary = {}) -> String:
 	var n: int = int(row.get("owned", 0))
-	lines.append("Owned: %d" % n if n > 0 else "Not found yet")
+	var owned: String = "Owned: %d" % n if n > 0 else "Not found yet"
+	var id: int = int(row.get("id", 0))
+	if not ItemText.info(welcome_msg, id).is_empty():
+		return ItemText.tooltip(welcome_msg, id, 0, [], PackedStringArray([owned]))
+	var lines: PackedStringArray = PackedStringArray()
+	lines.append(String(row.get("name", "")))
+	lines.append("Card")
+	lines.append_array(ItemText.card_lines(row))
+	lines.append(owned)
 	return "\n".join(lines)
 
 

@@ -12,7 +12,7 @@ const PRICE_PER_LEVEL_PCT: int = 2
 const PRICE_MAX_PCT: int = 24
 const SKILL_DISCOUNT: String = "Discount"
 const SKILL_OVERCHARGE: String = "Overcharge"
-const ICON_PX: int = 24
+const ICON_PX: int = 32
 
 var session: NetSession = null
 var welcome: Dictionary = {}
@@ -131,14 +131,18 @@ func _rebuild(list: VBoxContainer, rows: Array[Dictionary], is_buy: bool) -> voi
 		icon.custom_minimum_size = Vector2(ICON_PX, ICON_PX)
 		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		icon.texture = slots.texture(String(r["icon_key"])) if slots != null else null
+		icon.texture = slots.item_texture(String(r["icon_key"])) if slots != null else null
+		icon.tooltip_text = String(r["tooltip"])
+		icon.mouse_filter = Control.MOUSE_FILTER_PASS
 		line.add_child(icon)
 		var nm := Label.new()
 		nm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		nm.text = String(r["name"]) if is_buy else "%s x%d" % [r["name"], int(r["count"])]
+		nm.text = String(r["label"])
+		nm.tooltip_text = String(r["tooltip"])
+		nm.mouse_filter = Control.MOUSE_FILTER_PASS
 		line.add_child(nm)
 		var pr := Label.new()
-		pr.text = "%dz" % int(r["price"])
+		pr.text = price_text(int(r["price"]))
 		line.add_child(pr)
 		var b := Button.new()
 		b.text = "Buy" if is_buy else "Sell"
@@ -268,8 +272,11 @@ static func buy_rows(welcome_msg: Dictionary, town_id: int, you: Dictionary) -> 
 		if id <= 0:
 			continue
 		var info: Dictionary = _shop_item_info(welcome_msg, id)
+		var price: int = buy_price(int(info.get("buy", 0)), pct)
 		out.append({"item": id, "name": InventoryPanel.item_name(welcome_msg, id),
-				"price": buy_price(int(info.get("buy", 0)), pct), "icon_key": AssetSlots.item_key(id)})
+				"label": ItemText.display_name(welcome_msg, id), "price": price,
+				"icon_key": InventoryPanel.row_icon_key(welcome_msg, id),
+				"tooltip": ItemText.tooltip(welcome_msg, id, 0, [], PackedStringArray(["Buy: " + price_text(price)]))})
 	return out
 
 
@@ -289,14 +296,31 @@ static func sell_rows(welcome_msg: Dictionary, you: Dictionary) -> Array[Diction
 		var raw: Variant = (inv as Array)[i]
 		if typeof(raw) != TYPE_DICTIONARY or worn.has(i):
 			continue
-		var id: int = int((raw as Dictionary).get("item", 0))
-		var cnt: int = int((raw as Dictionary).get("count", 0))
+		var d: Dictionary = raw
+		var id: int = int(d.get("item", 0))
+		var cnt: int = int(d.get("count", 0))
 		if id <= 0 or cnt <= 0:
 			continue
+		var refine: int = int(d.get("refine", 0))
+		var cards: Array = d["cards"] as Array if typeof(d.get("cards")) == TYPE_ARRAY else []
 		var info: Dictionary = _shop_item_info(welcome_msg, id)
+		var price: int = sell_price(int(info.get("sell", 0)), pct)
+		var extra: PackedStringArray = PackedStringArray(["Sell: %s each" % price_text(price)])
 		out.append({"slot": i, "item": id, "name": InventoryPanel.item_name(welcome_msg, id), "count": cnt,
-				"price": sell_price(int(info.get("sell", 0)), pct), "icon_key": AssetSlots.item_key(id)})
+				"label": ItemText.stack_name(welcome_msg, id, cnt, refine), "price": price,
+				"icon_key": InventoryPanel.row_icon_key(welcome_msg, id),
+				"tooltip": ItemText.tooltip(welcome_msg, id, refine, cards, extra)})
 	return out
+
+
+## "1,250 Ryn" (docs/naming.md 1.3).
+static func price_text(ryn: int) -> String:
+	var s: String = str(absi(ryn))
+	var grouped: String = ""
+	while s.length() > 3:
+		grouped = "," + s.substr(s.length() - 3) + grouped
+		s = s.substr(0, s.length() - 3)
+	return "%s%s%s Ryn" % ["-" if ryn < 0 else "", s, grouped]
 
 
 static func buy_message(item: int) -> Dictionary:

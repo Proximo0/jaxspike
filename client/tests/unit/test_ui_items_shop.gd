@@ -70,3 +70,16 @@ func test_sell_rows_skip_worn() -> void:
 func test_messages() -> void:
 	assert_eq(ShopPanel.buy_message(2), {"t": "buy", "item": 2})
 	assert_eq(ShopPanel.sell_message(0), {"t": "sell", "slot": 0})
+
+
+func test_rows_use_the_shared_formatter() -> void:
+	var b: Array[Dictionary] = ShopPanel.buy_rows(WELCOME, 1, _you())
+	assert_eq(b[1]["label"], "Sword")
+	assert_eq(b[1]["icon_key"], "item.sword", "kind fallback when welcome.items has no icon")
+	assert_true(String(b[0]["tooltip"]).begins_with("Red Potion\nConsumable"), String(b[0]["tooltip"]))
+	assert_true(String(b[0]["tooltip"]).ends_with("Buy: 42 Ryn"))
+	var s: Array[Dictionary] = ShopPanel.sell_rows(WELCOME, _you())
+	assert_eq(s[0]["label"], "Red Potion x4")
+	assert_true(String(s[0]["tooltip"]).contains("Sell: 25 Ryn each"))
+	assert_eq(ShopPanel.price_text(1250), "1,250 Ryn")
+	assert_eq(ShopPanel.price_text(7), "7 Ryn")
