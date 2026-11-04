@@ -5,7 +5,7 @@ game/ro_skills_effects.py (resolve). Every output dtype and shape equals the inp
 """
 import jax.numpy as jnp
 
-from game import ro_anim, ro_skills_effects
+from game import ro_anim, ro_pvp, ro_skills_effects
 from game.config import (MAX_MONSTERS, MAX_PLAYERS, PLAYER_ATTACK, PLAYER_ATTACK_COOLDOWN, PLAYER_MAX_HP,
                          TICK_MS)
 from game.data import skills as S
@@ -138,6 +138,7 @@ def phase(world, inputs, derived=None):
     tpl, tmo = jnp.clip(t, 0, mp - 1), jnp.clip(t - mp, 0, mm - 1)
     ally_ok = is_pl & pl["active"][tpl] & ~pl["dead"][tpl]
     enemy_ok = is_mo & mo["active"][tmo]
+    enemy_ok = enemy_ok | ro_pvp.skill_target_ok(world, sc, t)  # ro6-pvp3: damage skills on players where PvP allows
     tgt_ok = jnp.where(is_self, True, jnp.where(ttype == S.TARGET_ALLY, ally_ok, enemy_ok))
     own = pl["pos"]
     tpos = jnp.where(is_self[:, None], own, jnp.where(is_pl[:, None], pl["pos"][tpl], mo["pos"][tmo]))

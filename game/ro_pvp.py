@@ -29,16 +29,37 @@ Round 5 (ro5-pvp2):
            players at once). `record_hits` merges one tick's hits; `top_damager` is the PvP kill credit. A target's
            row clears when it leaves the PvP areas or dies (phase); entries of logged-out attackers drop.
 Crit shield: a PvP crit chance (per mille) loses LUK_CRIT_SHIELD x target LUK (classic: target LUK / 5 percent).
+
+Round 6 (ro6-pvp3):
+  chase       bool [MAX_PLAYERS]: phase wrote this player's move intent toward its duel target (auto-chase). A
+              player with a locked, allowed duel target (pair_ok) farther than its weapon range gets move.path_dir
+              one step toward it every tick (ro_move.want, the interface the monsters use; movement applies it on
+              the next tick); it stops at weapon range, when the lock clears or the pair leaves the PvP areas (the
+              intent it wrote is cleared), and a human's own move input this tick wins (no chase written).
+  quiet       int32 [MAX_PLAYERS]: ticks since this target last took a PvP hit; its ledger row clears once it has
+              gone LEDGER_DECAY_MS without one (record_hits resets it).
+  skill_hit   int32 [MAX_PLAYERS]: PvP skill damage taken this tick (ro_skills_effects writes it before combat,
+              combat reads it for the PvP death and zeroes it). A skill that drops a player to 0 hp leaves the
+              death to combat, so the corpse shows and respawn waits a tick like an auto-attack kill.
+  skill_kills int32 [MAX_PLAYERS]: PvP kills whose killing tick had skill damage on the target (credited to the
+              same killer as pvp_kills: the top cumulative damager in the ledger).
+  skill_target_ok: the single-target ATK/MATK skills (Bash, the bolts, Double Strafe, Soul Strike, Envenom,
+              Mammonite, Frost Diver) may target another player when pair_ok allows; heals target any player.
 """
 import jax
 import jax.numpy as jnp
 
 from game import world_layout as wl
-from game.config import MAX_PLAYERS
+from game.config import MAX_PLAYERS, TICK_MS
+from game.data import skills as S
 
 PVP_SLOTS = 64  # fixed PvP candidate list per world (see the module docstring)
 CREDIT_SLOTS = 4  # attackers each target player accumulates PvP damage from at once (ro5-pvp2)
 LUK_CRIT_SHIELD = 2  # per mille of crit chance removed per point of target LUK (classic: LUK / 5 percent)
+LEDGER_DECAY_MS = 10000  # ro6-pvp3: a target's ledger row clears after this long without a PvP hit on it
+LEDGER_DECAY_TICKS = (LEDGER_DECAY_MS + TICK_MS - 1) // TICK_MS
+_PVP_SKILL = jnp.asarray((S.SKILL_TARGET == S.TARGET_ENEMY) & (S.SKILL_AOE == 0)
+                         & ((S.SKILL_EFFECT == S.EFFECT_ATK) | (S.SKILL_EFFECT == S.EFFECT_MATK)))  # bool [N_SKILLS]
 _PVP_ZONE = jnp.asarray(wl.pvp_zone())                                         # bool [N_ZONES]
 _TOWN_ZONE = jnp.asarray([z[1] == wl.ZONE_TOWN for z in wl.ZONES], jnp.bool_)  # bool [N_ZONES]
 
@@ -51,6 +72,10 @@ def make_state():
         "duel": jnp.full((MAX_PLAYERS,), -1, jnp.int32),
         "by": jnp.full((MAX_PLAYERS, CREDIT_SLOTS), -1, jnp.int32),
         "dmg": jnp.zeros((MAX_PLAYERS, CREDIT_SLOTS), jnp.int32),
+        "chase": jnp.zeros((MAX_PLAYERS,), jnp.bool_),
+        "quiet": jnp.zeros((MAX_PLAYERS,), jnp.int32),
+        "skill_hit": jnp.zeros((MAX_PLAYERS,), jnp.int32),
+        "skill_kills": jnp.zeros((MAX_PLAYERS,), jnp.int32),
     }
 
 
@@ -75,6 +100,21 @@ def pair_ok(arena_a, field_a, arena_b, field_b):
     return (arena_a & arena_b) | (field_a & field_b)
 
 
+def skill_target_ok(world, skill, target):
+    """bool [MAX_PLAYERS]: caster i may cast `skill[i]` (a single-target ATK/MATK skill) on player `target[i]`
+    (another living player, pair_ok). False everywhere without the pvp block. ro6-pvp3."""
+    skill = jnp.asarray(skill, jnp.int32)
+    target = jnp.asarray(target, jnp.int32)
+    if "pvp" not in world:
+        return jnp.zeros(target.shape, jnp.bool_)
+    n = world["players"]["active"].shape[0]
+    slot = jnp.arange(n, dtype=jnp.int32)
+    tc = jnp.clip(target, 0, n - 1)
+    arena, field = areas(world)
+    is_pl = (target >= 0) & (target < n) & (target != slot)
+    return _PVP_SKILL[jnp.clip(skill, 0, S.N_SKILLS - 1)] & is_pl & pair_ok(arena, field, arena[tc], field[tc])
+
+
 def phase(world, inputs):
     """Apply the PK toggle (one-shot `pvp` input) and clear the flag of inactive slots. No-op without the block."""
     if "pvp" not in world:
@@ -90,7 +130,54 @@ def phase(world, inputs):
     out = {**v, "pk": pk & p["active"]}
     if "duel" in v:
         out.update(_duel_and_ledger(world, v, inputs))
+        if "chase" in v and "move" in world:
+            world, out["chase"] = _chase(world, inputs, out["duel"], v["chase"])
     return {**world, "pvp": out}
+
+
+def _chase(world, inputs, duel, was):
+    """Auto-chase (ro6-pvp3): (world with move.path_dir written, chase bool [P]). A living player whose locked duel
+    target is allowed (pair_ok) and farther than its weapon range (manhattan, as combat) wants one step toward it:
+    the diagonal, except when the two stand diagonally adjacent (then the lower slot takes the x step and the higher
+    the y step, so two mutual chasers meet instead of swapping diagonals forever), falling back to an axis step when
+    the diagonal is walled. A human's own move input this tick wins. Rows this wrote last tick that stop chasing
+    get their intent cleared (when no move input came this tick)."""
+    from game import ro_items, ro_move  # lazy: ro_items pulls in ro_stats; keep this module light
+    p = world["players"]
+    n = p["active"].shape[0]
+    slot = jnp.arange(n, dtype=jnp.int32)
+    dc = jnp.clip(duel, 0, n - 1)
+    arena, field = areas(world)
+    pos = p["pos"].astype(jnp.int32)
+    delta = pos[dc] - pos
+    dist = jnp.abs(delta).sum(-1)
+    own = inputs["move"] != 0 if "move" in inputs else jnp.zeros((n,), jnp.bool_)
+    chase = ((duel >= 0) & (duel != slot) & pair_ok(arena, field, arena[dc], field[dc])
+             & (dist > ro_items.weapon_range(world)) & ~own)
+    s = jnp.sign(delta)
+    sx, sy = s * jnp.asarray([1, 0], jnp.int32), s * jnp.asarray([0, 1], jnp.int32)
+    adj_diag = (jnp.abs(delta[:, 0]) == 1) & (jnp.abs(delta[:, 1]) == 1)
+    first = jnp.where(adj_diag[:, None], jnp.where((slot < duel)[:, None], sx, sy), s)
+    walls = world["walls"]
+    hi = walls.shape[0] - 1
+
+    def free(d):
+        t = jnp.clip(pos + d, 0, hi)
+        ok = walls[t[:, 0], t[:, 1]] == 0
+        diag = jnp.all(d != 0, axis=1)
+        side = (walls[t[:, 0], pos[:, 1]] == 0) & (walls[pos[:, 0], t[:, 1]] == 0)
+        return ok & (~diag | side) & jnp.any(d != 0, axis=1)
+
+    cand = jnp.stack([first, sx, sy], axis=1)  # [P, 3, 2]
+    ok = jnp.stack([free(first), free(sx), free(sy)], axis=1)
+    pick = jnp.take_along_axis(cand, jnp.argmax(ok, axis=1)[:, None, None], axis=1)[:, 0]
+    chase = chase & jnp.any(ok, axis=1)
+    pd = jnp.where(chase, ro_move.dir_toward(pick), -1)
+    mask = chase | (was & ~own)  # stopped chasers: clear the intent this phase wrote
+    n_m = world["move"]["path_dir"].shape[0] - n
+    pad = jnp.full((n_m,), -1, jnp.int32)
+    world = ro_move.want(world, jnp.concatenate([pd, pad]), jnp.concatenate([mask, jnp.zeros((n_m,), jnp.bool_)]))
+    return world, chase
 
 
 def _duel_and_ledger(world, v, inputs):
@@ -116,7 +203,13 @@ def _duel_and_ledger(world, v, inputs):
     arena, field = areas(world)
     by, dmg = v["by"], v["dmg"]
     keep = (arena | field)[:, None] & (by >= 0) & p["active"][jnp.clip(by, 0, n - 1)] & (dmg > 0)
-    return {"duel": duel, "by": jnp.where(keep, by, -1), "dmg": jnp.where(keep, dmg, 0)}
+    out = {"duel": duel}
+    if "quiet" in v:  # ro6-pvp3: the row decays after LEDGER_DECAY_MS without a PvP hit on the target
+        quiet = jnp.minimum(v["quiet"] + 1, LEDGER_DECAY_TICKS + 1).astype(jnp.int32)
+        keep = keep & (quiet <= LEDGER_DECAY_TICKS)[:, None]
+        out["quiet"] = quiet
+    out.update({"by": jnp.where(keep, by, -1), "dmg": jnp.where(keep, dmg, 0)})
+    return out
 
 
 def record_hits(v, idx, tcol, dmg):
@@ -140,7 +233,10 @@ def record_hits(v, idx, tcol, dmg):
     new_by = jnp.where(top > 0, jnp.take_along_axis(ids, pos, axis=1), -1)
     new_dm = jnp.maximum(top, 0)
     rows = jnp.where(valid & jnp.any(hits > 0, axis=1), idx, n)
-    return {**v, "by": v["by"].at[rows].set(new_by, mode="drop"), "dmg": v["dmg"].at[rows].set(new_dm, mode="drop")}
+    out = {**v, "by": v["by"].at[rows].set(new_by, mode="drop"), "dmg": v["dmg"].at[rows].set(new_dm, mode="drop")}
+    if "quiet" in v:  # ro6-pvp3: a hit restarts the decay clock of its target's row
+        out["quiet"] = v["quiet"].at[rows].set(0, mode="drop")
+    return out
 
 
 def top_damager(v, active):

@@ -160,7 +160,6 @@ func run() -> Array:
 
 	# Notices: the same text in two snaps is two System lines; one snap over many frames is one; the HUD line holds.
 	var sys0: int = chat.visible_lines(ChatWindow.TAB_SYSTEM).size()
-	chat.select_tab(ChatWindow.TAB_PARTY)  # ro6-ui: the HUD line only shows a notice when the chat is not on All/System
 	link.push_inbound(snap_text(7, Vector2i(66, 100), {"level": 13}, "blocked"))
 	await _feel_frames(4)
 	link.push_inbound(snap_text(8, Vector2i(66, 100), {"level": 13}, "blocked"))
@@ -168,7 +167,7 @@ func run() -> Array:
 	link.push_inbound(snap_text(9, Vector2i(66, 100), {"level": 13}, ""))
 	await _feel_frames(2)
 	var sys1: int = chat.visible_lines(ChatWindow.TAB_SYSTEM).size()
-	rows.append(row("notice_once_per_snap", sys1 == sys0 + 2 and hud.notice_label.text == "blocked",
+	rows.append(row("notice_once_per_snap", sys1 == sys0 + 2 and hud.notice_label.text == "",  # ro6-ui: the chat on All logs it, the HUD line stays empty
 			"lines %d -> %d hud=%s" % [sys0, sys1, hud.notice_label.text]))
 
 	# Stat section under the info window: C shows it with the stats, C hides it again.

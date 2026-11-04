@@ -482,3 +482,181 @@ def test_duellists_name_their_foe_as_target():
     out = pvp_overrides(w, i)
     assert int(out["target"][0]) == 1  # slot 0 is a duellist, slot 1 is not
     assert int(out["target"][1]) == int(i["target"][1])
+
+
+# --- round 6 (ro6-pvp3): auto-chase, PvP skills, ledger decay, duellists' skills -----------------------------------
+
+def _lock(w, a, b):
+    return {**w, "pvp": {**w["pvp"], "duel": w["pvp"]["duel"].at[a].set(b)}}
+
+
+def _move(slot, code):
+    i = empty_inputs()
+    return {**i, "move": i["move"].at[slot].set(code)}
+
+
+def test_chase_writes_an_intent_toward_the_locked_target_and_stops_at_range():
+    from game import ro_move
+    east = int(ro_move.dir_toward(jnp.array([1, 0])))
+    w = _lock(_world(pos0=A0, pos1=(A0[0] + 4, A0[1])), 0, 1)
+    o = ro_pvp.phase(w, empty_inputs())
+    assert bool(o["pvp"]["chase"][0]) and int(o["move"]["path_dir"][0]) == east
+    assert not bool(o["pvp"]["chase"][1]) and int(o["move"]["path_dir"][1]) == -1  # slot 1 locked nobody
+    # a human's own move this tick wins: no chase written
+    own = ro_pvp.phase(w, _move(0, 1))
+    assert not bool(own["pvp"]["chase"][0]) and int(own["move"]["path_dir"][0]) == -1
+    # in weapon range: no chase, and the intent the last tick's chase wrote is cleared
+    near = {**o, "players": {**o["players"], "pos": o["players"]["pos"].at[1].set(jnp.array(A1))}}
+    n2 = ro_pvp.phase(near, empty_inputs())
+    assert not bool(n2["pvp"]["chase"][0]) and int(n2["move"]["path_dir"][0]) == -1
+
+
+def test_chase_only_inside_the_pvp_areas():
+    w = _lock(_world(pos0=A0, pos1=TOWN), 0, 1)  # the target stands in town, outside the arena
+    o = ro_pvp.phase(w, empty_inputs())
+    assert not bool(o["pvp"]["chase"][0]) and int(o["move"]["path_dir"][0]) == -1
+    f = _lock(_world(pos0=FIELD, pos1=(FIELD[0] + 4, FIELD[1]), pk=(True, True)), 0, 1)  # fields are not PvP in v1
+    assert not bool(ro_pvp.phase(f, empty_inputs())["pvp"]["chase"][0])
+
+
+def _walk(w, ticks):
+    from game import movement
+    for _ in range(ticks):
+        w = movement.move_players(w, empty_inputs())
+        w = ro_pvp.phase(w, empty_inputs())
+    return w
+
+
+def test_chase_closes_in_and_mutual_chasers_meet_on_a_diagonal():
+    w = _lock(_world(pos0=A0, pos1=(A0[0] + 5, A0[1] + 2)), 0, 1)
+    o = _walk(w, 12)
+    d = np.abs(np.asarray(o["players"]["pos"][0]) - np.asarray(o["players"]["pos"][1])).sum()
+    assert d == 1 and tuple(np.asarray(o["players"]["pos"][1]).tolist()) == (A0[0] + 5, A0[1] + 2)
+    both = _lock(_lock(_world(pos0=A0, pos1=(A0[0] + 3, A0[1] + 3)), 0, 1), 1, 0)
+    o2 = _walk(both, 12)
+    d2 = np.abs(np.asarray(o2["players"]["pos"][0]) - np.asarray(o2["players"]["pos"][1])).sum()
+    assert d2 == 1
+    assert not bool(o2["pvp"]["chase"][0]) and not bool(o2["pvp"]["chase"][1])
+
+
+def test_chase_jits_and_vmaps():
+    w = _lock(_world(pos0=A0, pos1=(A0[0] + 4, A0[1])), 0, 1)
+    ws = jax.tree_util.tree_map(lambda *x: jnp.stack(x), w, w)
+    o = jax.jit(jax.vmap(ro_pvp.phase, in_axes=(0, None)))(ws, empty_inputs())
+    assert o["pvp"]["chase"][:, 0].tolist() == [True, True]
+
+
+def _skill_world(pos1=A1, skill=None, lvl=5, sp=500):
+    from game.data import skills as S
+    w = _world(pos1=pos1)
+    skill = S.SK_BASH if skill is None else skill
+    sk = w["skills"]
+    w = {**w, "skills": {**sk, "learned": sk["learned"].at[0, skill].set(lvl)}}
+    st = w["stats"]
+    return {**w, "stats": {**st, "sp": st["sp"].at[0].set(sp)}}
+
+
+def _cast(slot, skill, target):
+    i = empty_inputs()
+    return {**i, "skill": i["skill"].at[slot].set(skill), "target": i["target"].at[slot].set(target)}
+
+
+def test_bash_hits_a_player_in_the_arena_and_feeds_the_ledger():
+    from game import ro_skills
+    from game.data import skills as S
+    w = _skill_world()
+    o = ro_skills.phase(w, _cast(0, S.SK_BASH, 1))
+    dealt = 10 ** 6 - int(o["players"]["hp"][1])
+    assert dealt > 0 and int(o["pvp"]["skill_hit"][1]) == dealt
+    assert int(o["pvp"]["by"][1, 0]) == 0 and int(o["pvp"]["dmg"][1, 0]) == dealt
+    assert int(o["skills"]["skill_dmg"][0]) == dealt
+    assert int(o["anim"]["hit_dmg"][1]) == dealt
+    # outside the PvP areas the cast is refused (no SP spent, no damage)
+    t = _skill_world(pos1=TOWN)
+    t = {**t, "players": {**t["players"], "pos": t["players"]["pos"].at[0].set(jnp.array([TOWN[0] + 1, TOWN[1]]))}}
+    o2 = ro_skills.phase(t, _cast(0, S.SK_BASH, 1))
+    assert int(o2["players"]["hp"][1]) == 10 ** 6 and int(o2["skills"]["casts"][0]) == 0
+
+
+def test_pvp_skill_damage_uses_the_target_armor_element_and_defence(monkeypatch):
+    from game import ro_skills, ro_skills_effects as fx
+    from game.config import MAX_PLAYERS
+    from game.data import elements as el
+    from game.data import skills as S
+    w = _skill_world(skill=S.SK_FIRE_BOLT)
+    d = ro_skills.fallback_derived(w)
+    d = {**d, "matk": jnp.full_like(d["matk"], 200), "mdef": jnp.zeros_like(d["mdef"]), "def": jnp.zeros_like(d["def"])}
+    s = jnp.zeros((MAX_PLAYERS,), jnp.int32).at[0].set(S.SK_FIRE_BOLT)
+    lvl = jnp.zeros_like(s).at[0].set(5)
+    t = jnp.full_like(s, -1).at[0].set(1)
+    mask = jnp.zeros((MAX_PLAYERS,), jnp.bool_).at[0].set(True)
+    base = fx.base_damage(d, S.SKILL_EFFECT[s])
+    plain = int(fx.pvp_skill_damage(w, mask, d, s, lvl, t, base)[0])
+    exp = 200 * int(S.SKILL_POWER[S.SK_FIRE_BOLT, 5]) // 1000 * int(S.SKILL_HITS[S.SK_FIRE_BOLT])
+    assert plain == exp * int(el.elem_mult(el.ELEM_FIRE, el.ELEM_NEUTRAL)) // 100
+    real = ro_items.equipped
+    monkeypatch.setattr(ro_items, "equipped",
+                        lambda world: {**real(world), "armor_elem": real(world)["armor_elem"].at[1].set(el.ELEM_WATER)})
+    wet = int(fx.pvp_skill_damage(w, mask, d, s, lvl, t, base)[0])
+    assert wet == exp * int(el.elem_mult(el.ELEM_FIRE, el.ELEM_WATER)) // 100 and wet != plain
+    d2 = {**d, "mdef": jnp.full_like(d["mdef"], 7)}  # soft MDEF comes off per hit
+    assert int(fx.pvp_skill_damage(w, mask, d2, s, lvl, t, base)[0]) == wet - 7 * int(S.SKILL_HITS[S.SK_FIRE_BOLT])
+    t_town = {**w, "players": {**w["players"], "pos": w["players"]["pos"].at[1].set(jnp.array(TOWN))}}
+    assert int(fx.pvp_skill_damage(t_town, mask, d, s, lvl, t, base)[0]) == 0  # the pair left the arena
+
+
+def test_skill_kill_is_a_pvp_kill_credited_through_the_ledger():
+    from game import ro_skills
+    from game.data import skills as S
+    w = _skill_world()
+    w = {**w, "players": {**w["players"], "hp": w["players"]["hp"].at[1].set(1)}}
+    o = ro_skills.phase(w, _cast(0, S.SK_BASH, 1))
+    assert int(o["players"]["hp"][1]) == 0 and not bool(o["players"]["dead"][1])  # the death is combat's
+    o = combat(o, empty_inputs())
+    assert bool(o["players"]["dead"][1])
+    assert int(o["pvp"]["pvp_kills"][0]) == 1 and int(o["pvp"]["skill_kills"][0]) == 1
+    assert int(o["pvp"]["pvp_deaths"][1]) == 1 and int(o["players"]["deaths"][1]) == 0  # no exp penalty
+    assert int(o["pvp"]["skill_hit"].sum()) == 0
+
+
+def test_heal_lands_on_any_player():
+    from game import ro_skills
+    from game.data import skills as S
+    w = _skill_world(pos1=TOWN, skill=S.SK_HEAL)
+    w = {**w, "players": {**w["players"], "pos": w["players"]["pos"].at[0].set(jnp.array([TOWN[0] + 1, TOWN[1]])),
+                          "hp": w["players"]["hp"].at[1].set(5)},
+         "stats": {**w["stats"], "int": w["stats"]["int"].at[0].set(30)}}  # (base 1 + INT 1) // 8 heals 0
+    o = ro_skills.phase(w, _cast(0, S.SK_HEAL, 1))  # not in a party, not in a PvP area
+    assert int(o["players"]["hp"][1]) > 5
+
+
+def test_ledger_decays_after_ten_seconds_without_hits():
+    v = ro_pvp.make_state()
+    n = v["by"].shape[0]
+    idx = jnp.full((8,), n, jnp.int32).at[:2].set(jnp.array([0, 1]))
+    v = {**v, "quiet": v["quiet"].at[0].set(50)}
+    v = ro_pvp.record_hits(v, idx, jnp.zeros((8,), jnp.int32), jnp.array([0, 9, 0, 0, 0, 0, 0, 0]))
+    assert int(v["quiet"][0]) == 0  # the hit restarted the clock
+    w = {**_world(), "pvp": v}
+    for _ in range(ro_pvp.LEDGER_DECAY_TICKS):
+        w = ro_pvp.phase(w, empty_inputs())
+    assert int(w["pvp"]["dmg"][0, 0]) == 9  # exactly 10 s: still held
+    w = ro_pvp.phase(w, empty_inputs())
+    assert int(w["pvp"]["dmg"][0, 0]) == 0 and int(w["pvp"]["by"][0, 0]) == -1
+    assert ro_pvp.LEDGER_DECAY_TICKS * ro_pvp.TICK_MS == 10000
+
+
+def test_duellists_cast_their_attack_skill_and_let_the_engine_chase():
+    from bots.ro_pvp_policy import pvp_overrides
+    from game.data import skills as S
+    w = _skill_world()
+    st = w["stats"]
+    w = {**w, "stats": {**st, "job": st["job"].at[0].set(JOB_SWORDSMAN)}}
+    out = pvp_overrides(w, empty_inputs())
+    assert int(out["skill"][0]) == S.SK_BASH and int(out["target"][0]) == 1
+    poor = {**w, "stats": {**w["stats"], "sp": w["stats"]["sp"].at[0].set(0)}}
+    assert int(pvp_overrides(poor, empty_inputs())["skill"][0]) == 0  # no SP: auto-attack only
+    far = _lock(_world(pos0=A0, pos1=(A0[0] + 4, A0[1])), 0, 1)
+    assert int(pvp_overrides(far, empty_inputs())["move"][0]) == 0  # locked: the engine's chase walks
+    unlocked = _world(pos0=A0, pos1=(A0[0] + 4, A0[1]))
+    assert int(pvp_overrides(unlocked, empty_inputs())["move"][0]) != 0

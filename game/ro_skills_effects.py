@@ -4,10 +4,17 @@
 resolves this tick: monster damage (single target and AoE through one [MAX_PLAYERS, 9] gathered-index path), deaths
 with lowest-slot kill credit (mirrors game/combat.py), heals, and buffs. Targets are global entity ids: players
 0..MAX_PLAYERS-1, monsters MAX_PLAYERS + i.
+
+PvP (ro6-pvp3, `pvp_skill_damage`): a single-target ATK/MATK skill cast on another player resolves on that player
+when ro_pvp.skill_target_ok still allows the pair at resolve time. Damage = skill_damage against the target's armor
+element, then ATK skills: * (100 - target hard DEF) / 100 - target soft DEF (VIT, Angelus) per hit; MATK skills:
+- target soft MDEF per hit; at least 1 per hit unless the element table says immune. The hits feed the PvP ledger
+(ro_pvp.record_hits, the kill credit) and pvp.skill_hit; the hp may reach 0 here, the death itself is combat's.
+Heals already land on any living player (TARGET_ALLY).
 """
 import jax.numpy as jnp
 
-from game import ro_mvp
+from game import ro_anim, ro_mvp
 from game.config import MAP, MAX_MONSTERS, MAX_PLAYERS, MONSTER_RESPAWN_TICKS
 from game.data.elements import MONSTER_ELEMENT, elem_mult
 from game.data.skills import (
@@ -131,6 +138,52 @@ def apply_buffs(p, sk, target, do_buff, buff, ticks, lvl):
     return buffs, jnp.where(applied, lvl_new, sk["buff_level"])
 
 
+def pvp_skill_damage(world, mask, derived, s, lvl, t, base):
+    """int32 [MAX_PLAYERS]: per caster, the damage its resolving skill deals to the player it targets (0 = none or
+    not allowed). See the module docstring for the formula."""
+    from game import ro_items, ro_pvp, ro_skills  # lazy: ro_skills imports this module
+    ok = mask & ro_pvp.skill_target_ok(world, s, t)
+    tc = jnp.clip(t, 0, MAX_PLAYERS - 1)
+    eq = ro_items.equipped(world)
+    mod = ro_skills.buff_stat_mods(world)
+    a_el = eq["armor_elem"][tc]
+    hits = SKILL_HITS[s]
+    total = skill_damage(base, SKILL_POWER[s, lvl], hits, SKILL_ELEMENT[s], a_el)
+    hard = jnp.clip(eq["armor_def"], 0, 80)[tc]  # = combat._MAX_DEF
+    soft = (derived["def"] * (100 + mod["def_pct"]) // 100)[tc]
+    mdef = (derived["mdef"] + mod["mdef_flat"])[tc]
+    phys = total * (100 - hard) // 100 - soft * hits
+    mag = total - mdef * hits
+    d = jnp.where(SKILL_EFFECT[s] == EFFECT_ATK, phys, mag)
+    d = jnp.where(elem_mult(SKILL_ELEMENT[s], a_el) > 0, jnp.maximum(d, hits), 0)
+    return jnp.where(ok, d, 0).astype(jnp.int32)
+
+
+def _pvp_skill_hits(world, mask, derived, s, lvl, t, base):
+    """(world with the PvP skill damage on the target players' hp, pvp.skill_hit, the ledger and the hit numbers,
+    damage dealt per caster int32 [MAX_PLAYERS])."""
+    from game import ro_pvp
+    p, v = world["players"], world["pvp"]
+    pd = pvp_skill_damage(world, mask, derived, s, lvl, t, base)
+    landed = pd > 0
+    tw = jnp.where(landed, t, MAX_PLAYERS)
+    taken = jnp.zeros((MAX_PLAYERS,), jnp.int32).at[tw].add(pd, mode="drop")
+    hp = jnp.maximum(p["hp"] - taken, 0).astype(p["hp"].dtype)
+    if "by" in v:  # the ledger, in the compact [PVP_SLOTS] space of casters and their targets
+        involved = landed | (taken > 0)
+        idx = jnp.nonzero(involved, size=ro_pvp.PVP_SLOTS, fill_value=MAX_PLAYERS)[0].astype(jnp.int32)
+        ic = jnp.minimum(idx, MAX_PLAYERS - 1)
+        tcol = jnp.clip(jnp.searchsorted(idx, t[ic]), 0, ro_pvp.PVP_SLOTS - 1).astype(jnp.int32)
+        dk = jnp.where((idx < MAX_PLAYERS) & (idx[tcol] == t[ic]), pd[ic], 0)
+        v = ro_pvp.record_hits(v, idx, tcol, dk)
+    v = {**v, "skill_hit": taken}
+    world = {**world, "players": {**p, "hp": hp}, "pvp": v}
+    mm = world["monsters"]["hp"].shape[0]
+    zm = jnp.zeros((mm,), jnp.int32)
+    world = ro_anim.note_hit(world, jnp.concatenate([taken > 0, zm > 0]), jnp.concatenate([taken, zm]))
+    return world, pd
+
+
 def resolve(world, mask, derived):
     """Apply the effects of all casters in `mask`. See the module docstring."""
     p, m, sk = world["players"], world["monsters"], world["skills"]
@@ -156,6 +209,10 @@ def resolve(world, mask, derived):
     monsters, kills = damage_monsters(m, p["kills"], idx, dmg)
     if "mvp" in world:  # ro3-exp: skill hits feed the cumulative damage credit (exp and ryn to the killer)
         world = ro_mvp.record_damage(world, jnp.broadcast_to(pidx[:, None], idx.shape), idx, dmg)
+    pvp_dmg = jnp.zeros((MAX_PLAYERS,), jnp.int32)
+    if "pvp" in world and "skill_hit" in world["pvp"]:  # ro6-pvp3: damage skills on players in the PvP areas
+        world, pvp_dmg = _pvp_skill_hits(world, is_dmg, derived, s, lvl, t, base)
+        p = world["players"]
 
     # Heals.
     one = jnp.ones((MAX_PLAYERS,), jnp.int32)
@@ -173,7 +230,7 @@ def resolve(world, mask, derived):
         **sk,
         "buffs": buffs,
         "buff_level": buff_level,
-        "skill_dmg": sk["skill_dmg"] + dmg.sum(axis=1).astype(jnp.int32),
+        "skill_dmg": sk["skill_dmg"] + dmg.sum(axis=1).astype(jnp.int32) + pvp_dmg,
     }
     players = {**p, "hp": hp.astype(p["hp"].dtype), "kills": kills}
     out = {**world, "players": players, "monsters": monsters, "skills": skills}

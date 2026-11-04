@@ -28,7 +28,9 @@ monster formulas against the target's flee, armor element, hard and soft DEF. Pv
 (not players.deaths: no exp penalty). Round 5 (ro5-pvp2): an explicit duel target (pvp.duel, set from
 inputs["target"]) is swung at first, even with a monster in reach; the target's LUK shields crits (ro_pvp
 LUK_CRIT_SHIELD per mille per LUK); the PvP kill goes to the top cumulative PvP damager (ro_pvp ledger), the
-lowest-slot hitter of the killing tick only when the ledger has nobody logged in.
+lowest-slot hitter of the killing tick only when the ledger has nobody logged in. Round 6 (ro6-pvp3): a player
+dropped to 0 hp by a PvP skill this tick (pvp.skill_hit, written by ro_skills_effects) dies here as a PvP death too,
+with the same ledger credit; such kills also count in pvp.skill_kills; skill_hit is zeroed after use.
 """
 import jax
 import jax.numpy as jnp
@@ -265,7 +267,9 @@ def combat(world, inputs):
     # kill (ro5-pvp2), the lowest-slot PvP hitter of the tick when the ledger names nobody logged in.
     mdead = m["active"] & (new_m_hp <= 0)
     pdead = p["active"] & ~p["dead"] & (new_p_hp <= 0)
-    pvp_death = pdead & (pv["dmg"] > 0)
+    skill_hit = world["pvp"]["skill_hit"] if "pvp" in world and "skill_hit" in world["pvp"] else None
+    pvp_hit = pv["dmg"] > 0 if skill_hit is None else (pv["dmg"] > 0) | (skill_hit > 0)  # ro6-pvp3: skill kills
+    pvp_death = pdead & pvp_hit
 
     players = {
         **p,
@@ -291,7 +295,12 @@ def combat(world, inputs):
             top = ro_pvp.top_damager(v, p["active"])
             killer = jnp.where(top >= 0, top, killer)
         pk_kills = v["pvp_kills"].at[jnp.where(pvp_death, killer, n_p)].add(1, mode="drop")
-        world = {**world, "pvp": {**v, "pvp_kills": pk_kills, "pvp_deaths": v["pvp_deaths"] + pvp_death.astype(jnp.int32)}}
+        v = {**v, "pvp_kills": pk_kills, "pvp_deaths": v["pvp_deaths"] + pvp_death.astype(jnp.int32)}
+        if skill_hit is not None:  # ro6-pvp3: kills with skill damage on the killing tick; skill_hit is one-tick
+            sk_kill = jnp.where(pvp_death & (skill_hit > 0), killer, n_p)
+            v = {**v, "skill_kills": v["skill_kills"].at[sk_kill].add(1, mode="drop"),
+                 "skill_hit": jnp.zeros_like(skill_hit)}
+        world = {**world, "pvp": v}
     world = ro_anim.on_combat(world, swing, tgt, mswing, ptgt, dmg_m, dmg_taken)  # ro-anim: attack, hurt, hit numbers
     if "anim" in world:  # ro4-pvp: PvP swings (attack facing the target player), PvP misses, the crit column
         no_m = jnp.zeros((n_m,), jnp.bool_)

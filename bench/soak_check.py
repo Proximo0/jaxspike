@@ -148,8 +148,9 @@ def main(batch=8, chunks=10, ticks_per_chunk=100, seed=0):
         from bots.ro_pvp_policy import IS_DUELLIST
         duel = worlds["players"]["active"] & IS_DUELLIST[None, :]
         nd, dk = int(jnp.sum(duel)), int(jnp.sum(jnp.where(duel, worlds["pvp"]["pvp_kills"], 0)))
+        sk = int(jnp.sum(jnp.where(duel, worlds["pvp"]["skill_kills"], 0))) if "skill_kills" in worlds["pvp"] else 0
         print(f"pvp kills {int(jnp.sum(worlds['pvp']['pvp_kills']))} deaths {int(jnp.sum(worlds['pvp']['pvp_deaths']))}; "
-              f"{dk / max(nd, 1):.2f} PvP kills per duellist ({nd} duellists)")
+              f"{dk / max(nd, 1):.2f} PvP kills and {sk / max(nd, 1):.2f} PvP skill kills per duellist ({nd} duellists)")
     if total_problems:
         print("FIRST VIOLATIONS:")
         for p_ in total_problems[:15]:

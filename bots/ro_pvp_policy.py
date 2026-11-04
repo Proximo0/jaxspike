@@ -11,11 +11,15 @@ PvP deaths cost no exp; a dead duellist respawns on its temple and walks back. O
 `pvp_overrides(world, inputs)` returns the inputs with move, attack (and sit, when present) replaced on duellist slots;
 compose it last in bots.ro_policies.ro_bot_inputs. Round 5 (ro5-pvp2): a duellist on the floor also names the foe it
 walks to as its explicit duel target (`target` = that player's entity id) on ticks it casts no skill, so the
-engine's click-to-duel path (ro_pvp `duel`) is what the soak exercises.
+engine's click-to-duel path (ro_pvp `duel`) is what the soak exercises. Round 6 (ro6-pvp3): once the foe is the
+locked duel target the duellist sends no move and lets the engine's auto-chase walk it into weapon range; with SP
+for its job's attack skill (bots.ro_skills_policy JOB_ATTACKS, the best learned one, ready and in skill range) it
+casts that skill on the foe instead of only auto-attacking.
 """
 import jax.numpy as jnp
 
 from bots.ro_nav_policy import DELTAS, blocked
+from bots.ro_skills_policy import JOB_ATTACKS, _jobs, _range, _ready, _sp
 from game.config import MAX_PLAYERS
 from game.world_layout import arena_box, arena_gate, in_arena
 
@@ -69,7 +73,10 @@ def _duel(world):
     at_stage = jnp.all(pos == _STAGE[None, :], axis=1) | jnp.all(pos == _GATE[None, :], axis=1)
     goal = jnp.where(inside[:, None], foe, jnp.where(at_stage[:, None], _GATE[None, :] + jnp.asarray([0, 1]),
                                                      _STAGE[None, :]))
-    move = jnp.where(inside & adjacent, 0, _step_toward(world, pos, goal, inside))
+    locked = jnp.zeros_like(inside)
+    if "pvp" in world and "chase" in world["pvp"]:  # ro6-pvp3: the engine chases a locked foe
+        locked = inside & has & (world["pvp"]["duel"] == near)
+    move = jnp.where(inside & (adjacent | locked), 0, _step_toward(world, pos, goal, inside))
     mask = IS_DUELLIST & p["active"]
     foe_id = jnp.where(inside & has, near, -1).astype(jnp.int32)
     return jnp.where(alive, move, 0).astype(jnp.int32), inside, mask, foe_id
@@ -86,6 +93,23 @@ def pvp_overrides(world, inputs):
             if k in inputs:
                 plain = plain & (inputs[k] == 0)
         out["target"] = jnp.where(plain, foe, inputs["target"]).astype(jnp.int32)
+    if "skill" in inputs and "target" in inputs:  # ro6-pvp3: the job's attack skill on the foe when SP allows
+        skill = duel_skill(world, foe)
+        cast = mask & (skill > 0)
+        out["skill"] = jnp.where(cast, skill, inputs["skill"]).astype(jnp.int32)
+        out["target"] = jnp.where(cast, foe, out["target"]).astype(jnp.int32)
     if "sit" in inputs:
         out["sit"] = jnp.where(mask, False, inputs["sit"])
     return out
+
+
+def duel_skill(world, foe):
+    """int32 [P]: the best learned attack skill of the slot's job when it is ready (SP, cooldown, not casting) and
+    the foe (player slot, -1 none) is within its range; 0 = none."""
+    sk, pos = world["skills"], world["players"]["pos"]
+    atks = JOB_ATTACKS[_jobs(world)]  # [P, 4]
+    has = (atks > 0) & (jnp.take_along_axis(sk["learned"], atks, axis=1) > 0)
+    a_skill = jnp.where(has.any(axis=1), atks[_SLOT, jnp.argmax(has, axis=1)], 0).astype(jnp.int32)
+    dist = jnp.abs(pos[jnp.clip(foe, 0, MAX_PLAYERS - 1)] - pos).sum(-1)
+    ok = (foe >= 0) & _ready(world, a_skill, _sp(world)) & (dist > 0) & (dist <= _range(world, a_skill))
+    return jnp.where(ok, a_skill, 0).astype(jnp.int32)
