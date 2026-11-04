@@ -188,7 +188,10 @@ func _ensure_panels() -> void:
 
 ## Left click in the world: entity select wins over walk-to (the skill bar owns the selection).
 func _click_world(world_pos: Vector2) -> bool:
-	return skill_bar != null and skill_bar.click_world(world_pos)
+	var picked: bool = skill_bar != null and skill_bar.click_world(world_pos)
+	if picked:
+		hud.on_target_selected(skill_bar.targeting.selected_id)  # ro5-pvp2: a player becomes the duel target
+	return picked
 
 
 func _on_quit() -> void:

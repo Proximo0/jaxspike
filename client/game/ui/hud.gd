@@ -215,6 +215,18 @@ func refresh(delta: float = 0.0) -> void:
 				Vector2i(ViewMath.to_vec(you.get("pos"))), int(you.get("town", 0)))
 
 
+## ro5-pvp2: call after a left click selected entity `id` (game_view._click_world): a player other than you becomes
+## the duel target ({"t": "target"}; the engine swings at it first while you hold attack in a PvP area). Returns the
+## message sent, {} when none.
+func on_target_selected(id: int) -> Dictionary:
+	if session == null:
+		return {}
+	var msg: Dictionary = duel_message(id, session.slot, session.store.get_ent(id))
+	if not msg.is_empty():
+		session.send(msg)
+	return msg
+
+
 func _hud_fill(bar: ProgressBar, over: Label, fraction: float, text: String) -> void:
 	bar.max_value = 1.0
 	bar.step = 0.0
@@ -274,6 +286,14 @@ static func pvp_badge_text(you: Dictionary, arena: Rect2i) -> String:
 	if text != "" and k + d > 0:
 		text += " %d/%d" % [k, d]
 	return text
+
+
+## ro5-pvp2: the duel-lock message for a selected entity row: {"t": "target", "target": id} when the row is another
+## player (kind 0, not `own_id`), else {}.
+static func duel_message(id: int, own_id: int, ent: Dictionary) -> Dictionary:
+	if id < 0 or id == own_id or ent.is_empty() or int(ent.get("kind", -1)) != 0:
+		return {}
+	return {"t": "target", "target": id}
 
 
 ## RO shows exp as a percentage with one decimal; a maxed level (next 0) reads "MAX".

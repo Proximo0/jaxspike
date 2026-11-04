@@ -134,6 +134,8 @@ func _upsert(src: Dictionary) -> void:
 		e["item"] = int(src["item"])
 	if src.has("mkind"):
 		e["mkind"] = int(src["mkind"])
+	if src.has("k"):
+		e["k"] = int(src["k"])  # ro5-pvp2: PK flag (rows are rebuilt each snap, so absent = off)
 	# Anim fields (docs/anim_wire.md): a missing one keeps its old value, except `h` (damage on this tick only;
 	# a miss arrives as h = 0 and is kept as 0).
 	var prev: Dictionary = _ents.get(id, {})

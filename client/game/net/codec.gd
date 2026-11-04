@@ -78,7 +78,7 @@ static func decode_snap_bin(data: PackedByteArray) -> Dictionary:
 	var ents: Array = []
 	var off: int = BIN_HEADER_BYTES + json_len
 	for i: int in n:
-		ents.append(_bin_row(data, off, anim, names))
+		ents.append(_bin_row(data, off, anim, names, head.get("pk", [])))
 		off += BIN_ROW_BYTES
 	var gone: Array = []
 	for i: int in n_gone:
@@ -89,7 +89,7 @@ static func decode_snap_bin(data: PackedByteArray) -> Dictionary:
 	}
 
 
-static func _bin_row(data: PackedByteArray, off: int, anim: bool, names: Dictionary) -> Dictionary:
+static func _bin_row(data: PackedByteArray, off: int, anim: bool, names: Dictionary, pk: Array = []) -> Dictionary:
 	var id: int = data.decode_u16(off)
 	var kind: int = data.decode_u16(off + 2)
 	var e: Dictionary = {"id": id, "kind": kind, "pos": [data.decode_u16(off + 4), data.decode_u16(off + 6)],
@@ -108,6 +108,8 @@ static func _bin_row(data: PackedByteArray, off: int, anim: bool, names: Diction
 		e["d"] = data.decode_s8(off + 29)
 	if kind == 0:
 		e["name"] = String(names.get(str(id), "bot"))
+		if pk.has(id) or pk.has(float(id)):  # ro5-pvp2: PK flag travels in the JSON head (numbers arrive as floats)
+			e["k"] = 1
 	elif kind < KIND_DROP_BASE:
 		e["mkind"] = kind - 1
 	else:

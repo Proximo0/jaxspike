@@ -25,7 +25,10 @@ A crit deals at least 2 and is flagged in the anim block's `crit` column (the wi
 Player -> player (ro4-pvp, `pvp_swings`): with world["pvp"], players on the arena floor (or in a PvP zone with
 PK on) swing at the nearest allowed player in weapon range when no monster is in reach, with the player ->
 monster formulas against the target's flee, armor element, hard and soft DEF. PvP deaths go to pvp.pvp_deaths
-(not players.deaths: no exp penalty) and pvp.pvp_kills of the lowest-slot PvP hitter.
+(not players.deaths: no exp penalty). Round 5 (ro5-pvp2): an explicit duel target (pvp.duel, set from
+inputs["target"]) is swung at first, even with a monster in reach; the target's LUK shields crits (ro_pvp
+LUK_CRIT_SHIELD per mille per LUK); the PvP kill goes to the top cumulative PvP damager (ro_pvp ledger), the
+lowest-slot hitter of the killing tick only when the ledger has nobody logged in.
 """
 import jax
 import jax.numpy as jnp
@@ -90,18 +93,21 @@ def _card_terms(eq):
     return {"atk": z, "hit": z, "flee": z, "def": z, "crit": z}
 
 
-def pvp_swings(world, p, inputs, mswing_p, atk, hit, crit_chance, flee, hard, soft, elem_w, elem_a, key):
+def pvp_swings(world, p, inputs, mswing_p, atk, hit, crit_chance, flee, hard, soft, elem_w, elem_a, key, luk=None):
     """The player-vs-player swings of one tick (ro4-pvp), with the RO formulas of the player -> monster path.
 
     Candidates are the living players on the arena floor or in a PvP zone with PK on (game/ro_pvp.areas), compacted
     into a fixed [PVP_SLOTS] list (lowest slots first). A candidate with the attack input, a ready cooldown and no
     monster in reach (mswing_p) swings at the nearest (manhattan, lowest slot on ties) other candidate within its
-    weapon range that ro_pvp.pair_ok allows. Per swing: roll = atk * U[90, 110] / 100; hit% = clip(80 + hit -
-    target flee, 5, 95) (a crit always hits); crit = per-mille roll < crit chance; damage = roll * elem(weapon,
+    weapon range that ro_pvp.pair_ok allows; its explicit duel target (pvp.duel) when allowed and in range wins over
+    both the nearest player and a monster in reach ("explicit" in the result: the PvE swing is cancelled). The crit
+    chance loses LUK_CRIT_SHIELD per mille per point of target `luk`. Per swing: roll = atk * U[90, 110] / 100;
+    hit% = clip(80 + hit - target flee, 5, 95) (a crit always hits); crit = per-mille roll < crit chance - shield;
+    damage = roll * elem(weapon,
     target armor) / 100, then (non-crit) * (100 - target hard DEF) / 100 - target soft DEF, min 1; a crit doubles it,
     ignores both DEFs and is at least 2 (so -1 stays the wire's Miss marker); 0 when the element table says immune.
-    Returns per player [MAX_PLAYERS]: swing (bool), target slot, damage taken, crit taken (bool), lowest-slot hitter
-    (MAX_PLAYERS = none), swung_at (bool)."""
+    Returns per player [MAX_PLAYERS]: swing (bool), explicit (bool), target slot, damage taken, crit taken (bool),
+    lowest-slot hitter (MAX_PLAYERS = none), swung_at (bool); and "pvp", the block with the hits in its ledger."""
     n_p = MAX_PLAYERS
     arena, field = ro_pvp.areas({**world, "players": p})
     idx = jnp.nonzero(arena | field, size=ro_pvp.PVP_SLOTS, fill_value=n_p)[0].astype(jnp.int32)  # [K] ascending
@@ -115,12 +121,22 @@ def pvp_swings(world, p, inputs, mswing_p, atk, hit, crit_chance, flee, hard, so
     can = ok & (dist <= ro_items.weapon_range(world)[ic][:, None])
     col = jnp.argmin(jnp.where(can, dist, 1 << 30), axis=1)
     has = jnp.any(can, axis=1)
+    v = world["pvp"]
+    if "duel" in v:  # ro5-pvp2: the locked duel target, when allowed and in range, wins
+        lock = can & (idx[None, :] == v["duel"][ic][:, None])
+        explicit = jnp.any(lock, axis=1)
+        col = jnp.where(explicit, jnp.argmax(lock, axis=1), col)
+    else:
+        explicit = jnp.zeros_like(has)
     t = ic[col]  # target slot per candidate attacker
-    swing = valid & has & inputs["attack"][ic] & (p["attack_cd"][ic] == 0) & ~mswing_p[ic]
+    ready = valid & inputs["attack"][ic] & (p["attack_cd"][ic] == 0)
+    explicit = ready & explicit
+    swing = explicit | (ready & has & ~mswing_p[ic])
 
     r = jax.random.uniform(key, (3, ro_pvp.PVP_SLOTS))
     base = atk[ic] * _roll(r[0], 90, 110) // 100
-    crit = _roll(r[1], 0, 999) < crit_chance[ic]
+    shield = 0 if luk is None else ro_pvp.LUK_CRIT_SHIELD * jnp.maximum(luk[t], 0)  # ro5-pvp2: classic LUK / 5 %
+    crit = _roll(r[1], 0, 999) < crit_chance[ic] - shield
     hit_ok = _roll(r[2], 0, 99) < jnp.clip(80 + hit[ic] - flee[t], 5, 95)
     elem = elem_mult(elem_w[ic], elem_a[t])
     raw = base * elem // 100
@@ -131,8 +147,12 @@ def pvp_swings(world, p, inputs, mswing_p, atk, hit, crit_chance, flee, hard, so
 
     tw = jnp.where(landed, t, n_p)
     a_full = jnp.where(valid, idx, n_p)
+    if "by" in v:  # ro5-pvp2: cumulative damage per target (the kill credit)
+        v = ro_pvp.record_hits(v, idx, col.astype(jnp.int32), jnp.where(landed, dmg, 0))
     return {
+        "pvp": v,
         "swing": jnp.zeros((n_p,), jnp.bool_).at[a_full].set(swing, mode="drop"),
+        "explicit": jnp.zeros((n_p,), jnp.bool_).at[a_full].set(explicit, mode="drop"),
         "target": jnp.zeros((n_p,), jnp.int32).at[a_full].set(t, mode="drop"),
         "dmg": jnp.zeros((n_p,), jnp.int32).at[tw].add(jnp.where(landed, dmg, 0), mode="drop"),
         "crit": jnp.zeros((n_p,), jnp.bool_).at[tw].max(crit, mode="drop"),
@@ -143,7 +163,8 @@ def pvp_swings(world, p, inputs, mswing_p, atk, hit, crit_chance, flee, hard, so
 
 def _no_pvp(n_p):
     z = jnp.zeros((n_p,), jnp.bool_)
-    return {"swing": z, "target": jnp.zeros((n_p,), jnp.int32), "dmg": jnp.zeros((n_p,), jnp.int32), "crit": z,
+    return {"swing": z, "explicit": z, "target": jnp.zeros((n_p,), jnp.int32), "dmg": jnp.zeros((n_p,), jnp.int32),
+            "crit": z,
             "first": jnp.full((n_p,), n_p, jnp.int32), "swung_at": z}
 
 
@@ -177,6 +198,16 @@ def combat(world, inputs):
     mtable, _ = build_grid(m["pos"], m["active"])
     tgt, dist = nearest_in_block(mtable, p["pos"], m["pos"])
     swing = alive & inputs["attack"] & (p["attack_cd"] == 0) & (dist <= ro_items.weapon_range(world)) & m["active"][tgt]
+
+    # Player-vs-player swings (ro4-pvp): only with the pvp block; their own key, so the PvE rolls are unchanged. An
+    # explicit duel swing (ro5-pvp2) replaces the PvE swing of that player this tick.
+    pv = _no_pvp(n_p)
+    if "pvp" in world:
+        st = world["stats"]
+        luk = st["luk"] + (eq["card_bonus"][:, item_data.BONUS_LUK] if "card_bonus" in eq else 0)
+        pv = pvp_swings(world, p, inputs, swing, atk, hit, crit_chance, flee_all, hard_all, soft_all,
+                        eq["weapon_elem"], eq["armor_elem"], jax.random.fold_in(k_p, 1), luk)
+        swing = swing & ~pv["explicit"]
     tkind = kind[tgt]
     base = atk * _roll(r[0, :n_p], 90, 110) // 100
     crit = _roll(r[1, :n_p], 0, 999) < crit_chance
@@ -205,11 +236,6 @@ def combat(world, inputs):
         credit = jnp.where(killed, first, n_p)
     kills = p["kills"].at[credit].add(1, mode="drop")
 
-    # Player-vs-player swings (ro4-pvp): only with the pvp block; their own key, so the PvE rolls above are unchanged.
-    pv = _no_pvp(n_p)
-    if "pvp" in world:
-        pv = pvp_swings(world, p, inputs, swing, atk, hit, crit_chance, flee_all, hard_all, soft_all,
-                        eq["weapon_elem"], eq["armor_elem"], jax.random.fold_in(k_p, 1))
     aspd = jnp.maximum(1, d["aspd_ticks"] * 100 // (100 + mod["aspd_pct"]))
     p_cd = jnp.where(swing | pv["swing"], aspd - 1, jnp.maximum(p["attack_cd"] - 1, 0))  # period == aspd ticks
 
@@ -235,7 +261,8 @@ def combat(world, inputs):
     m_cd = jnp.where(mswing, m_period, jnp.maximum(m["attack_cd"] - 1, 0))
 
     # Deaths. A death with PvP damage this tick is a PvP death: counted in pvp.pvp_deaths, not players.deaths, so the
-    # ro_stats death penalty (keyed on players.deaths) never fires for it; the lowest-slot PvP hitter gets the kill.
+    # ro_stats death penalty (keyed on players.deaths) never fires for it; the top cumulative PvP damager gets the
+    # kill (ro5-pvp2), the lowest-slot PvP hitter of the tick when the ledger names nobody logged in.
     mdead = m["active"] & (new_m_hp <= 0)
     pdead = p["active"] & ~p["dead"] & (new_p_hp <= 0)
     pvp_death = pdead & (pv["dmg"] > 0)
@@ -258,8 +285,12 @@ def combat(world, inputs):
     }
     world = {**world, "players": players, "monsters": monsters}
     if "pvp" in world:
-        v = world["pvp"]
-        pk_kills = v["pvp_kills"].at[jnp.where(pvp_death, pv["first"], n_p)].add(1, mode="drop")
+        v = pv.get("pvp", world["pvp"])
+        killer = pv["first"]
+        if "by" in v:
+            top = ro_pvp.top_damager(v, p["active"])
+            killer = jnp.where(top >= 0, top, killer)
+        pk_kills = v["pvp_kills"].at[jnp.where(pvp_death, killer, n_p)].add(1, mode="drop")
         world = {**world, "pvp": {**v, "pvp_kills": pk_kills, "pvp_deaths": v["pvp_deaths"] + pvp_death.astype(jnp.int32)}}
     world = ro_anim.on_combat(world, swing, tgt, mswing, ptgt, dmg_m, dmg_taken)  # ro-anim: attack, hurt, hit numbers
     if "anim" in world:  # ro4-pvp: PvP swings (attack facing the target player), PvP misses, the crit column

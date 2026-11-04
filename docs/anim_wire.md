@@ -13,6 +13,7 @@ For the client team (client-anim). Source of truth: `game/ro_anim.py` (state and
 | `t` | start_tick | server tick the action began; clip time = `(render_tick - t) * tick_ms` |
 | `m` | dur_ms | one-shot clip length to fit the clip into; `0` = looping clip (idle, walk, standby, sit) or held (dead) |
 | `s` | speed_ms | ms per straight cell step (diagonal x 1.4); interpolate positions over this, not over `tick_ms` |
+| `k` | PK flag | player rows only: 1 while the PK flag is on, absent = off; a flip re-sends the row. Binary snaps carry it as the JSON head `"pk": [ids]` (ro5-pvp2). Client message `{"t":"target","target":id}` locks a duel target (a monster id or your own id clears it) |
 | `h` | damage taken this tick | only present on the tick a swing resolved on this entity: the sum of all hits that tick, or **`0` = Miss** (every swing at it missed; the client shows "Miss", no flinch); **`h <= -2` = a crit of `|h|`** (yellow number) |
 
 An entity is re-sent (in `ents`) whenever `a`, `d`, `t`, `s` change or it takes a hit, besides the old pos/vis/hp/

@@ -341,3 +341,144 @@ def test_overrides_only_touch_duellists():
     assert int(out["move"][1]) == 3  # slot 1 is not a duellist
     assert bool(out["attack"][0])     # slot 0 is in the arena with a foe adjacent
     assert int(out["move"][0]) == 0
+
+
+# --- round 5 (ro5-pvp2): duel target, kill credit, LUK crit shield, the PK flag on the wire, persistence -----------
+
+def _target(slot, tgt, base=None):
+    i = base if base is not None else empty_inputs()
+    return {**i, "target": i["target"].at[slot].set(tgt)}
+
+
+def test_target_input_locks_and_clears_the_duel():
+    from game.config import MAX_PLAYERS
+    w = _world()
+    o = ro_pvp.phase(w, _target(0, 1))
+    assert int(o["pvp"]["duel"][0]) == 1
+    assert int(ro_pvp.phase(o, empty_inputs())["pvp"]["duel"][0]) == 1  # -1 = no input keeps it
+    assert int(ro_pvp.phase(o, _target(0, MAX_PLAYERS + 3))["pvp"]["duel"][0]) == -1  # a monster id clears
+    assert int(ro_pvp.phase(o, _target(0, 0))["pvp"]["duel"][0]) == -1  # your own id clears
+    skill = _target(0, 1)
+    skill = {**skill, "skill": skill["skill"].at[0].set(3)}
+    assert int(ro_pvp.phase(w, skill)["pvp"]["duel"][0]) == -1  # a skill's target is not a duel lock
+    dead = {**o, "players": {**o["players"], "dead": o["players"]["dead"].at[1].set(True)}}
+    assert int(ro_pvp.phase(dead, empty_inputs())["pvp"]["duel"][0]) == -1  # the target died
+
+
+def test_duel_target_wins_over_the_nearest_player_and_a_monster(monkeypatch):
+    from tests.test_combat import ORC
+    _fake_equipped(monkeypatch, weapon_atk=100)
+    w = _world()
+    p = w["players"]
+    w = {**w, "players": {**p, "pos": p["pos"].at[2].set(jnp.array([A0[0], A0[1] + 1])),
+                          "active": p["active"].at[2].set(True), "hp": p["hp"].at[2].set(10 ** 6)}}
+    m = w["monsters"]
+    w = {**w, "monsters": {**m, "pos": m["pos"].at[0].set(jnp.array([A0[0] - 1, A0[1]])),
+                           "active": m["active"].at[0].set(True), "kind": m["kind"].at[0].set(ORC),
+                           "hp": m["hp"].at[0].set(10 ** 6)}}
+    # without a lock: a monster in reach means no PvP swing at all
+    o = combat(_seed(w, 0), _attack(0))
+    assert int(o["players"]["hp"][1]) == 10 ** 6 and int(o["players"]["hp"][2]) == 10 ** 6
+    w2 = {**w, "pvp": {**w["pvp"], "duel": w["pvp"]["duel"].at[0].set(2)}}
+    hit2 = 0
+    for s in range(10):
+        o = combat(_seed(w2, s), _attack(0))
+        assert int(o["players"]["hp"][1]) == 10 ** 6  # never the nearer-by-slot player 1
+        assert int(o["monsters"]["hp"][0]) == 10 ** 6  # nor the monster
+        assert int(o["anim"]["face"][0]) == int(combat_mod.dir_toward(jnp.array([[0, 1]]))[0])
+        hit2 += int(o["players"]["hp"][2]) < 10 ** 6
+    assert hit2 >= 5
+
+
+def test_ledger_merges_cumulative_damage_and_keeps_the_top_slots():
+    v = ro_pvp.make_state()
+    n = v["by"].shape[0]
+    k = 8
+    idx = jnp.full((k,), n, jnp.int32).at[:4].set(jnp.array([0, 1, 2, 3]))
+    # attackers 1, 2, 3 hit target 0 (column 0): 5, 7, 6
+    v = ro_pvp.record_hits(v, idx, jnp.zeros((k,), jnp.int32), jnp.array([0, 5, 7, 6, 0, 0, 0, 0]))
+    assert v["by"][0].tolist()[:3] == [2, 3, 1] and v["dmg"][0].tolist()[:3] == [7, 6, 5]
+    # attacker 1 adds 10 more: 15 cumulative, now on top
+    v = ro_pvp.record_hits(v, idx, jnp.zeros((k,), jnp.int32), jnp.array([0, 10, 0, 0, 0, 0, 0, 0]))
+    active = jnp.ones((n,), jnp.bool_)
+    assert int(ro_pvp.top_damager(v, active)[0]) == 1 and int(v["dmg"][0][0]) == 15
+    assert int(ro_pvp.top_damager(v, active.at[1].set(False))[0]) == 2  # a logged-out attacker loses the credit
+    assert int(ro_pvp.top_damager(v, active)[1]) == -1
+
+
+def test_pvp_kill_goes_to_the_top_cumulative_damager(monkeypatch):
+    _fake_equipped(monkeypatch, weapon_atk=1000)
+    w = _world()
+    p = w["players"]
+    w = {**w, "players": {**p, "pos": p["pos"].at[2].set(jnp.array([A1[0] + 1, A1[1]])),
+                          "active": p["active"].at[2].set(True), "hp": p["hp"].at[1].set(5)}}
+    v = w["pvp"]  # slot 2 already dealt far more to slot 1 than slot 0's killing blow
+    w = {**w, "pvp": {**v, "by": v["by"].at[1, 0].set(2), "dmg": v["dmg"].at[1, 0].set(10 ** 6)}}
+    for s in range(30):
+        o = combat(_seed(w, s), _attack(0))
+        if bool(o["players"]["dead"][1]):
+            break
+    assert bool(o["players"]["dead"][1])
+    assert int(o["pvp"]["pvp_kills"][2]) == 1 and int(o["pvp"]["pvp_kills"][0]) == 0
+    after = ro_pvp.phase(o, empty_inputs())
+    assert int(after["pvp"]["dmg"][1].sum()) == 0  # the dead target's ledger clears
+
+
+def test_luk_shields_crits(monkeypatch):
+    _fake_equipped(monkeypatch, weapon_atk=50)
+    w = _world()
+    st = w["stats"]
+    w = {**w, "stats": {**st, "luk": st["luk"].at[0].set(100)}}  # crit 10 + 300 = 310 per mille
+    crits = sum(bool(combat(_seed(w, s), _attack(0))["anim"]["crit"][1]) for s in range(40))
+    shielded = {**w, "stats": {**w["stats"], "luk": w["stats"]["luk"].at[1].set(155)}}  # 310 - 2 * 155 = 0
+    crits_s = sum(bool(combat(_seed(shielded, s), _attack(0))["anim"]["crit"][1]) for s in range(40))
+    assert crits >= 5 and crits_s == 0
+
+
+def test_pk_flag_column_changed_mask_and_rows():
+    from game import view
+    from net import protocol
+    w = _world()
+    t0 = view.entity_table(w)
+    w1 = {**w, "pvp": {**w["pvp"], "pk": w["pvp"]["pk"].at[1].set(True)}}
+    t1 = view.entity_table(w1)
+    assert t1["pk"].shape == t1["hp"].shape and int(t1["pk"][1]) == 1 and int(t1["pk"].sum()) == 1
+    ch = np.asarray(view.changed_mask(t0, t1))
+    assert ch[1] and not ch[0]
+    tab = jax.device_get(t1)
+    rows = protocol.entity_rows(np.array([0, 1]), tab, {})
+    assert "k" not in rows[0] and rows[1]["k"] == 1
+    pull = {"send": np.array([[0, 1] + [-1] * 6]), "gone": np.full((1, 8), -1), "tab": tab}
+    snap = protocol.decode_snap_bin(protocol.build_snaps(pull, [(0, {}, None, True, "bin")], 5, {})[0])
+    assert [e.get("k") for e in snap["ents"]] == [None, 1]
+    js = protocol.decode(protocol.build_snaps(pull, [(0, {}, None, True, "json")], 5, {})[0])
+    assert [e.get("k") for e in js["ents"]] == [None, 1]
+    assert protocol.validate_client({"t": "target", "target": 4}) == {"t": "target", "target": 4}
+    assert protocol.validate_client({"t": "target", "target": -1}) is None
+
+
+def test_pvp_record_is_saved_and_restored(tmp_path):
+    from net import char_fields, characters
+    w = _world()
+    w = {**w, "pvp": {**w["pvp"], "pvp_kills": w["pvp"]["pvp_kills"].at[1].set(7),
+                      "pvp_deaths": w["pvp"]["pvp_deaths"].at[1].set(4)}}
+    f = char_fields.character_fields(jax.device_get(w), 1)
+    assert f["pvp_kills"] == 7 and f["pvp_deaths"] == 4
+    c = {**characters.new_character(0, (5, 5)), "pvp_kills": 7, "pvp_deaths": 4}
+    characters.save(tmp_path, "duellist", c)
+    back = characters.load(tmp_path, "duellist")
+    assert back["pvp_kills"] == 7 and back["pvp_deaths"] == 4
+    fresh = make_empty_world(jax.random.PRNGKey(0))
+    applied = char_fields.apply_character(fresh, 3, back)
+    assert int(applied["pvp"]["pvp_kills"][3]) == 7 and int(applied["pvp"]["pvp_deaths"][3]) == 4
+    old = {k: v for k, v in c.items() if k not in char_fields.PVP_KEYS}  # an older save: fresh 0 / 0
+    assert char_fields.validate_ro(old, np.asarray(c["inv"]))["pvp_kills"] == 0
+
+
+def test_duellists_name_their_foe_as_target():
+    from bots.ro_pvp_policy import pvp_overrides
+    w = _world(pos0=A0, pos1=(A0[0] + 3, A0[1]))
+    i = empty_inputs()
+    out = pvp_overrides(w, i)
+    assert int(out["target"][0]) == 1  # slot 0 is a duellist, slot 1 is not
+    assert int(out["target"][1]) == int(i["target"][1])

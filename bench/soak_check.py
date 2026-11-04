@@ -144,6 +144,12 @@ def main(batch=8, chunks=10, ticks_per_chunk=100, seed=0):
     print(f"kills/bot/1k {kills * per_bot:.2f} deaths/bot/1k {deaths * per_bot:.2f} "
           f"(targets 3-5 and 0.3-0.6 at base levels 1-10, docs/round4_contract.md); "
           f"base level mean {float(jnp.mean(worlds['stats']['base_level'][:, :n_bots // batch])):.2f}")
+    if "pvp" in worlds:  # ro5-pvp2: duellists' PvP kills
+        from bots.ro_pvp_policy import IS_DUELLIST
+        duel = worlds["players"]["active"] & IS_DUELLIST[None, :]
+        nd, dk = int(jnp.sum(duel)), int(jnp.sum(jnp.where(duel, worlds["pvp"]["pvp_kills"], 0)))
+        print(f"pvp kills {int(jnp.sum(worlds['pvp']['pvp_kills']))} deaths {int(jnp.sum(worlds['pvp']['pvp_deaths']))}; "
+              f"{dk / max(nd, 1):.2f} PvP kills per duellist ({nd} duellists)")
     if total_problems:
         print("FIRST VIOLATIONS:")
         for p_ in total_problems[:15]:

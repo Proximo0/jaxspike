@@ -21,7 +21,8 @@ STATS_KEYS = tuple(f"stats_{k}" for k in STAT_SCALARS)
 SKILLS_KEYS = ("skills_learned", "skills_sp")
 ITEMS_KEYS = ("items_inv_count", "items_inv_refine", "items_inv_cards", "items_equip", "items_ryn")
 CRAFT_KEYS = ("craft_level", "craft_exp", "craft_gathers", "craft_crafts")
-RO_KEYS = STATS_KEYS + SKILLS_KEYS + ITEMS_KEYS + CRAFT_KEYS
+PVP_KEYS = ("pvp_kills", "pvp_deaths")  # ro5-pvp2: world["pvp"] rows of the same names
+RO_KEYS = STATS_KEYS + SKILLS_KEYS + ITEMS_KEYS + CRAFT_KEYS + PVP_KEYS
 LEGACY_FIELDS = ("pos", "spawn", "hp", "inv", "kills", "deaths")
 
 _LEVEL_EXP = np.asarray(LEVEL_EXP, np.int64)
@@ -45,11 +46,12 @@ def _fresh_rows():
                   "items_ryn": int(it["ryn"][0])},
         "craft": {"craft_level": np.asarray(cr["level"])[0], "craft_exp": np.asarray(cr["exp"])[0],
                   "craft_gathers": int(cr["gathers"][0]), "craft_crafts": int(cr["crafts"][0])},
+        "pvp": {k: 0 for k in PVP_KEYS},
     }
 
 
 def fresh_group(group: str, inv=None) -> dict:
-    """Fresh-character values of one RO group ('stats', 'skills', 'items', 'craft'), as copies. For 'items' with
+    """Fresh-character values of one RO group ('stats', 'skills', 'items', 'craft', 'pvp'), as copies. For 'items' with
     `inv`, inv_count is 1 where inv != 0 (the migration rule)."""
     out = {k: (v.copy() if isinstance(v, np.ndarray) else v) for k, v in _fresh_rows()[group].items()}
     if group == "items" and inv is not None:
@@ -59,7 +61,7 @@ def fresh_group(group: str, inv=None) -> dict:
 
 def fresh_ro_fields(inv=None) -> dict:
     out = {}
-    for g in ("stats", "skills", "items", "craft"):
+    for g in ("stats", "skills", "items", "craft", "pvp"):
         out.update(fresh_group(g, inv))
     return out
 
@@ -90,6 +92,9 @@ def character_fields(world_np, slot, town=None, storage=None) -> dict:
     out["craft_exp"] = np.array(cr["exp"][s], np.int32)
     out["craft_gathers"] = int(cr["gathers"][s])
     out["craft_crafts"] = int(cr["crafts"][s])
+    if "pvp" in world_np:  # ro5-pvp2 (a block without it keeps the fresh 0 / 0 on load)
+        for k in PVP_KEYS:
+            out[k] = int(world_np["pvp"][k][s])
     if town is not None:
         out["town"] = int(town)
     if storage is not None:
@@ -125,6 +130,9 @@ def apply_character(world, slot, fields) -> dict:
         put("items", k, f"items_{k}")
     for k in ("level", "exp", "gathers", "crafts"):
         put("craft", k, f"craft_{k}")
+    if "pvp" in world:
+        for k in PVP_KEYS:
+            put("pvp", k, k)
     return world
 
 
@@ -223,12 +231,22 @@ def _craft(raw):
     return {"craft_level": lvl, "craft_exp": exp, "craft_gathers": gat, "craft_crafts": cra}
 
 
+def _pvp(raw):
+    """ro5-pvp2: the PvP record, clamped to [0, I32_MAX]; None (fresh 0 / 0) when absent or not integer scalars."""
+    if not all(k in raw for k in PVP_KEYS):
+        return None
+    g = {k: _scalar(raw[k], 0, I32_MAX) for k in PVP_KEYS}
+    return None if any(v is None for v in g.values()) else g
+
+
 def validate_ro(raw: dict, inv) -> dict:
     """Full RO key set for a loaded file's `raw` dict and its already validated `inv`.
 
-    Each group (stats, skills, items, craft) is optional: absent, partial or unusable groups fall back to the fresh
+    Each group (stats, skills, items, craft, pvp) is optional: absent, partial or unusable groups fall back to the fresh
     group (items: count 1 where inv != 0); clampable values are clamped. Never raises, never returns None."""
     inv = np.asarray(inv, np.int32)
     stats = _stats(raw) or fresh_group("stats")
     skills = _skills(raw) or fresh_group("skills")
-    return {**stats, **skills, **(_items(raw, inv) or fresh_group("items", inv)), **(_craft(raw) or fresh_group("craft"))}
+    return {**stats, **skills, **(_items(raw, inv) or fresh_group("items", inv)),
+            **(_craft(raw) or fresh_group("craft")),
+            **(_pvp(raw) or fresh_group("pvp"))}

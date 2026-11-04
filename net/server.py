@@ -80,6 +80,7 @@ _SKILLS_PULL = ("learned", "sp", "cooldown", "buffs", "buff_level", "casting", "
 _ITEMS_PULL = ("inv_count", "inv_refine", "inv_cards", "equip", "ryn")
 _CRAFT_PULL = ("level", "exp", "gathers", "crafts")
 _PARTY_PULL = ("party_id", "leader")
+_PVP_PULL = ("pk", "pvp_kills", "pvp_deaths")  # ro4-pvp / ro5-pvp2: not the duel ledger (it stays on device)
 # Per-slot rows reset when a slot changes hands (login, logout): block -> keys (None = every key of the block).
 _SLOT_ROWS = {"stats": None, "skills": None, "items": None, "craft": ("level", "exp", "gathers", "crafts"),
               "party": ("party_id", "leader", "invite_from", "invite_ttl")}
@@ -128,7 +129,7 @@ def _tick_fn(world, hmask, hmove, hattack, heat, hro, prev_tab, known, viewer_sl
             "ro": {**_ro_blocks(world), "derived": {"max_hp": d["max_hp"], "max_sp": d["max_sp"]}},
             "anim": {"amotion_ms": ro_anim.amotion_ms(world, d)[:MAX_PLAYERS]},  # snap.you (docs/anim_wire.md)
             "mvp": {"event": world["mvp"]["event"], "event_head": world["mvp"]["event_head"]},
-            **({"pvp": dict(world["pvp"])} if "pvp" in world else {}),  # ro4-pvp: snap.you.pvp / pvp_kills / pvp_deaths
+            **({"pvp": {k: world["pvp"][k] for k in _PVP_PULL}} if "pvp" in world else {}),  # snap.you.pvp, the save
             "cards": card_events(drops_before, world["drops"], world["monsters"], top_before, p)}  # ro4-cards
     return world, tab, known_next, pull
 
@@ -145,8 +146,10 @@ def _reset_rows_fn(world, fresh, slot, kills, deaths):
         world = {**world, blk: {**cur, **new}}
     st = world["stats"]
     st = {**st, "kills_seen": st["kills_seen"].at[slot].set(kills), "deaths_seen": st["deaths_seen"].at[slot].set(deaths)}
-    if "pvp" in world:  # ro4-pvp: a slot changing hands starts with PK off and no PvP record
-        world = {**world, "pvp": {k: v.at[slot].set(jnp.zeros((), v.dtype)) for k, v in world["pvp"].items()}}
+    if "pvp" in world:  # ro4-pvp: a slot changing hands starts with PK off, no PvP record, no duel, an empty ledger
+        row = ro_pvp.fresh_row()
+        world = {**world, "pvp": {k: v.at[slot].set(row[k].astype(v.dtype) if k in row else jnp.zeros((), v.dtype))
+                                  for k, v in world["pvp"].items()}}
     return {**world, "stats": st}
 
 
@@ -174,6 +177,10 @@ def _login_rows_fn(world, fresh, slot, f):
         world = put(world, "items", k, f[f"items_{k}"])
     for k in ("level", "exp", "gathers", "crafts"):
         world = put(world, "craft", k, f[f"craft_{k}"])
+    if "pvp" in world:  # ro5-pvp2: the saved PvP record
+        for k in ("pvp_kills", "pvp_deaths"):
+            if k in f:
+                world = put(world, "pvp", k, f[k])
     return world
 
 
@@ -188,7 +195,7 @@ if "pvp" not in _NONE_INPUTS:  # ro4-pvp: PK toggle, until game/state.py carries
 _RO_INPUT_KEYS = tuple(_RO_INPUT_KEYS) + tuple(k for k in ("sit", "teleport", "pvp") if k not in _RO_INPUT_KEYS)
 _TOWN_BOXES = np.asarray(town_boxes())
 _RO_MESSAGES = frozenset(("allot", "job", "skill", "learn", "use_item", "equip", "refine", "drop", "gather", "craft",
-                          "party", "chat", "storage", "save", "buy", "sell", "sit", "teleport", "pvp"))
+                          "party", "chat", "storage", "save", "buy", "sell", "sit", "teleport", "pvp", "target"))
 PARTY_OP = {"create": 1, "leave": 2, "invite": 3, "accept": 4}
 
 
@@ -466,7 +473,11 @@ class GameServer:
         if character_fields is None:
             return base
         ro = ro or self._ro_host()
-        out = character_fields({"players": pl, **{b: ro[b] for b in ("stats", "skills", "items", "craft")}}, slot,
+        pv = pull.get("pvp") if pull is not None else None
+        if pv is None and "pvp" in self.world:  # ro5-pvp2: the PvP record is saved with the character
+            pv = jax.device_get({k: self.world["pvp"][k] for k in ("pvp_kills", "pvp_deaths")})
+        out = character_fields({"players": pl, **{b: ro[b] for b in ("stats", "skills", "items", "craft")},
+                                **({"pvp": pv} if pv is not None else {})}, slot,
                                town=self.town[slot], storage=self.storage.get(slot))
         out.update(base)
         return out
@@ -1019,6 +1030,10 @@ class GameServer:
             pend["teleport"][slot] = msg["town"]
         elif t == "pvp":  # ro4-pvp: flip the PK flag on the next tick
             pend["pvp"][slot] = True
+        elif t == "target":  # ro5-pvp2: duel target (engine pvp.duel); a plain target, so no skill / party op this tick
+            pend["target"][slot] = msg["target"]
+            pend["skill"][slot] = 0
+            pend["party"][slot] = 0
 
 
 def bench_ticks(seed: int, n: int) -> None:

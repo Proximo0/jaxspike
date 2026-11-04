@@ -38,7 +38,18 @@ def entity_table(world):
                                  DROP_KIND_BASE + d["item"].astype(jnp.int32),
                                  NODE_KIND_BASE + n["kind"].astype(jnp.int32)]),
         **_anim_columns(world),
+        **_pk_column(world),
     }
+
+
+def _pk_column(world):
+    """ro5-pvp2: `pk` int8 [E], the players' PK flag (world["pvp"]["pk"]), 0 for every other entity; absent without
+    the pvp block. Sent as the row field `k` (net/protocol.py); a flip re-sends the row (changed_mask)."""
+    if "pvp" not in world:
+        return {}
+    pk = world["pvp"]["pk"].astype(jnp.int8)
+    rest = world["monsters"]["hp"].shape[0] + world["drops"]["pos"].shape[0] + world["craft"]["nodes"]["pos"].shape[0]
+    return {"pk": jnp.concatenate([pk, jnp.zeros((rest,), jnp.int8)])}
 
 
 # ro-anim (docs/anim_wire.md): small dtypes because the host pulls the whole table every tick; drops are all 0.
@@ -52,10 +63,12 @@ def _anim_columns(world):
 
 
 def changed_mask(prev, now):
-    """True where pos, vis, hp or kind differ, or (ro-anim) action, face, start_tick or speed_ms changed or a hit
+    """True where pos, vis, hp, kind or (ro5-pvp2) the PK flag differ, or (ro-anim) action, face, start_tick or speed_ms changed or a hit
     landed this tick (hit != 0)."""
     base = ((prev["pos"] != now["pos"]).any(axis=-1) | (prev["vis"] != now["vis"])
             | (prev["hp"] != now["hp"]) | (prev["kind"] != now["kind"]))
+    if "pk" in now and "pk" in prev:  # ro5-pvp2: a PK flip re-sends the row
+        base = base | (prev["pk"] != now["pk"])
     if "action" not in now:
         return base
     return (base | (prev["action"] != now["action"]) | (prev["face"] != now["face"])

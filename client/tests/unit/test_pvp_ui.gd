@@ -33,3 +33,19 @@ func test_pvp_marked() -> void:
 	EntityLayer.pvp_arena = Rect2i()
 	assert_true(not EntityLayer.pvp_marked({"pos": [229, 271]}))
 	EntityLayer.pvp_arena = before
+
+
+func test_pk_flag_from_the_wire_marks_the_name() -> void:
+	var before: Rect2i = EntityLayer.pvp_arena
+	EntityLayer.pvp_arena = Rect2i()
+	assert_true(EntityLayer.pvp_marked({"pos": [10, 10], "k": 1}), "ro5-pvp2: row key k = 1 is the PK flag")
+	assert_true(not EntityLayer.pvp_marked({"pos": [10, 10], "k": 0}))
+	EntityLayer.pvp_arena = before
+
+
+func test_duel_message_only_for_other_players() -> void:
+	assert_eq(Hud.duel_message(7, 3, {"kind": 0}), {"t": "target", "target": 7})
+	assert_eq(Hud.duel_message(3, 3, {"kind": 0}), {}, "not yourself")
+	assert_eq(Hud.duel_message(600, 3, {"kind": 2}), {}, "not a monster")
+	assert_eq(Hud.duel_message(7, 3, {}), {}, "unknown entity")
+	assert_eq(Hud.duel_message(-1, 3, {"kind": 0}), {}, "no selection")

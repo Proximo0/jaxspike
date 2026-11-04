@@ -9,7 +9,9 @@ are slot % 4 == 1). Every tick a living duellist:
 PvP deaths cost no exp; a dead duellist respawns on its temple and walks back. Other slots are left untouched.
 
 `pvp_overrides(world, inputs)` returns the inputs with move, attack (and sit, when present) replaced on duellist slots;
-compose it last in bots.ro_policies.ro_bot_inputs.
+compose it last in bots.ro_policies.ro_bot_inputs. Round 5 (ro5-pvp2): a duellist on the floor also names the foe it
+walks to as its explicit duel target (`target` = that player's entity id) on ticks it casts no skill, so the
+engine's click-to-duel path (ro_pvp `duel`) is what the soak exercises.
 """
 import jax.numpy as jnp
 
@@ -45,6 +47,12 @@ def _step_toward(world, pos, goal, axis_first):
 
 def duel_moves(world):
     """(move int32 [P], attack bool [P], mask bool [P]): the duellists' inputs and which slots they replace."""
+    move, attack, mask, _ = _duel(world)
+    return move, attack, mask
+
+
+def _duel(world):
+    """duel_moves plus foe int32 [P]: the nearest other living player on the arena floor (-1 = none / outside)."""
     p = world["players"]
     pos = p["pos"]
     alive = p["active"] & ~p["dead"]
@@ -63,14 +71,21 @@ def duel_moves(world):
                                                      _STAGE[None, :]))
     move = jnp.where(inside & adjacent, 0, _step_toward(world, pos, goal, inside))
     mask = IS_DUELLIST & p["active"]
-    return jnp.where(alive, move, 0).astype(jnp.int32), inside, mask
+    foe_id = jnp.where(inside & has, near, -1).astype(jnp.int32)
+    return jnp.where(alive, move, 0).astype(jnp.int32), inside, mask, foe_id
 
 
 def pvp_overrides(world, inputs):
     """inputs with the duellists' move / attack (and sit = False) in place of the other policies' values."""
-    move, attack, mask = duel_moves(world)
+    move, attack, mask, foe = _duel(world)
     out = {**inputs, "move": jnp.where(mask, move, inputs["move"]).astype(jnp.int32),
            "attack": jnp.where(mask, attack, inputs["attack"])}
+    if "target" in inputs:  # ro5-pvp2: lock the foe as the duel target (only on ticks without a skill or party op)
+        plain = mask & (foe >= 0)
+        for k in ("skill", "party"):
+            if k in inputs:
+                plain = plain & (inputs[k] == 0)
+        out["target"] = jnp.where(plain, foe, inputs["target"]).astype(jnp.int32)
     if "sit" in inputs:
         out["sit"] = jnp.where(mask, False, inputs["sit"])
     return out

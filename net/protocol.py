@@ -109,6 +109,9 @@ def _validate_ro(t, msg: dict) -> dict | None:
         return {"t": t}
     if t == "pvp":  # ro4-pvp: toggle the PK flag on the next tick (refused in towns by the engine)
         return {"t": t}
+    if t == "target":  # ro5-pvp2: lock a duel target (a player entity id); a monster id or your own id clears it
+        ok = _is_int(msg.get("target")) and 0 <= msg["target"] < N_ENTITIES
+        return {"t": t, "target": msg["target"]} if ok else None
     return None
 
 
@@ -231,6 +234,7 @@ def entity_rows(ids: np.ndarray, tab: dict, names: dict) -> list[dict]:
     pos, hp = tab["pos"][ids].tolist(), tab["hp"][ids].tolist()
     max_hp, kind = tab["max_hp"][ids].tolist(), tab["kind"][ids].tolist()
     anim = [tab[k][ids].tolist() for k in _ANIM_COLS] if "action" in tab else None
+    pk = tab["pk"][ids].tolist() if "pk" in tab else None  # ro5-pvp2: players' PK flag, row key `k` (1 when on)
     out = []
     for i, e in enumerate(ids.tolist()):
         k = kind[i]
@@ -244,6 +248,8 @@ def entity_rows(ids: np.ndarray, tab: dict, names: dict) -> list[dict]:
                 ent["h"] = wire_hit(anim[5][i])
         if k == 0:
             ent["name"] = names.get(e, "bot")
+            if pk is not None and pk[i]:
+                ent["k"] = 1
         elif k >= 100:
             ent["item"] = k - 100
         else:
@@ -393,7 +399,8 @@ def you_delta(you: dict, last: dict, full: bool) -> dict:
 #   0 "JS" | 2 u8 layout (1) | 3 u8 flags: bit0 full, bit1 anim columns valid | 4 u32 tick | 8 u16 n_ents |
 #   10 u16 n_gone | 12 u32 json_len
 # then json_len bytes of UTF-8 JSON {"you": {...}, "notice": str or null, "names": {"<id>": name}} (names: the
-# human players among the ents; any other player is "bot"), then n_ents BIN_ROW records, then n_gone u16 ids.
+# human players among the ents; any other player is "bot"; ro5-pvp2: optional "pk": [ids] = the players among the
+# ents with the PK flag on, decoded as row key k = 1), then n_ents BIN_ROW records, then n_gone u16 ids.
 # Decoded like JSON: name for kind 0, mkind = kind - 1 for 1..99, item = kind - 100 for 100..NODE_KIND_BASE-1,
 # a/d/t/m/s for kind < 100 when flag bit1 is set, h only when a hit or a miss happened this tick (miss = 0).
 BIN_MAGIC = b"JS"
@@ -449,11 +456,16 @@ def build_snaps(pull: dict, views: list, tick: int, names: dict) -> list:
         human[[e for e in names if 0 <= e < human.shape[0]]] = True
         named = [send_all[sl, :n_send[sl]] for sl in slots]
         anim_flag = 2 if "action" in tab else 0
+        pk_on = (tab["pk"] != 0) & (tab["kind"] == 0) if "pk" in tab else None
         for j, i in enumerate(bn):
             slot, you, notice, full, _ = views[i]
             ids, n, ng = named[j], n_send[slot], n_gone[slot]
-            body = _JSON.encode({"you": you, "notice": notice,
-                                 "names": {str(e): names[e] for e in ids[human[ids]].tolist()}}).encode()
+            head = {"you": you, "notice": notice, "names": {str(e): names[e] for e in ids[human[ids]].tolist()}}
+            if pk_on is not None:  # ro5-pvp2: the PK-flagged players among the ents (row key `k` once decoded)
+                flagged = ids[pk_on[ids]]
+                if flagged.size:
+                    head["pk"] = flagged.tolist()
+            body = _JSON.encode(head).encode()
             hdr = _BIN_PACK.pack(BIN_MAGIC, BIN_LAYOUT, int(bool(full)) | anim_flag, tick, n, ng, len(body))
             out[i] = b"".join((hdr, body, rows[j, :n].tobytes(), gone_u2[j, :ng].tobytes()))
     return out
@@ -478,6 +490,7 @@ def decode_snap_bin(data: bytes) -> dict | None:
     rows = np.frombuffer(data, BIN_ROW, n, off + jl)
     gone = np.frombuffer(data, "<u2", ng, off + jl + n * BIN_ROW.itemsize)
     anim, names, ents = bool(h["flags"] & 2), head.get("names", {}), []
+    pk = set(head.get("pk", ()))
     for e_id, k, x, y, hp, max_hp, t, hit, s, m, a, d in rows.tolist():
         if k >= NODE_KIND_BASE:
             ents.append({"id": e_id, "kind": k, "pos": [x, y], "hp": hp})
@@ -489,6 +502,8 @@ def decode_snap_bin(data: bytes) -> dict | None:
                 ent["h"] = wire_hit(hit)  # -1 (a miss) decodes as h: 0, a crit stays negative
         if k == 0:
             ent["name"] = names.get(str(e_id), "bot")
+            if e_id in pk:
+                ent["k"] = 1
         elif k < 100:
             ent["mkind"] = k - 1
         else:
