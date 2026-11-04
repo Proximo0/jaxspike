@@ -52,7 +52,7 @@ def total_mb() -> int:
 def counts() -> dict:
     """Process counts by name and the heavy processes' total working set in MB (tasklist's Mem Usage column)."""
     out = subprocess.run(["tasklist", "/FO", "CSV", "/NH"], capture_output=True, text=True, timeout=20).stdout
-    c = {"python": 0, "godot": 0, "blender": 0, "heavy_mb": 0}
+    c = {"python": -1, "godot": 0, "blender": 0, "heavy_mb": 0}  # -1: this hook is itself a python.exe
     for ln in out.splitlines():
         if not ln.startswith('"'):
             continue
