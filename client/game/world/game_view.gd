@@ -95,6 +95,8 @@ func _process(_delta: float) -> void:
 				for p: Node in panels:
 					if p.has_method("set_welcome"):
 						p.call("set_welcome", msg)
+				if fx_layer != null:
+					fx_layer.set_welcome(msg)  # ro6-fx2: skill elements for the bolt tint
 			"error":
 				_close(session.last_error)
 				return

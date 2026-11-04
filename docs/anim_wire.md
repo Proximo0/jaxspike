@@ -53,6 +53,16 @@ Round 3 (ro3-wire):
 `amotion_ms` and `after_delay` read 0 until the server pulls `world["anim"]` amotion and `skills.after_delay`
 (lines reported to the lead and netperf2 in the ro-anim final report).
 
+## Snap head (ro6-fx2)
+
+| key | meaning |
+|---|---|
+| `fx` | `[[caster_id, skill_id, x, y], ...]`: the skills that resolved this tick whose tile lies in the viewer's window (VIEW_W x VIEW_H around `you.pos`), at most `FX_PER_SNAP` = 32, absent when none. `x, y` = the target's current tile (enemy/ally skills), the cast tile (ground skills) or the caster's own tile (self skills such as Magnum Break). JSON snaps carry it top level, binary snaps in the JSON head; both decode to `snap.fx`. Source: `skills.fx_skill` int32 [P] / `skills.fx_target` int32 [P, 2], rewritten every tick in `game/ro_skills.py` |
+
+The Godot `EntityStore.fx_events` keeps them for one snap (`{caster, skill, tile}`); `FxLogic.skill_kind` picks the
+sprite (melee ATK skills hit_spark, bolts bolt tinted by element, Arrow Shower / Double Strafe arrow_shower, Magnum
+Break magnum_break, heals heal, the rest a one-shot cast_circle burst).
+
 ## Snap encoding
 The Godot client sends `"format": "bin"` at login by default (`NetSession.snap_format`; `"json"` opts out). Binary
 layout: `docs/proto_v2_notes.md` / `net/protocol.py` BIN_HEADER, BIN_ROW (layout 1 unchanged by round 3).

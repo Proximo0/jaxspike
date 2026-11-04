@@ -34,6 +34,8 @@ def make_state():
         "casts": z(mp),
         "skill_dmg": z(mp),
         "after_delay": z(mp),  # ro-anim: ticks of after-cast delay left; no cast starts while > 0
+        "fx_skill": z(mp),  # ro6-fx2: skill id that resolved this tick (0 = none); rewritten every tick
+        "fx_target": z(mp, 2),  # ro6-fx2: its tile (the target's tile, the caster's own for self skills)
     }
 
 
@@ -167,6 +169,17 @@ def phase(world, inputs, derived=None):
     else:
         world = {**world, "stats": {**world["stats"], "sp": sp.astype(world["stats"]["sp"].dtype)}}
     resolve = alive & (casting != 0) & (cast_left == 0)
+    # ro6-fx2: which skill resolved where this tick, for the client's effect sprites (snap head "fx")
+    rsc = jnp.clip(casting, 0, S.N_SKILLS - 1)
+    rt = sk["cast_target"]
+    rtt = S.SKILL_TARGET[rsc]
+    rpos = jnp.where(((rt >= 0) & (rt < mp))[:, None], pl["pos"][jnp.clip(rt, 0, mp - 1)],
+                     jnp.where(((rt >= mp) & (rt < mp + mm))[:, None], mo["pos"][jnp.clip(rt - mp, 0, mm - 1)],
+                               sk["cast_tile"]))
+    rpos = jnp.where((rtt == S.TARGET_SELF)[:, None], own, jnp.where((rtt == S.TARGET_GROUND)[:, None],
+                                                                      sk["cast_tile"], rpos))
+    fx = {"fx_skill": jnp.where(resolve, casting, 0).astype(I32),
+          "fx_target": jnp.where(resolve[:, None], rpos, 0).astype(I32)} if "fx_skill" in sk else {}
     mon_hp_before = world["monsters"]["hp"]  # ro-anim: skill damage numbers
     world = ro_skills_effects.resolve({**world, "skills": sk}, resolve, derived)
     sk = world["skills"]
@@ -200,7 +213,8 @@ def phase(world, inputs, derived=None):
         sp = jnp.where(regen, sp + S.SP_REGEN_FLAT + max_sp // 100, sp)
     sp = jnp.minimum(sp, max_sp).astype(I32)
 
-    sk = {**sk, "casting": casting.astype(I32), "cast_left": cast_left.astype(I32), "casts": casts.astype(I32)}
+    sk = {**sk, "casting": casting.astype(I32), "cast_left": cast_left.astype(I32), "casts": casts.astype(I32),
+          **fx}
     if pool_blk == "skills":
         sk["sp"] = sp
         return {**world, "skills": sk}

@@ -99,7 +99,8 @@ def test_make_state_shapes_and_dtypes():
     s = ro_skills.make_state()
     shapes = {"learned": (MP, sk.N_SKILLS), "cooldown": (MP, sk.N_SKILLS), "cast_left": (MP,), "casting": (MP,),
               "cast_target": (MP,), "cast_tile": (MP, 2), "buffs": (MP, sk.N_BUFFS), "buff_level": (MP, sk.N_BUFFS),
-              "sp": (MP,), "casts": (MP,), "skill_dmg": (MP,), "after_delay": (MP,)}
+              "sp": (MP,), "casts": (MP,), "skill_dmg": (MP,), "after_delay": (MP,),
+              "fx_skill": (MP,), "fx_target": (MP, 2)}  # ro6-fx2
     assert set(s) == set(shapes)
     for k, shp in shapes.items():
         assert s[k].shape == shp, k

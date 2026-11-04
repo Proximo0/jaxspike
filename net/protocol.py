@@ -353,6 +353,31 @@ def you_full(pull: dict, slot: int, town: int) -> dict:
     return you
 
 
+FX_PER_SNAP = 32  # ro6-fx2: at most this many skill effects in one snap head ("fx")
+
+
+def fx_table(pull: dict) -> np.ndarray | None:
+    """ro6-fx2: [K, 4] int rows (caster_id, skill_id, x, y) of the skills that resolved this tick, compacted once per
+    tick from the pulled `skills.fx_skill` / `fx_target` arrays; None when the pull carries no fx block."""
+    fx = pull.get("fx")
+    if fx is None:
+        return None
+    sid = np.asarray(fx["skill"])
+    ids = np.flatnonzero(sid != 0)
+    tile = np.asarray(fx["target"])[ids].reshape(-1, 2)
+    return np.stack([ids, sid[ids], tile[:, 0], tile[:, 1]], axis=1).astype(np.int64)
+
+
+def fx_for(table: np.ndarray | None, pull: dict, slot: int) -> list:
+    """ro6-fx2: the fx rows whose tile lies in `slot`'s view window (VIEW_W x VIEW_H around its pos), at most
+    FX_PER_SNAP, as [[caster_id, skill_id, x, y], ...]; [] when none."""
+    if table is None or not table.shape[0]:
+        return []
+    pos = np.asarray(pull["players"]["pos"][slot])
+    near = (np.abs(table[:, 2] - pos[0]) <= VIEW_W // 2) & (np.abs(table[:, 3] - pos[1]) <= VIEW_H // 2)
+    return table[near][:FX_PER_SNAP].tolist()
+
+
 def snapshot(pull: dict, slot: int, names: dict, notice: str | None, tick: int, town: int, full: bool,
              you_extra: dict | None = None) -> dict:
     """Build the snap message for one viewer (row `slot`) from the tick's single host pull.
@@ -370,8 +395,12 @@ def snapshot(pull: dict, slot: int, names: dict, notice: str | None, tick: int, 
                 e["max_hp"] = int(max_hp[e["id"]])
     if you_extra:
         you.update(you_extra)
-    return {"t": "snap", "tick": tick, "you": you, "ents": ents,
-            "gone": gone[gone >= 0].tolist(), "notice": notice, "full": bool(full)}
+    out = {"t": "snap", "tick": tick, "you": you, "ents": ents,
+           "gone": gone[gone >= 0].tolist(), "notice": notice, "full": bool(full)}
+    fx = fx_for(fx_table(pull), pull, slot)
+    if fx:  # ro6-fx2: skill effects resolved this tick (docs/anim_wire.md)
+        out["fx"] = fx
+    return out
 
 
 # ----- netperf2: change-only `you`, one batched snap pass, binary snaps (docs/proto_v2_notes.md) -----
@@ -400,7 +429,8 @@ def you_delta(you: dict, last: dict, full: bool) -> dict:
 #   10 u16 n_gone | 12 u32 json_len
 # then json_len bytes of UTF-8 JSON {"you": {...}, "notice": str or null, "names": {"<id>": name}} (names: the
 # human players among the ents; any other player is "bot"; ro5-pvp2: optional "pk": [ids] = the players among the
-# ents with the PK flag on, decoded as row key k = 1), then n_ents BIN_ROW records, then n_gone u16 ids.
+# ents with the PK flag on, decoded as row key k = 1; ro6-fx2: optional "fx": [[caster_id, skill_id, x, y], ...]
+# = the skills resolved this tick in the viewer's window, at most FX_PER_SNAP), then n_ents BIN_ROW records, then n_gone u16 ids.
 # Decoded like JSON: name for kind 0, mkind = kind - 1 for 1..99, item = kind - 100 for 100..NODE_KIND_BASE-1,
 # a/d/t/m/s for kind < 100 when flag bit1 is set, h only when a hit or a miss happened this tick (miss = 0).
 BIN_MAGIC = b"JS"
@@ -435,6 +465,7 @@ def build_snaps(pull: dict, views: list, tick: int, names: dict) -> list:
     n_send = (send_all >= 0).sum(axis=1).tolist()  # rows are compacted: valid ids first, -1 pads after
     n_gone = (gone_all >= 0).sum(axis=1).tolist()
     out = [None] * len(views)
+    fxt = fx_table(pull)  # ro6-fx2: compacted once per tick, filtered per viewer
     js = [i for i, v in enumerate(views) if v[4] != "bin"]
     bn = [i for i, v in enumerate(views) if v[4] == "bin"]
     if js:
@@ -445,9 +476,11 @@ def build_snaps(pull: dict, views: list, tick: int, names: dict) -> list:
         for j, i in enumerate(js):
             slot, you, notice, full, _ = views[i]
             ents = ",".join([frag[k] for k in where[j][:n_send[slot]]])
+            fx = fx_for(fxt, pull, slot)
+            fx_txt = f',"fx":{_JSON.encode(fx)}' if fx else ""
             out[i] = (f'{{"t":"snap","tick":{tick},"you":{_JSON.encode(you)},"ents":[{ents}],'
                       f'"gone":{_JSON.encode(gone_all[slot, :n_gone[slot]].tolist())},"notice":{_JSON.encode(notice)},'
-                      f'"full":{"true" if full else "false"},"v":{PROTOCOL_VERSION}}}')
+                      f'"full":{"true" if full else "false"}{fx_txt},"v":{PROTOCOL_VERSION}}}')
     if bn:
         slots = [views[i][0] for i in bn]
         rows = _bin_table(tab)[send_all[slots]]  # [B, VIEW_K] records; -1 pads gather the last row, cut below
@@ -465,6 +498,9 @@ def build_snaps(pull: dict, views: list, tick: int, names: dict) -> list:
                 flagged = ids[pk_on[ids]]
                 if flagged.size:
                     head["pk"] = flagged.tolist()
+            fx = fx_for(fxt, pull, slot)
+            if fx:  # ro6-fx2: [[caster_id, skill_id, x, y], ...] resolved this tick
+                head["fx"] = fx
             body = _JSON.encode(head).encode()
             hdr = _BIN_PACK.pack(BIN_MAGIC, BIN_LAYOUT, int(bool(full)) | anim_flag, tick, n, ng, len(body))
             out[i] = b"".join((hdr, body, rows[j, :n].tobytes(), gone_u2[j, :ng].tobytes()))
@@ -509,5 +545,8 @@ def decode_snap_bin(data: bytes) -> dict | None:
         else:
             ent["item"] = k - 100
         ents.append(ent)
-    return {"t": "snap", "v": PROTOCOL_VERSION, "tick": int(h["tick"]), "you": head.get("you", {}), "ents": ents,
-            "gone": gone.tolist(), "notice": head.get("notice"), "full": bool(h["flags"] & 1)}
+    out = {"t": "snap", "v": PROTOCOL_VERSION, "tick": int(h["tick"]), "you": head.get("you", {}), "ents": ents,
+           "gone": gone.tolist(), "notice": head.get("notice"), "full": bool(h["flags"] & 1)}
+    if head.get("fx"):  # ro6-fx2
+        out["fx"] = head["fx"]
+    return out

@@ -137,3 +137,94 @@ func test_layer_poses_sprites_from_entity_layer() -> void:
 	assert_eq(layer.logic.live_of(FxLogic.CAST), 1)
 	layer.free()
 	el.free()
+
+
+func _fx_snap(s: EntityStore, tick: int, ents: Array, fx: Array) -> void:
+	s.apply_snap({"tick": tick, "ents": ents, "gone": [], "you": {"pos": [1, 1], "level": 5}, "fx": fx})
+
+
+func test_skill_kind_maps_every_family() -> void:
+	var fx := FxLogic.new()
+	assert_eq(fx.skill_kind(FxLogic.SK_BASH), FxLogic.HIT)
+	assert_eq(fx.skill_kind(FxLogic.SK_MAMMONITE), FxLogic.HIT)
+	for sid: int in FxLogic.BOLT_SKILLS:
+		assert_eq(fx.skill_kind(sid), FxLogic.BOLT)
+	assert_eq(fx.skill_kind(FxLogic.SK_ARROW_SHOWER), FxLogic.ARROW_SHOWER)
+	assert_eq(fx.skill_kind(FxLogic.SK_DOUBLE_STRAFE), FxLogic.ARROW_SHOWER)
+	assert_eq(fx.skill_kind(FxLogic.SK_MAGNUM_BREAK), FxLogic.MAGNUM_BREAK)
+	assert_eq(fx.skill_kind(FxLogic.SK_HEAL), FxLogic.HEAL)
+	assert_eq(fx.skill_kind(FxLogic.SK_FIRST_AID), FxLogic.HEAL)
+	assert_eq(fx.skill_kind(21), FxLogic.CAST_BURST, "Blessing has no sprite of its own")
+	fx.set_skills([{"id": 33, "effect": FxLogic.EFFECT_ATK, "element": 1}, {"id": 21, "effect": 4, "element": 0}])
+	assert_eq(fx.skill_kind(33), FxLogic.HIT, "an ATK skill from welcome.skills sparks")
+	assert_eq(fx.skill_kind(21), FxLogic.CAST_BURST)
+
+
+func test_bolt_tint_follows_the_element() -> void:
+	var fx := FxLogic.new()
+	assert_eq(FxLogic.element_tint(fx.skill_element(FxLogic.SK_FIRE_BOLT)), Color(1.0, 0.55, 0.2))
+	assert_eq(FxLogic.element_tint(fx.skill_element(FxLogic.SK_COLD_BOLT)), Color(0.45, 0.72, 1.0))
+	assert_eq(FxLogic.element_tint(fx.skill_element(FxLogic.SK_LIGHTNING_BOLT)), Color(1.0, 0.95, 0.35))
+	fx.set_skills([{"id": FxLogic.SK_FIRE_BOLT, "effect": 2, "element": FxLogic.ELEM_WATER}])
+	assert_eq(fx.skill_element(FxLogic.SK_FIRE_BOLT), FxLogic.ELEM_WATER, "welcome.skills wins")
+
+
+func test_fx_events_start_tile_effects_once() -> void:
+	var s := EntityStore.new()
+	var fx := FxLogic.new()
+	_snap(s, 1, [_ent(1, 0, 100)])
+	fx.observe(s, 1, Callable())
+	_fx_snap(s, 2, [], [[1, FxLogic.SK_COLD_BOLT, 4, 5], [1, FxLogic.SK_MAGNUM_BREAK, 1, 1], [2, 21, 3, 3]])
+	assert_eq(fx.observe(s, 1, Callable()), 3)
+	assert_eq(fx.live_of(FxLogic.BOLT), 1)
+	assert_eq(fx.live_of(FxLogic.MAGNUM_BREAK), 1)
+	assert_eq(fx.live_of(FxLogic.CAST_BURST), 1)
+	assert_eq(fx.targets[0], -1)
+	assert_eq(fx.tiles[0], Vector2(4, 5))
+	assert_eq(fx.tints[0], Color(0.45, 0.72, 1.0))
+	assert_eq(fx.tints[1], Color.WHITE)
+	assert_eq(fx.observe(s, 1, Callable()), 0, "same snap: nothing new")
+	fx.advance(60.0 * 8.0 + 1.0)
+	assert_eq(fx.live_count, 0, "all one-shots, the burst included")
+	_snap(s, 3, [])
+	assert_eq(fx.observe(s, 1, Callable()), 0, "events last one snap")
+
+
+func test_bash_spark_not_doubled_where_the_hit_already_sparked() -> void:
+	var s := EntityStore.new()
+	var fx := FxLogic.new()
+	_snap(s, 1, [_ent(2, 0, 100)])
+	fx.observe(s, 1, Callable())
+	_fx_snap(s, 2, [_ent(2, 0, 80, 20)], [[1, FxLogic.SK_BASH, 1, 1], [1, FxLogic.SK_BASH, 6, 6]])
+	assert_eq(fx.observe(s, 1, Callable()), 2, "the entity spark plus the spark on the empty tile")
+	assert_eq(fx.live_of(FxLogic.HIT), 2)
+
+
+func test_layer_draws_a_tile_effect_tinted_at_the_tile_centre() -> void:
+	var s := EntityStore.new()
+	_snap(s, 1, [_ent(1, 0, 100)])
+	var el := EntityLayer.new()
+	el.auto_refresh = false
+	el.store = s
+	el.own_id = 1
+	el.refresh(0.0)
+	var layer := FxLayer.new()
+	layer.auto_refresh = false
+	layer.bind_store(s, el)
+	layer.refresh(16.0)
+	_fx_snap(s, 2, [_ent(1, 0, 100)], [[1, FxLogic.SK_FIRE_BOLT, 3, 4]])
+	el.refresh(100.0)
+	layer.refresh(1.0)
+	assert_eq(layer.logic.live_of(FxLogic.BOLT), 1)
+	assert_eq(layer.logic.tints[0], Color(1.0, 0.55, 0.2))
+	layer.free()
+	el.free()
+
+
+func test_layer_set_welcome_reads_the_skill_elements() -> void:
+	var layer := FxLayer.new()
+	layer.set_welcome({"t": "welcome", "skills": {"list": [{"id": FxLogic.SK_FIRE_BOLT, "effect": 2, "element": 4}]}})
+	assert_eq(layer.logic.skill_element(FxLogic.SK_FIRE_BOLT), 4)
+	layer.set_welcome({"t": "welcome"})
+	assert_eq(layer.logic.skill_element(FxLogic.SK_FIRE_BOLT), 4, "a welcome without skills keeps the table")
+	layer.free()

@@ -94,3 +94,32 @@ func test_store_merges_you_over_change_only_snaps() -> void:
 		"you": {"pos": [1, 3], "hp": 4, "ryn": 9}})
 	assert_eq(int(store.you["ryn"]), 9)
 	assert_eq(store.you["inv"], [1, 2])
+
+
+## ro6-fx2: a bin frame with no rows whose JSON head is `head`.
+func _bin_with_head(head: Dictionary) -> PackedByteArray:
+	var body: PackedByteArray = JSON.stringify(head).to_utf8_buffer()
+	var raw := PackedByteArray([0x4A, 0x53, 1, 0])
+	raw.resize(16)
+	raw.encode_u32(4, 7)
+	raw.encode_u16(8, 0)
+	raw.encode_u16(10, 0)
+	raw.encode_u32(12, body.size())
+	raw.append_array(body)
+	return raw
+
+
+func test_decode_snap_bin_carries_the_fx_head_and_the_store_keeps_it_one_snap() -> void:
+	var s: Dictionary = Codec.decode_snap_bin(_bin_with_head({"you": {}, "notice": null, "names": {},
+		"fx": [[3, 10, 105, 98], [0, 5, 100, 100]]}))
+	assert_eq((s["fx"] as Array).size(), 2)
+	assert_false(Codec.decode_snap_bin(_bin_with_head({"you": {}, "notice": null, "names": {}})).has("fx"))
+	var store := EntityStore.new()
+	store.apply_snap(s)
+	assert_eq(store.fx_events.size(), 2)
+	assert_eq(store.fx_events[0], {"caster": 3, "skill": 10, "tile": Vector2i(105, 98)})
+	store.apply_snap({"t": "snap", "tick": 8, "ents": [], "gone": [], "fx": [[1, 2], "junk"]})
+	assert_eq(store.fx_events.size(), 0, "malformed rows dropped, the old events cleared")
+	store.apply_snap({"t": "snap", "tick": 9, "ents": [], "gone": [], "fx": [[1, 4, 2, 2]]})
+	store.apply_snap({"t": "snap", "tick": 10, "ents": [], "gone": []})
+	assert_true(store.fx_events.is_empty())

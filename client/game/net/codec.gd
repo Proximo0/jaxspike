@@ -47,7 +47,7 @@ static func decode_map(b64: String, size: int) -> PackedByteArray:
 
 # Binary snap ("format": "bin" at login; net/protocol.py BIN_HEADER / BIN_ROW), all little-endian:
 # header 16 bytes ("JS", layout u8, flags u8 [bit0 full, bit1 anim], tick u32, n_ents u16, n_gone u16, json_len u32),
-# then UTF-8 JSON {you, notice, names}, then n_ents rows of 30 bytes, then n_gone u16 ids.
+# then UTF-8 JSON {you, notice, names, pk?, fx?}, then n_ents rows of 30 bytes, then n_gone u16 ids.
 const BIN_LAYOUT: int = 1
 const BIN_HEADER_BYTES: int = 16
 const BIN_ROW_BYTES: int = 30
@@ -83,10 +83,13 @@ static func decode_snap_bin(data: PackedByteArray) -> Dictionary:
 	var gone: Array = []
 	for i: int in n_gone:
 		gone.append(data.decode_u16(off + 2 * i))
-	return {
+	var out: Dictionary = {
 		"t": "snap", "v": PROTOCOL_VERSION, "tick": data.decode_u32(4), "full": (flags & 1) != 0,
 		"you": head.get("you", {}), "notice": head.get("notice"), "ents": ents, "gone": gone,
 	}
+	if typeof(head.get("fx")) == TYPE_ARRAY and not (head["fx"] as Array).is_empty():
+		out["fx"] = head["fx"]  # ro6-fx2: [[caster_id, skill_id, x, y], ...] skills resolved this tick
+	return out
 
 
 static func _bin_row(data: PackedByteArray, off: int, anim: bool, names: Dictionary, pk: Array = []) -> Dictionary:

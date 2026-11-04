@@ -561,6 +561,23 @@ def test_learn_then_skill_in_one_tick(tmp_path):
         assert _pend_is_none(s)
     run(body())
 
+def test_resolved_skill_rides_the_snap_head_fx(tmp_path):
+    async def body():  # ro6-fx2: First Aid (self) resolves -> "fx": [[caster, 2, own x, own y]] on that snap only
+        s = _ro_server(tmp_path)
+        a, ws = _human(s, "fxcaster")
+        st = s.world["stats"]
+        s.world["stats"] = {**st, "skill_points": st["skill_points"].at[a].set(1)}
+        s._on_ro_message(a, {"t": "learn", "id": 2})
+        s._on_ro_message(a, {"t": "skill", "id": 2, "target": -1})
+        for _ in range(4):
+            await tk(s)
+        await _flush()
+        pos = np.asarray(s.world["players"]["pos"][a]).tolist()
+        mine = [[r for r in x.get("fx", []) if r[0] == a] for x in _snaps(ws)]
+        assert sum(len(r) for r in mine) == 1 and [a, 2, *pos] in sum(mine, [])
+        assert all(len(x.get("fx", [])) <= 32 for x in _snaps(ws))
+    run(body())
+
 def test_chat_say_party_whisper_delivery(tmp_path):
     async def body():
         s = _ro_server(tmp_path)

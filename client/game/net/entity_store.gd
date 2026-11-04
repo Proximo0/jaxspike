@@ -16,6 +16,8 @@ var version: int = 0  ## Bumped by every apply_snap (and clear/restore).
 var _changed: PackedInt32Array = PackedInt32Array()  ## Ids upserted by the last apply_snap.
 var _removed: PackedInt32Array = PackedInt32Array()  ## Ids deleted by the last apply_snap (full wipe included).
 var _ents: Dictionary = {}  ## int id -> Dictionary
+## ro6-fx2: the last snap's skill effects ({caster, skill, tile: Vector2i} from snap "fx"), cleared by every apply_snap.
+var fx_events: Array[Dictionary] = []
 
 
 ## Applies one decoded `snap` message.
@@ -25,6 +27,7 @@ func apply_snap(snap: Dictionary) -> void:
 	version += 1
 	_changed = PackedInt32Array()
 	_removed = PackedInt32Array()
+	fx_events = _entity_store_fx(snap.get("fx"))
 	if bool(snap.get("full", false)):
 		_removed = ids()
 		_ents.clear()
@@ -85,6 +88,7 @@ func ids() -> PackedInt32Array:
 
 func clear() -> void:
 	version += 1
+	fx_events = []
 	_removed = ids()
 	_changed = PackedInt32Array()
 	_ents.clear()
@@ -101,6 +105,7 @@ func snapshot() -> Dictionary:
 
 func restore(d: Dictionary) -> void:
 	version += 1
+	fx_events = []
 	_removed = ids()
 	tick = int(d.get("tick", 0))
 	snaps = int(d.get("snaps", 0))
@@ -146,6 +151,19 @@ func _upsert(src: Dictionary) -> void:
 			e[k] = prev[k]
 	_ents[id] = e
 	_changed.append(id)
+
+
+## ro6-fx2: snap "fx" rows [caster_id, skill_id, x, y] -> [{caster, skill, tile}]; malformed rows are skipped.
+static func _entity_store_fx(v: Variant) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	if typeof(v) != TYPE_ARRAY:
+		return out
+	for r: Variant in v:
+		if typeof(r) != TYPE_ARRAY or (r as Array).size() < 4:
+			continue
+		var a: Array = r
+		out.append({"caster": int(a[0]), "skill": int(a[1]), "tile": Vector2i(int(a[2]), int(a[3]))})
+	return out
 
 
 func _entity_store_norm_you(src: Dictionary) -> Dictionary:

@@ -131,6 +131,8 @@ def _tick_fn(world, hmask, hmove, hattack, heat, hro, prev_tab, known, viewer_sl
             "mvp": {"event": world["mvp"]["event"], "event_head": world["mvp"]["event_head"]},
             **({"pvp": {k: world["pvp"][k] for k in _PVP_PULL}} if "pvp" in world else {}),  # snap.you.pvp, the save
             "cards": card_events(drops_before, world["drops"], world["monsters"], top_before, p)}  # ro4-cards
+    if "fx_skill" in world["skills"]:  # ro6-fx2: skills resolved this tick -> snap head "fx" (net.protocol.fx_table)
+        pull["fx"] = {"skill": world["skills"]["fx_skill"], "target": world["skills"]["fx_target"]}
     return world, tab, known_next, pull
 
 

@@ -3,6 +3,8 @@ extends Node2D
 ## Draws the spell and hit effects (cast circle, hit spark, level-up, heal) above the entities. A pooled set of 64
 ## Sprite2D (sheet row of 128 px frames, hframes) is driven by FxLogic; positions come from the EntityLayer's
 ## drawn sprites, so the interpolation is never repeated here. Place it after the entity layer (or z_index 20+).
+## ro6-fx2: per-skill effects (bolt, arrow shower, magnum break, burst) sit on a tile (FxLogic.targets[i] = -1) and
+## take FxLogic.tints[i] as modulate; set_skills() feeds welcome.skills.list for the elements.
 
 const FX_JSON: String = "res://assets/anim/fx/fx.json"
 const FRAME_PX: float = 128.0
@@ -33,6 +35,18 @@ func bind_store(store: EntityStore, entity_layer: EntityLayer) -> void:
 	_load()
 
 
+## ro6-fx2: welcome.skills.list rows ({id, effect, element}) so bolts take their skill's element tint.
+func set_skills(rows: Array) -> void:
+	logic.set_skills(rows)
+
+
+## ro6-fx2: the welcome message's skills table (welcome.skills.list); anything else is ignored.
+func set_welcome(msg: Dictionary) -> void:
+	var sk: Variant = msg.get("skills")
+	if typeof(sk) == TYPE_DICTIONARY and typeof((sk as Dictionary).get("list")) == TYPE_ARRAY:
+		set_skills((sk as Dictionary)["list"])
+
+
 func _process(delta: float) -> void:
 	if auto_refresh:
 		refresh(delta * 1000.0)
@@ -54,7 +68,11 @@ func refresh(delta_ms: float) -> void:
 		if frame < 0 or _tex[kind] == null:
 			sp.visible = false
 			continue
-		var at: Vector2 = _entities.world_pos_of(logic.targets[i])
+		var at: Vector2 = Vector2.INF
+		if logic.targets[i] < 0:  # ro6-fx2: a skill effect on a tile
+			at = ViewMath.tile_center(logic.tiles[i], tile_px)
+		else:
+			at = _entities.world_pos_of(logic.targets[i])
 		if at == Vector2.INF:
 			at = logic.last_pos[i]
 			if at == Vector2.INF:
@@ -67,6 +85,7 @@ func refresh(delta_ms: float) -> void:
 			sp.texture = _tex[kind]
 			sp.hframes = int(logic.specs[kind]["frames"])
 			sp.offset = -_anchors[kind]
+		sp.modulate = logic.tints[i]
 		sp.scale = Vector2(s, s)
 		sp.position = at + Vector2(0.0, y_tiles * tile_px)
 		sp.frame = frame
@@ -93,7 +112,7 @@ func _load() -> void:
 	_tex.clear()
 	_anchors.clear()
 	for i: int in FxLogic.KIND_NAMES.size():
-		var fx_name: String = FxLogic.KIND_NAMES[i]
+		var fx_name: String = FxLogic.SHEET_NAMES[i]
 		var t: Texture2D = null
 		if slots != null and slots.has("fx." + fx_name):
 			var p: String = slots.path_of("fx." + fx_name)
